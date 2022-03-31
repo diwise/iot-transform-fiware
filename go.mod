@@ -1,4 +1,4 @@
-module github.com/diwise/iot-core
+module github.com/diwise/iot-transform-fiware
 
 go 1.17
 
