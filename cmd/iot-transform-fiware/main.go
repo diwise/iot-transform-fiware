@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"io/ioutil"
 	"runtime/debug"
 	"strings"
 
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/tracing"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -30,14 +33,22 @@ func main() {
 	config := messaging.LoadConfiguration(serviceName, logger)
 	messenger, err := messaging.Initialize(config)
 
-	needToDecideThis := "application/json"
-	messenger.RegisterCommandHandler(needToDecideThis, commandHandler)
+	if (err != nil){
+		logger.Fatal().Err(err).Msg("failed to init messenger")
+	}
+
+	routingKey := "msg.recieved"
+	messenger.RegisterTopicMessageHandler(routingKey, topicMessageHandler)
 }
 
-func commandHandler(ctx context.Context, wrapper messaging.CommandMessageWrapper, logger zerolog.Logger) error {
-	logger.Info().Str("body", string(wrapper.Body())).Msgf("received command")
-	return nil
+func topicMessageHandler(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
+	logger.Info().Str("body", string(msg.Body)).Msgf("received message")
+
+	//TODO: gör något bra med meddelandet.
+
+	msg.Ack(true)
 }
+ 
 
 func version() string {
 	buildInfo, ok := debug.ReadBuildInfo()
