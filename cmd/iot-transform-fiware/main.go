@@ -63,7 +63,7 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 
 
 func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
-	contextBrokerUrl := os.Getenv("CB_URL")
+	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
 	contextBrokerClient := domain.NewContextBrokerClient(contextBrokerUrl, logger)	
 	
 	return iottransformfiware.NewIoTTransformFiware(contextBrokerClient, logger)

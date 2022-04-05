@@ -2,6 +2,9 @@ package iottransformfiware
 
 import (
 	"context"
+	"encoding/json"
+
+	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
@@ -18,7 +21,16 @@ type iotTransformFiware struct {
 }
 
 func (t *iotTransformFiware) MessageAccepted(ctx context.Context, msg []byte) error	{
-	err := t.messageProcessor.ProcessMessage(ctx, msg)
+	
+	ma := iotcore.MessageAccepted{}
+	err := json.Unmarshal(msg, &ma)
+
+	if err != nil {
+		t.log.Err(err).Msgf("unable to unmarshal MessageAccepted")
+		return err
+	}
+	
+	err = t.messageProcessor.ProcessMessage(ctx, ma)
 
 	if (err != nil){
 		return err

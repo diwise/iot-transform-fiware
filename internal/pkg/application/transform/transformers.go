@@ -2,24 +2,18 @@ package transform
 
 import (
 	"context"
-
-	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"	
-	"github.com/rs/zerolog/log"
+	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"		
 )
 
-type MessageTransformerFunc func(ctx context.Context, msg []byte) (Entity, error)
+type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted) (Entity, error)
 
-func WeatherObserved(ctx context.Context, msg []byte) (Entity, error) {
-	// här måste vi göra om iot-core meddelandet till något som vi kan göra ett WO av	
-	wo := fiware.NewWeatherObserved("device", 0.0, 0.0, "observedAt")
-	err := wo.UnmarshalJSON(msg)
+func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (Entity, error) {
+	
+	weatherObserved := fiware.NewWeatherObserved(msg.Sensor, 0.0, 0.0, "observedAt")
+	weatherObserved.Temperature.Value = msg.SensorValue
 
-	if (err != nil) {
-		log.Err(err).Msgf("unable to unmarshal WeatherObserved data")
-		return nil, err
-	}
-
-	return wo, nil
+	return weatherObserved, nil
 }
 
 type Entity interface { }

@@ -16,6 +16,7 @@ services:
       MQTT_USER: $MQTT_USER
       MQTT_PASSWORD: $MQTT_PASSWORD
       RABBITMQ_HOST: 'rabbitmq'      
+      NGSI_CB_URL: ''
     ports:
       - '8080'
 
