@@ -8,7 +8,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
 
-	"github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"	
 )
 
 type MessageProcessor interface {
@@ -16,8 +16,9 @@ type MessageProcessor interface {
 }
 
 type messageProcessor struct {
-	tReg transform.TransformerRegistry
-	cbClient domain.ContextBrokerClient
+	transformerRegistry transform.TransformerRegistry
+	contextBrokerClient domain.ContextBrokerClient
+	log zerolog.Logger
 }
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg []byte) error {
@@ -25,38 +26,40 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg []byte) erro
 	err := json.Unmarshal(msg, ma)
 
 	if err != nil {
-		log.Err(err).Msgf("unable to unmarshal MessageAccepted")
+		mp.log.Err(err).Msgf("unable to unmarshal MessageAccepted")
 		return err
 	}
 
-	transformer := mp.tReg.DesignateTransformers(ctx, ma.Type)
+	transformer := mp.transformerRegistry.DesignateTransformers(ctx, ma.Type)
 
 	if transformer == nil {
-		log.Info().Msgf("no transformer found for type %s", ma.Type)
-		return nil
+		mp.log.Info().Msgf("no transformer found for type %s", ma.Type)
+		return nil // hmm, detta blir inte bra.
 	}
 
 	entity, err := transformer(ctx, msg)
 
 	if (err != nil){
-		log.Err(err).Msgf("unable to transform type %s", ma.Type)
-		return nil
+		mp.log.Err(err).Msgf("unable to transform type %s", ma.Type)
+		return err
 	}
 
-	err := mp.cbClient.Post(entity)	
+	err = mp.contextBrokerClient.Post(ctx, entity)
 
 	if (err != nil){
-		log.Err(err).Msgf("unable to upload type %s", ma.Type)
-		return nil
+		mp.log.Err(err).Msgf("unable to upload type %s", ma.Type)
+		return err
 	}
 
 	return nil
 }
 
-func NewMessageProcessor() MessageProcessor {
+func NewMessageProcessor(contextBrokerClient domain.ContextBrokerClient, log zerolog.Logger) MessageProcessor {
 	tr := transform.NewTransformerRegistry()
 
 	return &messageProcessor{
-		tReg: tr,
+		transformerRegistry: tr,
+		contextBrokerClient: contextBrokerClient,
+		log: log,
 	}
 }

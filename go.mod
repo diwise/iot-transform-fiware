@@ -12,6 +12,11 @@ require (
 )
 
 require (
+	github.com/felixge/httpsnoop v1.0.2 // indirect
+	go.opentelemetry.io/otel/metric v0.28.0 // indirect
+)
+
+require (
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/diwise/iot-core v0.0.0-20220401114422-dbbbdc532e58
 	github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17
@@ -20,6 +25,7 @@ require (
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.3.2 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.31.0
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.6.1 // indirect
 	go.opentelemetry.io/otel/trace v1.6.1 // indirect
 	go.opentelemetry.io/proto/otlp v0.12.1 // indirect

@@ -14,7 +14,7 @@ type transformerRegistry struct {
 
 func NewTransformerRegistry() TransformerRegistry {
 	transformers := map[string]MessageTransformerFunc{
-		"WeatherObserved": WeatherObserved,
+		"Temperature": WeatherObserved,
 	}
 
 	return &transformerRegistry{

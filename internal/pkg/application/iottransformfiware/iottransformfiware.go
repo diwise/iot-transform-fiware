@@ -3,6 +3,7 @@ package iottransformfiware
 import (
 	"context"
 
+	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/rs/zerolog"
 )
@@ -12,11 +13,12 @@ type IoTTransformFiware interface {
 }
 
 type iotTransformFiware struct {
-	mp messageprocessor.MessageProcessor
+	messageProcessor messageprocessor.MessageProcessor
+	log zerolog.Logger
 }
 
 func (t *iotTransformFiware) MessageAccepted(ctx context.Context, msg []byte) error	{
-	err := t.mp.ProcessMessage(ctx, msg)
+	err := t.messageProcessor.ProcessMessage(ctx, msg)
 
 	if (err != nil){
 		return err
@@ -25,10 +27,11 @@ func (t *iotTransformFiware) MessageAccepted(ctx context.Context, msg []byte) er
 	return nil
 }
 
-func NewIoTTransformFiware(ctx context.Context, log zerolog.Logger) IoTTransformFiware {
-	msgProc := messageprocessor.NewMessageProcessor()
+func NewIoTTransformFiware(contextBrokerClient domain.ContextBrokerClient, log zerolog.Logger) IoTTransformFiware {
+	messageProcessor := messageprocessor.NewMessageProcessor(contextBrokerClient, log)
 	
 	return &iotTransformFiware { 
-		mp : msgProc,
+		messageProcessor : messageProcessor,
+		log: log,
 	}
 }

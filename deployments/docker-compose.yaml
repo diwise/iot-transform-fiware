@@ -1,0 +1,38 @@
+version: '3'
+services:
+  iot-transform-fiware:
+    image: 'diwise/iot-transform-fiware:latest'
+    build:
+      context: ..
+      dockerfile: ./deployments/Dockerfile
+    restart: always
+    depends_on:
+      - rabbitmq      
+    environment:
+      MQTT_HOST: $MQTT_HOST
+      MQTT_PORT: $MQTT_PORT
+      MQTT_TOPIC_0: $MQTT_TOPIC_0
+      MQTT_TOPIC_1: $MQTT_TOPIC_1
+      MQTT_USER: $MQTT_USER
+      MQTT_PASSWORD: $MQTT_PASSWORD
+      RABBITMQ_HOST: 'rabbitmq'      
+    ports:
+      - '8080'
+
+  rabbitmq: 
+    image: 'bitnami/rabbitmq:3.8'
+    #image: 'arm64v8/rabbitmq:3.8'
+    environment:
+      RABBITMQ_DEFAULT_USER: 'user'
+      RABBITMQ_DEFAULT_PASS: 'bitnami'
+    ports:
+      - '4369'
+      - '5672'
+      - '25672'
+      - '15672'
+    volumes:
+      - 'rabbitmq_data:/bitnami'
+
+volumes:
+  rabbitmq_data:
+    driver: local

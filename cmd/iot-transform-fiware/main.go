@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
-	"io/ioutil"
+	"os"
 	"runtime/debug"
 	"strings"
 
+	"github.com/diwise/iot-transform-fiware/internal/domain"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/tracing"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 
@@ -30,6 +32,8 @@ func main() {
 	}
 	defer cleanup()
 
+	app := SetupIoTTransformFiware(logger)
+
 	config := messaging.LoadConfiguration(serviceName, logger)
 	messenger, err := messaging.Initialize(config)
 
@@ -38,17 +42,32 @@ func main() {
 	}
 
 	routingKey := "msg.recieved"
-	messenger.RegisterTopicMessageHandler(routingKey, topicMessageHandler)
+	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
 }
 
-func topicMessageHandler(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-	logger.Info().Str("body", string(msg.Body)).Msgf("received message")
+func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
 
-	//TODO: gör något bra med meddelandet.
+	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
 
-	msg.Ack(true)
+		logger.Info().Str("body", string(msg.Body)).Msg("received message")
+
+		err := app.MessageAccepted(ctx, msg.Body)
+	
+		if err != nil {
+			msg.Ack(false)
+		} else {
+			msg.Reject(false)
+		}				
+	}
 }
- 
+
+
+func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
+	contextBrokerUrl := os.Getenv("CB_URL")
+	contextBrokerClient := domain.NewContextBrokerClient(contextBrokerUrl, logger)	
+	
+	return iottransformfiware.NewIoTTransformFiware(contextBrokerClient, logger)
+}
 
 func version() string {
 	buildInfo, ok := debug.ReadBuildInfo()
