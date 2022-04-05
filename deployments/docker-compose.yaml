@@ -9,12 +9,6 @@ services:
     depends_on:
       - rabbitmq      
     environment:
-      MQTT_HOST: $MQTT_HOST
-      MQTT_PORT: $MQTT_PORT
-      MQTT_TOPIC_0: $MQTT_TOPIC_0
-      MQTT_TOPIC_1: $MQTT_TOPIC_1
-      MQTT_USER: $MQTT_USER
-      MQTT_PASSWORD: $MQTT_PASSWORD
       RABBITMQ_HOST: 'rabbitmq'      
       NGSI_CB_URL: ''
     ports:

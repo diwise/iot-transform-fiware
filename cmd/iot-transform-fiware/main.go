@@ -5,6 +5,7 @@ import (
 	"os"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
@@ -43,6 +44,10 @@ func main() {
 
 	routingKey := "msg.recieved"
 	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
+
+	for {
+		time.Sleep(1 * time.Second)
+	}
 }
 
 func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
