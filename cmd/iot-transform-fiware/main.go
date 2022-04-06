@@ -10,6 +10,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/tracing"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -42,7 +43,7 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to init messenger")
 	}
 
-	routingKey := "msg.recieved"
+	routingKey := "msg.accepted"
 	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
 
 	for {
@@ -51,7 +52,6 @@ func main() {
 }
 
 func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
-
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
 
 		logger.Info().Str("body", string(msg.Body)).Msg("received message")
@@ -69,9 +69,10 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 
 func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
 	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
-	contextBrokerClient := domain.NewContextBrokerClient(contextBrokerUrl, logger)	
-	
-	return iottransformfiware.NewIoTTransformFiware(contextBrokerClient, logger)
+	c := domain.NewContextBrokerClient(contextBrokerUrl, logger)	
+	m := messageprocessor.NewMessageProcessor(c, logger) 
+
+	return iottransformfiware.NewIoTTransformFiware(m, logger)
 }
 
 func version() string {
