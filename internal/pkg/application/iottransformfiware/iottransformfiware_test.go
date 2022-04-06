@@ -20,6 +20,7 @@ func TestMessageAcceptedShouldUnmarshalAndProcess(t *testing.T) {
 	msg := iotcore.MessageAccepted{
 		Sensor:      "xxxxxxxxxxxxxx",
 		Type:        "Temperature",
+		SensorType: "temperature",
 		SensorValue: 2,
 	}
 

@@ -22,11 +22,11 @@ type messageProcessor struct {
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
 
-	transformer := mp.transformerRegistry.DesignateTransformers(ctx, msg.Type)
+	transformer := mp.transformerRegistry.DesignateTransformers(ctx, msg.Type, msg.SensorType)
 
 	if transformer == nil {
-		mp.log.Info().Msgf("no transformer found for type %s", msg.Type)
-		return nil // hmm, detta blir inte bra.
+		mp.log.Info().Msgf("no transformer found for type %s, sensorType %s", msg.Type, msg.SensorType)
+		return nil //TODO: should this be an error?
 	}
 
 	entity, err := transformer(ctx, msg)

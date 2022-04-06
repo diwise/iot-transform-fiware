@@ -12,9 +12,10 @@ import (
 func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	is := testSetup(t)
 
-	msg := iotcore.MessageAccepted { 
-		Sensor: "xxxxxxxxxxxxxx", 
-		Type: "Temperature", 
+	msg := iotcore.MessageAccepted{
+		Sensor:      "xxxxxxxxxxxxxx",
+		Type:        "Temperature",
+		SensorType: "temperature",
 		SensorValue: 2,
 	}
 
@@ -22,6 +23,23 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	
 	is.NoErr(err)
 	f := e.(*fiware.WeatherObserved)	
+	is.Equal(f.Temperature.Value, msg.SensorValue)	
+}
+
+func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
+	is := testSetup(t)
+
+	msg := iotcore.MessageAccepted{
+		Sensor:      "xxxxxxxxxxxxxx",
+		Type:        "Temperature",
+		SensorType: "temperature/water",
+		SensorValue: 2,
+	}
+
+	e, err := WaterQualityObserved(context.Background(), msg)
+	
+	is.NoErr(err)
+	f := e.(*fiware.WaterQualityObserved)	
 	is.Equal(f.Temperature.Value, msg.SensorValue)	
 }
 

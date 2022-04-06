@@ -19,7 +19,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
-	github.com/diwise/iot-core v0.0.0-20220403161557-348c7c7af7cc
+	github.com/diwise/iot-core v0.0.0-20220406083929-eb3a75abda15
 	github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -31,9 +31,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.6.1 // indirect
 	go.opentelemetry.io/proto/otlp v0.15.0 // indirect
 	golang.org/x/net v0.0.0-20220403103023-749bd193bc2b // indirect
-	golang.org/x/sys v0.0.0-20220405052023-b1e9470b6e64 // indirect
+	golang.org/x/sys v0.0.0-20220405210540-1e041c57c461 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20220401170504-314d38edb7de // indirect
+	google.golang.org/genproto v0.0.0-20220405205423-9d709892a2bf // indirect
 	google.golang.org/grpc v1.45.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 )

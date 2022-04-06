@@ -5,7 +5,7 @@ import (
 )
 
 type TransformerRegistry interface {
-	DesignateTransformers(ctx context.Context, typeOfMsg string) MessageTransformerFunc
+	DesignateTransformers(ctx context.Context, typeOfMessage string, typeOfSensor string) MessageTransformerFunc
 }
 
 type transformerRegistry struct {
@@ -14,7 +14,8 @@ type transformerRegistry struct {
 
 func NewTransformerRegistry() TransformerRegistry {
 	transformers := map[string]MessageTransformerFunc{
-		"Temperature": WeatherObserved,
+		"temperature/water": WaterQualityObserved,
+		"temperature": WeatherObserved,
 	}
 
 	return &transformerRegistry{
@@ -22,10 +23,13 @@ func NewTransformerRegistry() TransformerRegistry {
 	}
 }
 
-func (tr *transformerRegistry) DesignateTransformers(ctx context.Context, typeOfMsg string) MessageTransformerFunc {
-	mt, exist := tr.registeredTransformers[typeOfMsg]
+func (tr *transformerRegistry) DesignateTransformers(ctx context.Context, typeOfMessage string, typeOfSensor string) MessageTransformerFunc {
+
+	mt, exist := tr.registeredTransformers[typeOfSensor] //TODO: better lookup logic...
+
 	if exist {
 		return mt
 	}
+
 	return nil
 }
