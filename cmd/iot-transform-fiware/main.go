@@ -39,11 +39,11 @@ func main() {
 	config := messaging.LoadConfiguration(serviceName, logger)
 	messenger, err := messaging.Initialize(config)
 
-	if (err != nil){
+	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to init messenger")
 	}
 
-	routingKey := "msg.accepted"
+	routingKey := "message.accepted"
 	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
 
 	for {
@@ -57,20 +57,19 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 		logger.Info().Str("body", string(msg.Body)).Msg("received message")
 
 		err := app.MessageAccepted(ctx, msg.Body)
-	
+
 		if err != nil {
 			msg.Ack(false)
 		} else {
 			msg.Reject(false)
-		}				
+		}
 	}
 }
 
-
 func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
 	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
-	c := domain.NewContextBrokerClient(contextBrokerUrl, logger)	
-	m := messageprocessor.NewMessageProcessor(c, logger) 
+	c := domain.NewContextBrokerClient(contextBrokerUrl, logger)
+	m := messageprocessor.NewMessageProcessor(c, logger)
 
 	return iottransformfiware.NewIoTTransformFiware(m, logger)
 }
