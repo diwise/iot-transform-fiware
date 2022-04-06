@@ -22,12 +22,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 
 	contextBrokerClient := domain.NewContextBrokerClient(contextBroker.URL, log)
 
-	msg := iotcore.MessageAccepted{
-		Sensor:      "xxxxxxxxxxxxxx",
-		Type:        "Temperature",
-		SensorType: "temperature",
-		SensorValue: 2,
-	}
+	msg := iotcore.NewMessageAccepted("deviceID", "temperature", "Temperature", 2).AtLocation(62.362829, 17.509804)
 
 	mp := NewMessageProcessor(contextBrokerClient, log)
 	err := mp.ProcessMessage(context.Background(), msg)

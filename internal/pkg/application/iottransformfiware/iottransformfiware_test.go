@@ -17,13 +17,8 @@ func TestMessageAcceptedShouldUnmarshalAndProcess(t *testing.T) {
 	m := newFakeMessageProcessor()
 	i := NewIoTTransformFiware(m, log)
 
-	msg := iotcore.MessageAccepted{
-		Sensor:      "xxxxxxxxxxxxxx",
-		Type:        "Temperature",
-		SensorType: "temperature",
-		SensorValue: 2,
-	}
-
+	msg := iotcore.NewMessageAccepted("deviceID", "temperature", "Temperature", 2).AtLocation(62.362829, 17.509804)
+	
 	messageBytes, _ := json.MarshalIndent(msg, "", " ")
 
 	err := i.MessageAccepted(context.Background(), messageBytes)
