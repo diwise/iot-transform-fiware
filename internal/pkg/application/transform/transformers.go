@@ -12,7 +12,7 @@ type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepte
 
 func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
-	weatherObserved := fiware.NewWeatherObserved(msg.Sensor, msg.Latitude(), msg.Longitude(), msg.Timestamp)
+	weatherObserved := fiware.NewWeatherObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 	weatherObserved.Temperature = ngsi.NewNumberProperty(msg.SensorValue)
 
 	return weatherObserved, nil
@@ -20,7 +20,7 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, err
 
 func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
-	waterQualityObserved := fiware.NewWaterQualityObserved(msg.Sensor, msg.Latitude(), msg.Longitude(), msg.Timestamp)
+	waterQualityObserved := fiware.NewWaterQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 	waterQualityObserved.Temperature = ngsi.NewNumberProperty(msg.SensorValue)
 
 	return waterQualityObserved, nil

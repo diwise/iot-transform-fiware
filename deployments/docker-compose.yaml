@@ -18,7 +18,7 @@ services:
       DEV_MGMT_URL: 'http://iot-device-mgmt:8080'
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel-collector:4318'
     ports:
-      - '8080'    
+      - '8080:8080'    
   iot-core:
     image: 'ghcr.io/diwise/iot-core@sha256:70d53cf8d4ff83dfad58e954163b809d658407aaf9c1d55003a76c4c335b8cd5'
     restart: always
@@ -50,7 +50,7 @@ services:
       - iot-core      
     environment:
       RABBITMQ_HOST: 'rabbitmq'      
-      NGSI_CB_URL: 'http://orion-ld:8080/'
+      NGSI_CB_URL: 'http://orion:1026'
 
   rabbitmq: 
     image: 'bitnami/rabbitmq:3.8'
@@ -65,6 +65,33 @@ services:
       - '15672'
     volumes:
       - 'rabbitmq_data:/bitnami'
+
+  orion:
+    image: fiware/orion-ld
+    hostname: orion
+    container_name: fiware-orion
+    depends_on:
+      - mongo-db
+    expose:
+      - "1026"
+    ports:
+      - "1026:1026" 
+    command: -dbhost mongo-db -logLevel DEBUG
+    healthcheck:
+      test: curl --fail -s http://orion:1026/version || exit 1
+
+  # Databases
+  mongo-db:
+    image: mongo:3.6
+    hostname: mongo-db
+    container_name: db-mongo
+    expose:
+      - "27017"
+    ports:
+      - "27017:27017" 
+    command: --nojournal
+    volumes:
+      - mongo-db:/data
 
 #  otel-collector:
 #    image: 'otel/opentelemetry-collector:0.48.0'
@@ -104,3 +131,4 @@ volumes:
     driver: local
 #  grafana-data:
 #    driver: local
+  mongo-db: ~
