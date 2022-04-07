@@ -92,17 +92,16 @@ services:
     command: --nojournal
     volumes:
       - mongo-db:/data
+ 
+  otel-collector:
+    image: 'otel/opentelemetry-collector:0.48.0'
+    command: '--config /etc/otel-config.yaml'
+    volumes:
+     - ./configs/otel-config.yaml:/etc/otel-config.yaml
+    restart: always
+    ports:
+      - '4318' 
 
-#  otel-collector:
-#    image: 'otel/opentelemetry-collector:0.48.0'
-#    command: '--config /etc/otel-config.yaml'
-#    volumes:
-#      - type: bind
-#        source: /home/minor/Code/diwise/iot-transform-fiware/deployments/configs/otel-config.yaml
-#        target: /etc/otel-config.yaml
-#    restart: always
-#    ports:
-#      - '4318' 
 #
 #  tempo:
 #    image: grafana/tempo:latest
