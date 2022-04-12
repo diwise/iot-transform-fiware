@@ -16,7 +16,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 	is, log := testSetup(t)
 
 	contextBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(201)		
+		w.WriteHeader(201)
 	}))
 	defer contextBroker.Close()
 
@@ -24,13 +24,13 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", "temperature", "Temperature", 2).AtLocation(62.362829, 17.509804)
 
-	mp := NewMessageProcessor(contextBrokerClient, log)
+	mp := NewMessageProcessor(contextBrokerClient)
 	err := mp.ProcessMessage(context.Background(), msg)
 
 	is.NoErr(err)
 }
 
-func testSetup(t *testing.T) (*is.I,  zerolog.Logger) {
+func testSetup(t *testing.T) (*is.I, zerolog.Logger) {
 	is := is.New(t)
 	return is, zerolog.Logger{}
 }

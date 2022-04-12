@@ -12,7 +12,7 @@ func TestWeatherObservedMapping(t *testing.T) {
 	is := testSetup(t)
 
 	r := NewTransformerRegistry()
-	tr := r.DesignateTransformers(context.Background(), "Temperature", "temperature")
+	tr := r.DesignateTransformers(context.Background(), "Temperature", "temperature/air")
 
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
