@@ -59,8 +59,6 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to handle accepted message")
 		}
-
-		msg.Ack(false)
 	}
 }
 
