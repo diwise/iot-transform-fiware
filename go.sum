@@ -66,6 +66,8 @@ github.com/diwise/messaging-golang v0.0.0-20220330092044-1e008f2e4f03 h1:EOu2vbT
 github.com/diwise/messaging-golang v0.0.0-20220330092044-1e008f2e4f03/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/messaging-golang v0.0.0-20220403165554-21d44d7902de h1:CNLiLxjiuR6KK5H3cQhB72nZuia6bsiT8kCX/OmpEOo=
 github.com/diwise/messaging-golang v0.0.0-20220403165554-21d44d7902de/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
+github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd h1:MDJCRtTtVsOPaz5LVoBQxnz75DbHu+xdUo7V00aiBJ8=
+github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17 h1:vZJFoH3rF28KfE13mZADHF7spHZqiRD1AkywPodteSs=
 github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17/go.mod h1:rJEtJBmPwq3c+0leOb2Zy/u/Z9eTIT8RJQFyGJzoMrM=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=

@@ -3,7 +3,7 @@ module github.com/diwise/iot-transform-fiware
 go 1.18
 
 require (
-	github.com/diwise/messaging-golang v0.0.0-20220403165554-21d44d7902de
+	github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd
 	github.com/rabbitmq/amqp091-go v1.3.4
 	github.com/rs/zerolog v1.26.1
 	go.opentelemetry.io/otel v1.6.1
