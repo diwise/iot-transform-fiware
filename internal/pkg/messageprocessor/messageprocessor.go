@@ -33,21 +33,21 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 	transformer := mp.transformerRegistry.DesignateTransformers(ctx, sensorType)
 
 	if transformer == nil {
-		mp.log.Info().Msgf("no transformer found for sensor %s, sensorType %s", msg.Sensor, msg.Pack[0].BaseName)
+		mp.log.Info().Msgf("no transformer found for sensorType %s", sensorType)
 		return nil //TODO: should this be an error?
 	}
 
 	entity, err := transformer(ctx, msg)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to transform type %s", msg.Pack[0].BaseName)
+		mp.log.Err(err).Msgf("unable to transform type %s", sensorType)
 		return err
 	}
 
 	err = mp.contextBrokerClient.Post(ctx, entity)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to upload type %s", msg.Pack[0].BaseName)
+		mp.log.Err(err).Msgf("unable to upload type %s", sensorType)
 		return err
 	}
 

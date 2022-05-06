@@ -47,6 +47,18 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	is.Equal(f.CO2.Value, *msg.Pack[1].Value)
 }
 
+func TestThatTimeParsesCorrectly(t *testing.T) {
+	is, pack := testSetup(t, "3428", "CO2", "", 22.2)
+
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	e, err := AirQualityObserved(context.Background(), msg)
+
+	is.NoErr(err)
+	f := e.(*fiware.AirQualityObserved)
+	is.Equal(f.DateObserved.Value, "2006-01-02T15:04:05Z")
+}
+
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, value float64) (*is.I, senml.Pack) {
 	is := is.New(t)
 	var pack senml.Pack
@@ -55,6 +67,7 @@ func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, value float64
 		BaseName:    fmt.Sprintf("urn:oma:lwm2m:ext:%s", typeSuffix),
 		Name:        "0",
 		StringValue: "deviceID",
+		BaseTime:    1136214245,
 	}, senml.Record{
 		Name:  typeName,
 		Value: &value,
