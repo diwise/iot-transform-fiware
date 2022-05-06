@@ -22,24 +22,32 @@ type messageProcessor struct {
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
 
-	transformer := mp.transformerRegistry.DesignateTransformers(ctx, msg.Type, msg.SensorType)
+	sensorType := msg.Pack[0].BaseName
+
+	for _, m := range msg.Pack {
+		if m.Name == "Env" {
+			sensorType = sensorType + "/" + m.StringValue
+		}
+	}
+
+	transformer := mp.transformerRegistry.DesignateTransformers(ctx, sensorType)
 
 	if transformer == nil {
-		mp.log.Info().Msgf("no transformer found for type %s, sensorType %s", msg.Type, msg.SensorType)
+		mp.log.Info().Msgf("no transformer found for sensor %s, sensorType %s", msg.Sensor, msg.Pack[0].BaseName)
 		return nil //TODO: should this be an error?
 	}
 
 	entity, err := transformer(ctx, msg)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to transform type %s", msg.Type)
+		mp.log.Err(err).Msgf("unable to transform type %s", msg.Pack[0].BaseName)
 		return err
 	}
 
 	err = mp.contextBrokerClient.Post(ctx, entity)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to upload type %s", msg.Type)
+		mp.log.Err(err).Msgf("unable to upload type %s", msg.Pack[0].BaseName)
 		return err
 	}
 

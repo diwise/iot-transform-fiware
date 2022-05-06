@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/diwise/messaging-golang v0.0.0-20220403165554-21d44d7902de
+	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/rabbitmq/amqp091-go v1.3.4
 	github.com/rs/zerolog v1.26.1
 	go.opentelemetry.io/otel v1.6.1
@@ -19,7 +20,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
-	github.com/diwise/iot-core v0.0.0-20220406093035-b892e3086fc4
+	github.com/diwise/iot-core v0.0.0-20220505135556-5c322dd4d38d
 	github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
