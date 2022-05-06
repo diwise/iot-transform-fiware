@@ -8,10 +8,10 @@ import (
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/logging"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/tracing"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 

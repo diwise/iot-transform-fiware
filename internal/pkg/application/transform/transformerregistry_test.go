@@ -9,20 +9,21 @@ import (
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	is := testSetup(t)
+	is, pack := testSetup(t, "3303", "Temperature", "", 22.2)
 
 	r := NewTransformerRegistry()
-	tr := r.DesignateTransformers(context.Background(), "Temperature", "temperature/air")
+	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName)
 
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
 }
 
 func TestWaterQualityObservedMapping(t *testing.T) {
-	is := testSetup(t)
+	is, pack := testSetup(t, "3303", "Temperature", "water", 22.2)
 
 	r := NewTransformerRegistry()
-	tr := r.DesignateTransformers(context.Background(), "Temperature", "temperature/water")
+
+	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName+"/"+pack[2].StringValue)
 
 	is.True(isFunc(tr))
 	is.Equal("WaterQualityObserved", getFuncName(tr))
