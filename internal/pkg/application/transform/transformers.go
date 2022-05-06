@@ -53,7 +53,6 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 func parseTime(unixTime float64) string {
 
 	n := int64(unixTime)
-
 	t := time.Unix(n, 0)
 
 	return t.UTC().Format(time.RFC3339)

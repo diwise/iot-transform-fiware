@@ -14,9 +14,10 @@ type transformerRegistry struct {
 
 func NewTransformerRegistry() TransformerRegistry {
 	transformers := map[string]MessageTransformerFunc{
-		"urn:oma:lwm2m:ext:3303/water": WaterQualityObserved,
-		"urn:oma:lwm2m:ext:3303":       WeatherObserved,
-		"urn:oma:lwm2m:ext:3428":       AirQualityObserved,
+		"urn:oma:lwm2m:ext:3303/water":  WaterQualityObserved,
+		"urn:oma:lwm2m:ext:3303":        WeatherObserved,
+		"urn:oma:lwm2m:ext:3303/indoor": AirQualityObserved,
+		"urn:oma:lwm2m:ext:3428":        AirQualityObserved,
 	}
 
 	return &transformerRegistry{
