@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/logging"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/tracing"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
@@ -16,17 +16,15 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
+const serviceName string = "iot-transform-fiware"
+
 func main() {
-	serviceName := "iot-transform-fiware"
 	serviceVersion := version()
 
-	logger := log.With().Str("service", strings.ToLower(serviceName)).Str("version", serviceVersion).Logger()
+	ctx, logger := logging.NewLogger(context.Background(), serviceName, serviceVersion)
 	logger.Info().Msg("starting up ...")
-
-	ctx := context.Background()
 
 	cleanup, err := tracing.Init(ctx, logger, serviceName, serviceVersion)
 	if err != nil {
@@ -54,14 +52,12 @@ func main() {
 func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
 
+		ctx = logging.NewContextWithLogger(ctx, logger)
 		logger.Info().Str("body", string(msg.Body)).Msg("received message")
 
 		err := app.MessageAccepted(ctx, msg.Body)
-
 		if err != nil {
-			msg.Ack(false)
-		} else {
-			msg.Reject(false)
+			logger.Error().Err(err).Msg("failed to handle accepted message")
 		}
 	}
 }
@@ -69,7 +65,7 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
 	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
 	c := domain.NewContextBrokerClient(contextBrokerUrl, logger)
-	m := messageprocessor.NewMessageProcessor(c, logger)
+	m := messageprocessor.NewMessageProcessor(c)
 
 	return iottransformfiware.NewIoTTransformFiware(m, logger)
 }

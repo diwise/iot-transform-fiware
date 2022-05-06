@@ -27,7 +27,7 @@ type contextBrokerClient struct {
 
 func (c *contextBrokerClient) Post(ctx context.Context, entity interface{}) error {
 	var err error
-	ctx, span := tracer.Start(ctx, "post-entity")
+	ctx, span := tracer.Start(ctx, "create-entity")
 	defer func() {
 		if err != nil {
 			span.RecordError(err)
@@ -39,7 +39,7 @@ func (c *contextBrokerClient) Post(ctx context.Context, entity interface{}) erro
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	}
 
-	parsedUrl, err := url.Parse(c.baseUrl + "/ngsi-ld/v1/entities/")
+	parsedUrl, err := url.Parse(c.baseUrl + "/ngsi-ld/v1/entities")
 	if err != nil {
 		c.log.Err(err).Msg("unable to parse URL to context broker")
 		return err

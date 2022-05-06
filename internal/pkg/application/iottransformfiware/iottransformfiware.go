@@ -6,6 +6,7 @@ import (
 
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 
+	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/logging"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/rs/zerolog"
 )
@@ -16,7 +17,6 @@ type IoTTransformFiware interface {
 
 type iotTransformFiware struct {
 	messageProcessor messageprocessor.MessageProcessor
-	log              zerolog.Logger
 }
 
 func (t *iotTransformFiware) MessageAccepted(ctx context.Context, msg []byte) error {
@@ -25,22 +25,16 @@ func (t *iotTransformFiware) MessageAccepted(ctx context.Context, msg []byte) er
 	err := json.Unmarshal(msg, &ma)
 
 	if err != nil {
-		t.log.Err(err).Msgf("unable to unmarshal MessageAccepted")
+		log := logging.GetFromContext(ctx)
+		log.Error().Err(err).Msg("unable to unmarshal incoming message")
 		return err
 	}
 
-	err = t.messageProcessor.ProcessMessage(ctx, ma)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return t.messageProcessor.ProcessMessage(ctx, ma)
 }
 
 func NewIoTTransformFiware(m messageprocessor.MessageProcessor, log zerolog.Logger) IoTTransformFiware {
 	return &iotTransformFiware{
 		messageProcessor: m,
-		log:              log,
 	}
 }

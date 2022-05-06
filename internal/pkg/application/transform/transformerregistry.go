@@ -26,11 +26,11 @@ func NewTransformerRegistry() TransformerRegistry {
 
 func (tr *transformerRegistry) DesignateTransformers(ctx context.Context, typeOfSensor string) MessageTransformerFunc {
 
-	mt, exist := tr.registeredTransformers[typeOfSensor] //TODO: better lookup logic...
+	mt, ok := tr.registeredTransformers[typeOfSensor] //TODO: better lookup logic...
 
-	if exist {
-		return mt
+	if !ok {
+		return nil
 	}
 
-	return nil
+	return mt
 }

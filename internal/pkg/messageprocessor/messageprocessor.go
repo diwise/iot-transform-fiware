@@ -6,8 +6,7 @@ import (
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
-
-	"github.com/rs/zerolog"
+	logging "github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type MessageProcessor interface {
@@ -17,7 +16,6 @@ type MessageProcessor interface {
 type messageProcessor struct {
 	transformerRegistry transform.TransformerRegistry
 	contextBrokerClient domain.ContextBrokerClient
-	log                 zerolog.Logger
 }
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
@@ -32,34 +30,35 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 
 	transformer := mp.transformerRegistry.DesignateTransformers(ctx, sensorType)
 
+	log := logging.GetFromContext(ctx)
+
 	if transformer == nil {
-		mp.log.Info().Msgf("no transformer found for sensorType %s", sensorType)
+		log.Info().Msgf("no transformer found for sensorType %s", sensorType)
 		return nil //TODO: should this be an error?
 	}
 
 	entity, err := transformer(ctx, msg)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to transform type %s", sensorType)
+		log.Err(err).Msgf("unable to transform type %s", sensorType)
 		return err
 	}
 
 	err = mp.contextBrokerClient.Post(ctx, entity)
 
 	if err != nil {
-		mp.log.Err(err).Msgf("unable to upload type %s", sensorType)
+		log.Err(err).Msgf("unable to upload type %s", sensorType)
 		return err
 	}
 
 	return nil
 }
 
-func NewMessageProcessor(contextBrokerClient domain.ContextBrokerClient, log zerolog.Logger) MessageProcessor {
+func NewMessageProcessor(contextBrokerClient domain.ContextBrokerClient) MessageProcessor {
 	tr := transform.NewTransformerRegistry()
 
 	return &messageProcessor{
 		transformerRegistry: tr,
 		contextBrokerClient: contextBrokerClient,
-		log:                 log,
 	}
 }

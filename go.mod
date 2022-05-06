@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd
+	github.com/diwise/service-chassis v0.0.0-20220426150153-706eb92d048e
 	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/rabbitmq/amqp091-go v1.3.4
 	github.com/rs/zerolog v1.26.1

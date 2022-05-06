@@ -25,7 +25,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
-	mp := NewMessageProcessor(contextBrokerClient, log)
+	mp := NewMessageProcessor(contextBrokerClient)
 	err := mp.ProcessMessage(context.Background(), msg)
 
 	is.NoErr(err)
