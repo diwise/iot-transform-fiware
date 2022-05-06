@@ -6,8 +6,8 @@ import (
 
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 
-	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/logging"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/rs/zerolog"
 )
 

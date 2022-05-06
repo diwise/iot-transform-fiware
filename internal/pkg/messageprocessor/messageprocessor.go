@@ -6,7 +6,7 @@ import (
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
-	logging "github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type MessageProcessor interface {
