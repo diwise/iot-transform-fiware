@@ -20,11 +20,11 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 
 	is.NoErr(err)
 	f := e.(*fiware.WeatherObserved)
-	is.Equal(&f.Temperature.Value, msg.Pack[1].Value)
+	is.Equal(f.Temperature.Value, *msg.Pack[1].Value)
 }
 
 func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "", 22.2)
+	is, pack := testSetup(t, "3303", "Temperature", "water", 22.2)
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -32,7 +32,19 @@ func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 
 	is.NoErr(err)
 	f := e.(*fiware.WaterQualityObserved)
-	is.Equal(&f.Temperature.Value, msg.Pack[1].Value)
+	is.Equal(f.Temperature.Value, *msg.Pack[1].Value)
+}
+
+func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
+	is, pack := testSetup(t, "3428", "CO2", "", 22.2)
+
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	e, err := AirQualityObserved(context.Background(), msg)
+
+	is.NoErr(err)
+	f := e.(*fiware.AirQualityObserved)
+	is.Equal(f.CO2.Value, *msg.Pack[1].Value)
 }
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, value float64) (*is.I, senml.Pack) {

@@ -25,7 +25,7 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 	sensorType := msg.Pack[0].BaseName
 
 	for _, m := range msg.Pack {
-		if m.Name == "Env" {
+		if m.Name == "Env" && m.StringValue != "" {
 			sensorType = sensorType + "/" + m.StringValue
 		}
 	}

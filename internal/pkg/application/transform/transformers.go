@@ -29,7 +29,7 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
 	airQualityObserved := fiware.NewAirQualityObserved("", 0.0, 0.0, msg.Timestamp)
-	airQualityObserved.CO2 = ngsi.NewNumberPropertyFromInt(int(*msg.Pack[1].Value))
+	airQualityObserved.CO2 = ngsi.NewNumberProperty(*msg.Pack[1].Value)
 
 	return airQualityObserved, nil
 }
