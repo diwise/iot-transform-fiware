@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"runtime/debug"
-	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
@@ -12,9 +12,11 @@ import (
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
+	"github.com/go-chi/chi/v5"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 )
 
@@ -44,9 +46,7 @@ func main() {
 	routingKey := "message.accepted"
 	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
 
-	for {
-		time.Sleep(1 * time.Second)
-	}
+	setupRouterAndWaitForConnections(logger)
 }
 
 func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
@@ -88,4 +88,22 @@ func version() string {
 	}
 
 	return sha
+}
+
+func setupRouterAndWaitForConnections(logger zerolog.Logger) {
+	r := chi.NewRouter()
+	r.Use(cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowCredentials: true,
+		Debug:            false,
+	}).Handler)
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	err := http.ListenAndServe(":8080", r)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to start router")
+	}
 }
