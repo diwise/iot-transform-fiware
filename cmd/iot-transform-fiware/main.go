@@ -4,14 +4,14 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"runtime/debug"
 
 	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/go-chi/chi/v5"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -23,16 +23,12 @@ import (
 const serviceName string = "iot-transform-fiware"
 
 func main() {
-	serviceVersion := version()
+	serviceVersion := buildinfo.SourceVersion()
 
-	ctx, logger := logging.NewLogger(context.Background(), serviceName, serviceVersion)
-	logger.Info().Msg("starting up ...")
-
-	cleanup, err := tracing.Init(ctx, logger, serviceName, serviceVersion)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to init tracing")
-	}
+	_, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
+
+	logger.Info().Msg("starting up ...")
 
 	app := SetupIoTTransformFiware(logger)
 
@@ -68,26 +64,6 @@ func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransf
 	m := messageprocessor.NewMessageProcessor(c)
 
 	return iottransformfiware.NewIoTTransformFiware(m, logger)
-}
-
-func version() string {
-	buildInfo, ok := debug.ReadBuildInfo()
-	if !ok {
-		return "unknown"
-	}
-
-	buildSettings := buildInfo.Settings
-	infoMap := map[string]string{}
-	for _, s := range buildSettings {
-		infoMap[s.Key] = s.Value
-	}
-
-	sha := infoMap["vcs.revision"]
-	if infoMap["vcs.modified"] == "true" {
-		sha += "+"
-	}
-
-	return sha
 }
 
 func setupRouterAndWaitForConnections(logger zerolog.Logger) {

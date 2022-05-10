@@ -6,7 +6,9 @@ require (
 	github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd
 	github.com/diwise/service-chassis v0.0.0-20220426150153-706eb92d048e
 	github.com/farshidtz/senml/v2 v2.0.0
+	github.com/go-chi/chi/v5 v5.0.7
 	github.com/rabbitmq/amqp091-go v1.3.4
+	github.com/rs/cors v1.8.2
 	github.com/rs/zerolog v1.26.1
 	go.opentelemetry.io/otel v1.7.0
 )
