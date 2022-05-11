@@ -15,8 +15,10 @@ import (
 
 func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 	is, log, pack := testSetup(t)
+	var entityWasPosted bool = false
 
 	contextBroker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		entityWasPosted = true
 		w.WriteHeader(201)
 	}))
 	defer contextBroker.Close()
@@ -29,6 +31,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 	err := mp.ProcessMessage(context.Background(), msg)
 
 	is.NoErr(err)
+	is.True(entityWasPosted) // expected a request to mock context broker
 }
 
 func testSetup(t *testing.T) (*is.I, zerolog.Logger, senml.Pack) {
@@ -36,7 +39,7 @@ func testSetup(t *testing.T) (*is.I, zerolog.Logger, senml.Pack) {
 	var pack senml.Pack
 
 	pack = append(pack, senml.Record{
-		BaseName:    "urn:oma:lwm2m:ext:3303",
+		BaseName:    "urn:oma:lwm2m:ext:3303/air",
 		Name:        "0",
 		StringValue: "deviceID",
 	})

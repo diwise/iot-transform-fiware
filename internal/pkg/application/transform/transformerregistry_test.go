@@ -9,10 +9,10 @@ import (
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "", 22.2)
+	is, pack := testSetup(t, "3303", "Temperature", "air", 22.2)
 
 	r := NewTransformerRegistry()
-	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName)
+	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName+"/"+pack[2].StringValue)
 
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
