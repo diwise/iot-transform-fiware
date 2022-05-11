@@ -55,8 +55,8 @@ github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWH
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/diwise/iot-core v0.0.0-20220506120114-4b99688d5d27 h1:zgyc1VOO+I1kucxYLZSrwsQqH7+eHlYMHEGZPdLoVP0=
-github.com/diwise/iot-core v0.0.0-20220506120114-4b99688d5d27/go.mod h1:zFUar2gH4ACouVt1Aqe6dpak0F5jfO1aG/kLY5lVtlQ=
+github.com/diwise/iot-core v0.0.0-20220511142952-1f2198ea50ec h1:AWV5XZsm8Cj/EEUFFX6fznIizH9cZ1nOmkqAa72XVkw=
+github.com/diwise/iot-core v0.0.0-20220511142952-1f2198ea50ec/go.mod h1:zFUar2gH4ACouVt1Aqe6dpak0F5jfO1aG/kLY5lVtlQ=
 github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd h1:MDJCRtTtVsOPaz5LVoBQxnz75DbHu+xdUo7V00aiBJ8=
 github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/ngsi-ld-golang v0.0.0-20220316192820-be9523ddfd17 h1:vZJFoH3rF28KfE13mZADHF7spHZqiRD1AkywPodteSs=

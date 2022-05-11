@@ -16,10 +16,9 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, err
 
 	weatherObserved := fiware.NewWeatherObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
-	for _, p := range msg.Pack {
-		if p.Name == "Temperature" {
-			weatherObserved.Temperature = ngsi.NewNumberProperty(*p.Value)
-		}
+	temp, ok := msg.GetFloat64("Temperature")
+	if ok {
+		weatherObserved.Temperature = ngsi.NewNumberProperty(temp)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
@@ -34,10 +33,9 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 
 	waterQualityObserved := fiware.NewWaterQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
-	for _, p := range msg.Pack {
-		if p.Name == "Temperature" {
-			waterQualityObserved.Temperature = ngsi.NewNumberProperty(*p.Value)
-		}
+	temp, ok := msg.GetFloat64("Temperature")
+	if ok {
+		waterQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
@@ -52,10 +50,9 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 
 	airQualityObserved := fiware.NewAirQualityObserved("", 0.0, 0.0, msg.Timestamp)
 
-	for _, p := range msg.Pack {
-		if p.Name == "CO2" {
-			airQualityObserved.CO2 = ngsi.NewNumberProperty(*p.Value)
-		}
+	co2, ok := msg.GetFloat64("CO2")
+	if ok {
+		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
