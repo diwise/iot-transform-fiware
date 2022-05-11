@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
@@ -28,12 +29,7 @@ type contextBrokerClient struct {
 func (c *contextBrokerClient) Post(ctx context.Context, entity interface{}) error {
 	var err error
 	ctx, span := tracer.Start(ctx, "create-entity")
-	defer func() {
-		if err != nil {
-			span.RecordError(err)
-		}
-		span.End()
-	}()
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
 
 	httpClient := http.Client{
 		Transport: otelhttp.NewTransport(http.DefaultTransport),
