@@ -2,6 +2,7 @@ package transform
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -19,6 +20,8 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, err
 	temp, ok := msg.GetFloat64("Temperature")
 	if ok {
 		weatherObserved.Temperature = ngsi.NewNumberProperty(temp)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
@@ -36,6 +39,8 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 	temp, ok := msg.GetFloat64("Temperature")
 	if ok {
 		waterQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
@@ -53,6 +58,8 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 	co2, ok := msg.GetFloat64("CO2")
 	if ok {
 		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {

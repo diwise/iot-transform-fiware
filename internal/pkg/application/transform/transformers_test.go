@@ -47,6 +47,16 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	is.Equal(f.CO2.Value, *msg.Pack[1].Value)
 }
 
+func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
+	is, pack := testSetup(t, "3428", "", "", 0.0)
+
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	_, err := AirQualityObserved(context.Background(), msg)
+
+	is.True(err != nil)
+}
+
 func TestThatTimeParsesCorrectly(t *testing.T) {
 	is, pack := testSetup(t, "3428", "CO2", "", 22.2)
 
