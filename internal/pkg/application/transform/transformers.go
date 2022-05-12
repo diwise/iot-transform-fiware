@@ -2,6 +2,7 @@ package transform
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -15,7 +16,13 @@ type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepte
 func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
 	weatherObserved := fiware.NewWeatherObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
-	weatherObserved.Temperature = ngsi.NewNumberProperty(*msg.Pack[1].Value)
+
+	temp, ok := msg.GetFloat64("Temperature")
+	if ok {
+		weatherObserved.Temperature = ngsi.NewNumberProperty(temp)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
 		t := parseTime(msg.Pack[0].BaseTime)
@@ -28,7 +35,13 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, err
 func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
 	waterQualityObserved := fiware.NewWaterQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
-	waterQualityObserved.Temperature = ngsi.NewNumberProperty(*msg.Pack[1].Value)
+
+	temp, ok := msg.GetFloat64("Temperature")
+	if ok {
+		waterQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
 		t := parseTime(msg.Pack[0].BaseTime)
@@ -41,7 +54,13 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
 	airQualityObserved := fiware.NewAirQualityObserved("", 0.0, 0.0, msg.Timestamp)
-	airQualityObserved.CO2 = ngsi.NewNumberProperty(*msg.Pack[1].Value)
+
+	co2, ok := msg.GetFloat64("CO2")
+	if ok {
+		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
+	} else {
+		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	}
 
 	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
 		t := parseTime(msg.Pack[0].BaseTime)
