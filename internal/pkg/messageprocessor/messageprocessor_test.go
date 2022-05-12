@@ -37,11 +37,15 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 func testSetup(t *testing.T) (*is.I, zerolog.Logger, senml.Pack) {
 	is := is.New(t)
 	var pack senml.Pack
+	val := 22.2
 
 	pack = append(pack, senml.Record{
 		BaseName:    "urn:oma:lwm2m:ext:3303/air",
 		Name:        "0",
 		StringValue: "deviceID",
+	}, senml.Record{
+		Name:  "Temperature",
+		Value: &val,
 	})
 
 	return is, zerolog.Logger{}, pack
