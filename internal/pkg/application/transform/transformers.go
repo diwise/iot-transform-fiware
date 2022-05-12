@@ -55,10 +55,16 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 
 	airQualityObserved := fiware.NewAirQualityObserved("", 0.0, 0.0, msg.Timestamp)
 
-	co2, ok := msg.GetFloat64("CO2")
-	if ok {
+	temp, tempOk := msg.GetFloat64("Temperature")
+	if tempOk {
+		airQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
+	}
+	co2, co2Ok := msg.GetFloat64("CO2")
+	if co2Ok {
 		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
-	} else {
+	}
+
+	if !tempOk && !co2Ok {
 		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
