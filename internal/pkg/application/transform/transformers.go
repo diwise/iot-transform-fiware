@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
 	ngsi "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/types"
+	geojson "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/geojson"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted) (any, error)
@@ -53,7 +55,7 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 
-	airQualityObserved := fiware.NewAirQualityObserved("", 0.0, 0.0, msg.Timestamp)
+	airQualityObserved := fiware.NewAirQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
 	temp, tempOk := msg.GetFloat64("Temperature")
 	if tempOk {
@@ -74,6 +76,30 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 	}
 
 	return airQualityObserved, nil
+}
+
+func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
+	var device *fiware.Device
+		
+	if strings.EqualFold(msg.BaseName(), "urn:oma:lwm2m:ext:3302") {				
+		if v, ok := msg.GetBool("Presence"); ok {
+			if v {
+				device = fiware.NewDevice(msg.Sensor, "on")
+			} else {
+				device = fiware.NewDevice(msg.Sensor, "off")
+			}			
+		}		
+	} else {
+		return nil, fmt.Errorf("unable to create Device for deviceID %s", msg.Sensor)
+	}
+
+	device.DateCreated = ngsi.CreateDateTimeProperty(msg.Timestamp)
+
+	if msg.IsLocated() {
+		device.Location = geojson.CreateGeoJSONPropertyFromWGS84(msg.Longitude(), msg.Latitude())
+	}
+
+	return device, nil
 }
 
 func parseTime(unixTime float64) string {

@@ -9,7 +9,8 @@ import (
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "air", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3303", "Temperature", "air", &temp, nil, "")
 
 	r := NewTransformerRegistry()
 	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName+"/"+pack[2].StringValue)
@@ -19,7 +20,8 @@ func TestWeatherObservedMapping(t *testing.T) {
 }
 
 func TestWaterQualityObservedMapping(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "water", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3303", "Temperature", "water", &temp, nil, "")
 
 	r := NewTransformerRegistry()
 
