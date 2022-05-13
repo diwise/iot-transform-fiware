@@ -79,14 +79,14 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 }
 
 func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
-	var device fiware.Device
+	var device *fiware.Device
 		
 	if strings.EqualFold(msg.BaseName(), "urn:oma:lwm2m:ext:3302") {				
 		if v, ok := msg.GetBool("Presence"); ok {
 			if v {
-				device = *fiware.NewDevice(msg.Sensor, "on")
+				device = fiware.NewDevice(msg.Sensor, "on")
 			} else {
-				device = *fiware.NewDevice(msg.Sensor, "off")
+				device = fiware.NewDevice(msg.Sensor, "off")
 			}			
 		}		
 	} else {

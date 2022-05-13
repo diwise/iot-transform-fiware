@@ -82,8 +82,8 @@ func TestThatDeviceCanBeCreated(t *testing.T){
 	e, err := Device(context.Background(), msg)
 
 	is.NoErr(err)
-	f := e.(fiware.Device)
-	is.Equal(f.Value, "on")
+	f := e.(*fiware.Device)
+	is.Equal(f.Value.Value, "on")
 }
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
