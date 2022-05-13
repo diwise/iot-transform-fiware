@@ -12,7 +12,8 @@ import (
 )
 
 func TestThatWeatherObservedCanBeCreated(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3303", "Temperature", "", &temp, nil, "")
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -24,7 +25,8 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 }
 
 func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
-	is, pack := testSetup(t, "3303", "Temperature", "water", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3303", "Temperature", "water", &temp, nil, "")
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -36,7 +38,8 @@ func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 }
 
 func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
-	is, pack := testSetup(t, "3428", "CO2", "", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3428", "CO2", "", &temp, nil, "")
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -48,7 +51,8 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 }
 
 func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
-	is, pack := testSetup(t, "3428", "", "", 0.0)
+	temp := 0.0
+	is, pack := testSetup(t, "3428", "", "", &temp, nil, "")
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -58,7 +62,8 @@ func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
 }
 
 func TestThatTimeParsesCorrectly(t *testing.T) {
-	is, pack := testSetup(t, "3428", "CO2", "", 22.2)
+	temp := 22.2
+	is, pack := testSetup(t, "3428", "CO2", "", &temp, nil, "")
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
@@ -69,7 +74,19 @@ func TestThatTimeParsesCorrectly(t *testing.T) {
 	is.Equal(f.DateObserved.Value, "2006-01-02T15:04:05Z")
 }
 
-func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, value float64) (*is.I, senml.Pack) {
+func TestThatDeviceCanBeCreated(t *testing.T){
+	p := true
+	is, pack := testSetup(t, "3302", "Presence", "", nil, &p, "")
+	
+	msg := iotcore.NewMessageAccepted("urn:oma:lwm2m:ext:3302", pack).AtLocation(62.362829, 17.509804)
+	e, err := Device(context.Background(), msg)
+
+	is.NoErr(err)
+	f := e.(fiware.Device)
+	is.Equal(f.Value, "on")
+}
+
+func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
 	is := is.New(t)
 	var pack senml.Pack
 
@@ -80,7 +97,9 @@ func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, value float64
 		BaseTime:    1136214245,
 	}, senml.Record{
 		Name:  typeName,
-		Value: &value,
+		Value: v,
+		BoolValue: vb,
+		StringValue: vs,
 	}, senml.Record{
 		Name:        "Env",
 		StringValue: typeEnv,

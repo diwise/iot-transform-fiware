@@ -18,6 +18,7 @@ func NewTransformerRegistry() TransformerRegistry {
 		"urn:oma:lwm2m:ext:3303/air":     WeatherObserved,
 		"urn:oma:lwm2m:ext:3303/indoors": AirQualityObserved,
 		"urn:oma:lwm2m:ext:3428/indoors": AirQualityObserved,
+		"urn:oma:lwm2m:ext:3302":         Device,
 	}
 
 	return &transformerRegistry{
