@@ -11,6 +11,8 @@ import (
 	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
 	ngsi "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/types"
 	geojson "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/geojson"
+	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
+	measurements "github.com/diwise/iot-core/pkg/measurements"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted) (any, error)
@@ -19,15 +21,15 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, err
 
 	weatherObserved := fiware.NewWeatherObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
-	temp, ok := msg.GetFloat64("Temperature")
+	temp, ok := msg.GetFloat64(measurements.Temperature)
 	if ok {
 		weatherObserved.Temperature = ngsi.NewNumberProperty(temp)
 	} else {
 		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
-		t := parseTime(msg.Pack[0].BaseTime)
+	if !almostEqual(msg.BaseTime(), 0.0) {
+		t := parseTime(msg.BaseTime())
 		weatherObserved.DateObserved = *ngsi.CreateDateTimeProperty(t)
 	}
 
@@ -38,15 +40,15 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any
 
 	waterQualityObserved := fiware.NewWaterQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
-	temp, ok := msg.GetFloat64("Temperature")
+	temp, ok := msg.GetFloat64(measurements.Temperature)
 	if ok {
 		waterQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
 	} else {
 		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
-		t := parseTime(msg.Pack[0].BaseTime)
+	if !almostEqual(msg.BaseTime(), 0.0) {
+		t := parseTime(msg.BaseTime())
 		waterQualityObserved.DateObserved = *ngsi.CreateDateTimeProperty(t)
 	}
 
@@ -57,11 +59,11 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 
 	airQualityObserved := fiware.NewAirQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
 
-	temp, tempOk := msg.GetFloat64("Temperature")
+	temp, tempOk := msg.GetFloat64(measurements.Temperature)
 	if tempOk {
 		airQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
 	}
-	co2, co2Ok := msg.GetFloat64("CO2")
+	co2, co2Ok := msg.GetFloat64(measurements.CO2)
 	if co2Ok {
 		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
 	}
@@ -70,8 +72,8 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.Pack[0].BaseTime, 0.0) {
-		t := parseTime(msg.Pack[0].BaseTime)
+	if !almostEqual(msg.BaseTime(), 0.0) {
+		t := parseTime(msg.BaseTime())
 		airQualityObserved.DateObserved = *ngsi.NewTextProperty(t)
 	}
 
@@ -81,8 +83,8 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 	var device *fiware.Device
 		
-	if strings.EqualFold(msg.BaseName(), "urn:oma:lwm2m:ext:3302") {				
-		if v, ok := msg.GetBool("Presence"); ok {
+	if strings.EqualFold(msg.BaseName(), lwm2m.Presence) {				
+		if v, ok := msg.GetBool(measurements.Presence); ok {
 			if v {
 				device = fiware.NewDevice(msg.Sensor, "on")
 			} else {
