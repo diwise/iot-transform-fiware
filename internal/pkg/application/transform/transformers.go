@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
-	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
-	ngsi "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/types"
-	geojson "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/geojson"
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
+	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	diwise "github.com/diwise/ngsi-ld-golang/pkg/datamodels/diwise"
+	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
+	geojson "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/geojson"
+	ngsi "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/types"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted) (any, error)
@@ -82,15 +83,15 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, 
 
 func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 	var device *fiware.Device
-		
-	if strings.EqualFold(msg.BaseName(), lwm2m.Presence) {				
+
+	if strings.EqualFold(msg.BaseName(), lwm2m.Presence) {
 		if v, ok := msg.GetBool(measurements.Presence); ok {
 			if v {
 				device = fiware.NewDevice(msg.Sensor, "on")
 			} else {
 				device = fiware.NewDevice(msg.Sensor, "off")
-			}			
-		}		
+			}
+		}
 	} else {
 		return nil, fmt.Errorf("unable to create Device for deviceID %s", msg.Sensor)
 	}
@@ -102,6 +103,29 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
 	}
 
 	return device, nil
+}
+
+func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
+
+	var lifebuoy *diwise.Lifebuoy
+
+	if v, ok := msg.GetBool(measurements.Presence); ok {
+		if v {
+			lifebuoy = diwise.NewLifebuoy(msg.Sensor, "on")
+		} else {
+			lifebuoy = diwise.NewLifebuoy(msg.Sensor, "off")
+		}
+	} else {
+		return nil, fmt.Errorf("unable to create lifebuoy, ignoring %s", msg.Sensor)
+	}
+
+	lifebuoy.DateObserved = ngsi.CreateDateTimeProperty(msg.Timestamp)
+
+	if msg.IsLocated() {
+		lifebuoy.Location = *geojson.CreateGeoJSONPropertyFromWGS84(msg.Longitude(), msg.Latitude())
+	}
+
+	return lifebuoy, nil
 }
 
 func parseTime(unixTime float64) string {
