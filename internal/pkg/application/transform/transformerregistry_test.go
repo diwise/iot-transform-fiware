@@ -2,18 +2,22 @@ package transform
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/diwise/iot-core/pkg/measurements"
+	"github.com/farshidtz/senml/v2"
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	temp := 22.2
-	is, pack := testSetup(t, "3303", "Temperature", "air", &temp, nil, "")
-
+	temp := 22.2	
+	is, pack := testSetup(t, "3303", measurements.Temperature, "air", &temp, nil, "")
 	r := NewTransformerRegistry()
-	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName+"/"+pack[2].StringValue)
+
+	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
 
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
@@ -21,14 +25,28 @@ func TestWeatherObservedMapping(t *testing.T) {
 
 func TestWaterQualityObservedMapping(t *testing.T) {
 	temp := 22.2
-	is, pack := testSetup(t, "3303", "Temperature", "water", &temp, nil, "")
-
+	is, pack := testSetup(t, "3303", measurements.Temperature, "water", &temp, nil, "")
 	r := NewTransformerRegistry()
 
-	tr := r.DesignateTransformers(context.Background(), pack[0].BaseName+"/"+pack[2].StringValue)
+	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
 
 	is.True(isFunc(tr))
 	is.Equal("WaterQualityObserved", getFuncName(tr))
+}
+
+func TestLifeBuoyMapping(t *testing.T) {
+	vb := true	
+	is, pack := testSetup(t, "3302", measurements.Presence, "lifebuoy", nil, &vb, "")
+	r := NewTransformerRegistry()
+
+	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+
+	is.True(isFunc(tr))
+	is.Equal("Lifebuoy", getFuncName(tr))
+}
+
+func transformerName(p senml.Pack) string {
+	return fmt.Sprintf("%s/%s", p[0].BaseName, p[2].StringValue)
 }
 
 func isFunc(v interface{}) bool {

@@ -2,6 +2,7 @@ package messageprocessor
 
 import (
 	"context"
+	"fmt"
 
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/iot-transform-fiware/internal/domain"
@@ -20,7 +21,7 @@ type messageProcessor struct {
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
 
-	sensorType := msg.Pack[0].BaseName
+	sensorType := msg.BaseName()
 
 	for _, m := range msg.Pack {
 		if m.Name == "env" && m.StringValue != "" {
@@ -28,13 +29,12 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 		}
 	}
 
-	transformer := mp.transformerRegistry.DesignateTransformers(ctx, sensorType)
+	transformer := mp.transformerRegistry.GetTransformerForSensorType(ctx, sensorType)
 
 	log := logging.GetFromContext(ctx)
 
 	if transformer == nil {
-		log.Info().Msgf("no transformer found for sensorType %s", sensorType)
-		return nil //TODO: should this be an error?
+		return fmt.Errorf("no transformer found for sensorType %s", sensorType)		
 	}
 
 	entity, err := transformer(ctx, msg)

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	"github.com/diwise/ngsi-ld-golang/pkg/datamodels/diwise"
 	"github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
 	"github.com/farshidtz/senml/v2"
 	"github.com/matryer/is"
@@ -74,10 +75,10 @@ func TestThatTimeParsesCorrectly(t *testing.T) {
 	is.Equal(f.DateObserved.Value, "2006-01-02T15:04:05Z")
 }
 
-func TestThatDeviceCanBeCreated(t *testing.T){
+func TestThatDeviceCanBeCreated(t *testing.T) {
 	p := true
 	is, pack := testSetup(t, "3302", "Presence", "", nil, &p, "")
-	
+
 	msg := iotcore.NewMessageAccepted("urn:oma:lwm2m:ext:3302", pack).AtLocation(62.362829, 17.509804)
 	e, err := Device(context.Background(), msg)
 
@@ -85,6 +86,19 @@ func TestThatDeviceCanBeCreated(t *testing.T){
 	f := e.(*fiware.Device)
 	is.Equal(f.Value.Value, "on")
 }
+
+func TestThatLifebuoyCanBeCreated(t *testing.T) {
+	p := true
+	is, pack := testSetup(t, "3302", "Presence", "lifebuoy", nil, &p, "")
+
+	msg := iotcore.NewMessageAccepted("urn:oma:lwm2m:ext:3302", pack).AtLocation(62.362829, 17.509804)
+	e, err := Lifebuoy(context.Background(), msg)
+
+	is.NoErr(err)
+	f := e.(*diwise.Lifebuoy)
+	is.Equal(f.Status.Value, "on")
+}
+
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
 	is := is.New(t)
@@ -96,9 +110,9 @@ func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, v
 		StringValue: "deviceID",
 		BaseTime:    1136214245,
 	}, senml.Record{
-		Name:  typeName,
-		Value: v,
-		BoolValue: vb,
+		Name:        typeName,
+		Value:       v,
+		BoolValue:   vb,
 		StringValue: vs,
 	}, senml.Record{
 		Name:        "Env",
