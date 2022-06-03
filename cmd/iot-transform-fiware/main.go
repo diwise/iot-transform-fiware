@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/diwise/iot-transform-fiware/internal/domain"
+	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
@@ -60,7 +60,7 @@ func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiwa
 
 func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
 	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
-	c := domain.NewContextBrokerClient(contextBrokerUrl, logger)
+	c := client.NewContextBrokerClient(contextBrokerUrl)
 	m := messageprocessor.NewMessageProcessor(c)
 
 	return iottransformfiware.NewIoTTransformFiware(m, logger)

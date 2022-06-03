@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/diwise/context-broker/pkg/ngsild/client"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
-	"github.com/diwise/iot-transform-fiware/internal/domain"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
@@ -16,7 +16,7 @@ type MessageProcessor interface {
 
 type messageProcessor struct {
 	transformerRegistry transform.TransformerRegistry
-	contextBrokerClient domain.ContextBrokerClient
+	contextBrokerClient client.ContextBrokerClient
 }
 
 func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
@@ -34,27 +34,20 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 	log := logging.GetFromContext(ctx)
 
 	if transformer == nil {
-		return fmt.Errorf("no transformer found for sensorType %s", sensorType)		
+		return fmt.Errorf("no transformer found for sensorType %s", sensorType)
 	}
 
-	entity, err := transformer(ctx, msg)
+	err := transformer(ctx, msg, mp.contextBrokerClient)
 
 	if err != nil {
 		log.Err(err).Msgf("unable to transform type %s", sensorType)
 		return err
 	}
 
-	err = mp.contextBrokerClient.Post(ctx, entity)
-
-	if err != nil {
-		log.Err(err).Msgf("unable to upload type %s", sensorType)
-		return err
-	}
-
 	return nil
 }
 
-func NewMessageProcessor(contextBrokerClient domain.ContextBrokerClient) MessageProcessor {
+func NewMessageProcessor(contextBrokerClient client.ContextBrokerClient) MessageProcessor {
 	tr := transform.NewTransformerRegistry()
 
 	return &messageProcessor{
