@@ -3,141 +3,164 @@ package transform
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
-	"time"
 
+	"github.com/diwise/context-broker/pkg/datamodels/fiware"
+	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
+	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
-	diwise "github.com/diwise/ngsi-ld-golang/pkg/datamodels/diwise"
-	fiware "github.com/diwise/ngsi-ld-golang/pkg/datamodels/fiware"
-	geojson "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/geojson"
-	ngsi "github.com/diwise/ngsi-ld-golang/pkg/ngsi-ld/types"
 )
 
-type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted) (any, error)
+type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
-
-	weatherObserved := fiware.NewWeatherObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
+func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 
 	temp, ok := msg.GetFloat64(measurements.Temperature)
-	if ok {
-		weatherObserved.Temperature = ngsi.NewNumberProperty(temp)
-	} else {
-		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	if !ok {
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.BaseTime(), 0.0) {
-		t := parseTime(msg.BaseTime())
-		weatherObserved.DateObserved = *ngsi.CreateDateTimeProperty(t)
+	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+
+	wo, err := fiware.NewWeatherObserved(id, msg.Latitude(), msg.Longitude(), msg.Timestamp, Temperature(temp))
+	if err != nil {
+		return err
 	}
 
-	return weatherObserved, nil
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.CreateEntity(ctx, wo, headers)
+
+	return err
 }
 
-func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
-
-	waterQualityObserved := fiware.NewWaterQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
+func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 
 	temp, ok := msg.GetFloat64(measurements.Temperature)
-	if ok {
-		waterQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
-	} else {
-		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	if !ok {
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.BaseTime(), 0.0) {
-		t := parseTime(msg.BaseTime())
-		waterQualityObserved.DateObserved = *ngsi.CreateDateTimeProperty(t)
+	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+
+	wqo, err := entities.New(
+		id, fiware.WaterQualityObservedTypeName, entities.DefaultContext(),
+		Location(msg.Latitude(), msg.Longitude()),
+		DateObserved(msg.Timestamp),
+		Temperature(temp),
+	)
+	if err != nil {
+		return err
 	}
 
-	return waterQualityObserved, nil
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.CreateEntity(ctx, wqo, headers)
+
+	return err
 }
 
-func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
+func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 
-	airQualityObserved := fiware.NewAirQualityObserved("", msg.Latitude(), msg.Longitude(), msg.Timestamp)
+	properties := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		Location(msg.Latitude(), msg.Longitude()),
+		DateObserved(msg.Timestamp),
+	}
 
 	temp, tempOk := msg.GetFloat64(measurements.Temperature)
 	if tempOk {
-		airQualityObserved.Temperature = ngsi.NewNumberProperty(temp)
+		properties = append(properties, Temperature(temp))
 	}
+
 	co2, co2Ok := msg.GetFloat64(measurements.CO2)
 	if co2Ok {
-		airQualityObserved.CO2 = ngsi.NewNumberProperty(co2)
+		properties = append(properties, Number("co2", co2))
 	}
 
 	if !tempOk && !co2Ok {
-		return nil, fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	if !almostEqual(msg.BaseTime(), 0.0) {
-		t := parseTime(msg.BaseTime())
-		airQualityObserved.DateObserved = *ngsi.NewTextProperty(t)
+	id := fiware.AirQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+
+	aqo, err := entities.New(
+		id, fiware.AirQualityObservedTypeName, properties...)
+	if err != nil {
+		return err
 	}
 
-	return airQualityObserved, nil
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.CreateEntity(ctx, aqo, headers)
+
+	return err
 }
 
-func Device(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
-	var device *fiware.Device
+func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 
-	if strings.EqualFold(msg.BaseName(), lwm2m.Presence) {
-		if v, ok := msg.GetBool(measurements.Presence); ok {
-			if v {
-				device = fiware.NewDevice(msg.Sensor, "on")
-			} else {
-				device = fiware.NewDevice(msg.Sensor, "off")
-			}
-		}
-	} else {
-		return nil, fmt.Errorf("unable to create Device for deviceID %s", msg.Sensor)
+	v, ok := msg.GetBool(measurements.Presence)
+
+	if !strings.EqualFold(msg.BaseName(), lwm2m.Presence) || !ok {
+		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
 	}
 
-	device.DateCreated = ngsi.CreateDateTimeProperty(msg.Timestamp)
+	properties := []entities.EntityDecoratorFunc{
+		DateLastValueReported(msg.Timestamp),
+	}
+
+	if v {
+		properties = append(properties, Status("on"))
+	} else {
+		properties = append(properties, Status("off"))
+	}
 
 	if msg.IsLocated() {
-		device.Location = geojson.CreateGeoJSONPropertyFromWGS84(msg.Longitude(), msg.Latitude())
+		properties = append(properties, Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	return device, nil
+	entity, err := fiware.NewDevice(msg.Sensor, properties...)
+	if err != nil {
+		return err
+	}
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
+
+	return err
 }
 
-func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted) (any, error) {
+func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 
-	var lifebuoy *diwise.Lifebuoy
-
-	if v, ok := msg.GetBool(measurements.Presence); ok {
-		if v {
-			lifebuoy = diwise.NewLifebuoy(msg.Sensor, "on")
-		} else {
-			lifebuoy = diwise.NewLifebuoy(msg.Sensor, "off")
-		}
-	} else {
-		return nil, fmt.Errorf("unable to create lifebuoy, ignoring %s", msg.Sensor)
+	v, ok := msg.GetBool(measurements.Presence)
+	if !ok {
+		return fmt.Errorf("unable to update lifebuoy, ignoring %s", msg.Sensor)
 	}
 
-	lifebuoy.DateObserved = ngsi.CreateDateTimeProperty(msg.Timestamp)
+	properties := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		DateLastValueReported(msg.Timestamp),
+	}
+
+	if v {
+		properties = append(properties, Status("on"))
+	} else {
+		properties = append(properties, Status("off"))
+	}
 
 	if msg.IsLocated() {
-		lifebuoy.Location = *geojson.CreateGeoJSONPropertyFromWGS84(msg.Longitude(), msg.Latitude())
+		properties = append(properties, Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	return lifebuoy, nil
-}
+	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
 
-func parseTime(unixTime float64) string {
+	entity, err := entities.New(id, "Lifebuoy", properties...)
+	if err != nil {
+		return err
+	}
 
-	n := int64(unixTime)
-	t := time.Unix(n, 0)
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
 
-	return t.UTC().Format(time.RFC3339)
-}
-
-const float64EqualityThreshold = 1e-9
-
-func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) <= float64EqualityThreshold
+	return err
 }
