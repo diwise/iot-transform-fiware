@@ -55,8 +55,8 @@ github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWH
 github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/diwise/context-broker v0.0.0-20220603082148-6092b4aaff68 h1:XmMW1X7kI41OijYT1tUIWLuPgfTGsZwRrwTuVLF4Wi0=
-github.com/diwise/context-broker v0.0.0-20220603082148-6092b4aaff68/go.mod h1:hEIWELN892bPSYGSOfxtUHOJ4FZJ056+K8Pxrqp5i0I=
+github.com/diwise/context-broker v0.0.0-20220630194749-9dc18eac8779 h1:tQ3YJxFovMhEud1Gg6T21PE8n1LJ6xBXf8rxsbXYagQ=
+github.com/diwise/context-broker v0.0.0-20220630194749-9dc18eac8779/go.mod h1:hEIWELN892bPSYGSOfxtUHOJ4FZJ056+K8Pxrqp5i0I=
 github.com/diwise/iot-core v0.0.0-20220516083909-2c7bde63b1a4 h1:+nmVRipxcmhI+zloeHPQAUemCAEAer6h7OeX/DUyo7s=
 github.com/diwise/iot-core v0.0.0-20220516083909-2c7bde63b1a4/go.mod h1:zFUar2gH4ACouVt1Aqe6dpak0F5jfO1aG/kLY5lVtlQ=
 github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd h1:MDJCRtTtVsOPaz5LVoBQxnz75DbHu+xdUo7V00aiBJ8=

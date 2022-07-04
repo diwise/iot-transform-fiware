@@ -3,7 +3,7 @@ module github.com/diwise/iot-transform-fiware
 go 1.18
 
 require (
-	github.com/diwise/context-broker v0.0.0-20220603082148-6092b4aaff68
+	github.com/diwise/context-broker v0.0.0-20220630194749-9dc18eac8779
 	github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd
 	github.com/diwise/service-chassis v0.0.0-20220602203825-64e6594861be
 	github.com/farshidtz/senml/v2 v2.0.0
