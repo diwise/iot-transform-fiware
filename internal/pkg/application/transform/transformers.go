@@ -171,8 +171,20 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		entities.DefaultContext(),
 	}
 
+	var observedBy string
+	if oBy, ok := msg.GetString("DeviceName"); !ok || oBy == "" {
+		observedBy = msg.Sensor // fallback to sensor ID if deviceName is not set
+	} else {
+		observedBy = oBy
+	}
+
+	curDateTime := msg.Timestamp 
+	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
+		curDateTime = cdt
+	}
+
 	if v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume); ok {
-		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(msg.Timestamp), p.ObservedBy(msg.Sensor)))
+		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)))
 	}
 
 	entity, err := fiware.NewWaterConsumptionObserved(msg.Sensor, properties...)

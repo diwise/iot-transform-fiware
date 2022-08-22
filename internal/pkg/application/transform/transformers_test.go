@@ -128,6 +128,15 @@ func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
 	v := 1009.0
 	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
 
+	pack = append(pack, senml.Record{
+		Name:        "DeviceName",
+		StringValue: "deviceName",
+	},
+		senml.Record{
+			Name:        "CurrentDateTime",
+			StringValue: "2006-01-02T15:04:05Z",
+		})
+
 	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
 
 	cbClient := &test.ContextBrokerClientMock{
@@ -141,6 +150,7 @@ func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
 
 	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
 	is.True(strings.Contains(string(b), waterConsumptionFmt))
+	is.True(!strings.Contains(string(b), "62.362829")) // no location should be added
 }
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
