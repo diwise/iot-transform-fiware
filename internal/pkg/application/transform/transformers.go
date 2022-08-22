@@ -9,6 +9,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
+	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -155,6 +156,26 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
 
 	entity, err := entities.New(id, "Lifebuoy", properties...)
+	if err != nil {
+		return err
+	}
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
+
+	return err
+}
+
+func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+	}
+
+	if v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume); ok {
+		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(msg.Timestamp), p.ObservedBy(msg.Sensor)))
+	}
+
+	entity, err := fiware.NewWaterConsumptionObserved(msg.Sensor, properties...)
 	if err != nil {
 		return err
 	}

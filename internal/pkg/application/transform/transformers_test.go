@@ -124,6 +124,25 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
 
+func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
+	v := 1009.0
+	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
+
+	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
+
+	cbClient := &test.ContextBrokerClientMock{
+		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
+			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
+		},
+	}
+
+	err := WaterConsumptionObserved(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	is.True(strings.Contains(string(b), waterConsumptionFmt))
+}
+
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
 	is := is.New(t)
 	var pack senml.Pack
@@ -149,3 +168,4 @@ func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, v
 const co2PropertyFmt string = `"co2":{"type":"Property","value":%.1f}`
 const statusPropertyWithOnValue string = `"status":{"type":"Property","value":"on"}`
 const temperaturePropertyFmt string = `"temperature":{"type":"Property","value":%.1f}`
+const waterConsumptionFmt string = `"waterConsumption":{"type":"Property","value":1009`
