@@ -3,7 +3,7 @@ module github.com/diwise/iot-transform-fiware
 go 1.18
 
 require (
-	github.com/diwise/context-broker v0.0.0-20220822094330-5a559191cd68
+	github.com/diwise/context-broker v0.0.0-20220823081608-5d59a59feb37
 	github.com/diwise/messaging-golang v0.0.0-20220413073613-1dcf3cdf0dcd
 	github.com/diwise/service-chassis v0.0.0-20220609153321-22f72f7f5e21
 	github.com/farshidtz/senml/v2 v2.0.0
@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/diwise/iot-core v0.0.0-20220819173156-806968b116e8
+	github.com/diwise/iot-core v0.0.0-20220822114846-32f876f5d0f2
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -36,10 +36,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.9.0 // indirect
 	go.opentelemetry.io/otel/trace v1.9.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
-	golang.org/x/net v0.0.0-20220812174116-3211cb980234 // indirect
+	golang.org/x/net v0.0.0-20220822230855-b0a4917ee28c // indirect
 	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6 // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20220819174105-e9f053255caa // indirect
+	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc // indirect
 	google.golang.org/grpc v1.48.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
