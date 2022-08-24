@@ -13,7 +13,7 @@ import (
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	temp := 22.2	
+	temp := 22.2
 	is, pack := testSetup(t, "3303", measurements.Temperature, "air", &temp, nil, "")
 	r := NewTransformerRegistry()
 
@@ -35,7 +35,7 @@ func TestWaterQualityObservedMapping(t *testing.T) {
 }
 
 func TestLifeBuoyMapping(t *testing.T) {
-	vb := true	
+	vb := true
 	is, pack := testSetup(t, "3302", measurements.Presence, "lifebuoy", nil, &vb, "")
 	r := NewTransformerRegistry()
 
@@ -45,8 +45,20 @@ func TestLifeBuoyMapping(t *testing.T) {
 	is.Equal("Lifebuoy", getFuncName(tr))
 }
 
+func TestWaterConsumptionMapping(t *testing.T) {
+	v := 1009.0
+	is, pack := testSetup(t, "3424", measurements.CumulatedWaterVolume, "", &v, nil, "")
+	r := NewTransformerRegistry()
+
+	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+
+	is.True(isFunc(tr))
+	is.Equal("WaterConsumptionObserved", getFuncName(tr))
+}
+
 func transformerName(p senml.Pack) string {
-	return fmt.Sprintf("%s/%s", p[0].BaseName, p[2].StringValue)
+	tn := fmt.Sprintf("%s/%s", p[0].BaseName, p[2].StringValue)
+	return strings.TrimSuffix(tn, "/")
 }
 
 func isFunc(v interface{}) bool {
