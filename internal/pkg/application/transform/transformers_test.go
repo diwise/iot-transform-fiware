@@ -140,17 +140,16 @@ func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
 	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
 
 	cbClient := &test.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
 	}
 
 	err := WaterConsumptionObserved(context.Background(), msg, cbClient)
 	is.NoErr(err)
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), waterConsumptionFmt))
-	is.True(!strings.Contains(string(b), "62.362829")) // no location should be added
 }
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {

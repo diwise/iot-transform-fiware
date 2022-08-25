@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -178,7 +179,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		observedBy = oBy
 	}
 
-	curDateTime := msg.Timestamp 
+	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		curDateTime = cdt
 	}
@@ -187,13 +188,15 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)))
 	}
 
-	entity, err := fiware.NewWaterConsumptionObserved(msg.Sensor, properties...)
+	entityID := fmt.Sprintf("%s:%s", msg.Sensor, time.Now().UTC().Format("2006-01-02T15:04:05Z"))
+	
+	entity, err := fiware.NewWaterConsumptionObserved(entityID, properties...)
 	if err != nil {
 		return err
 	}
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
+	_, err = cbClient.CreateEntity(ctx, entity, headers)
 
 	return err
 }
