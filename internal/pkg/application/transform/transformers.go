@@ -168,9 +168,7 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-	}
+	properties := []entities.EntityDecoratorFunc{entities.DefaultContext()}
 
 	var observedBy string
 	if oBy, ok := msg.GetString("DeviceName"); !ok || oBy == "" {
@@ -186,11 +184,13 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	if v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume); ok {
 		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)))
+	} else {
+		return fmt.Errorf("no CumulatedWaterVolume property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	entityID := fmt.Sprintf("%s:%s", msg.Sensor, time.Now().UTC().Format("2006-01-02T15:04:05Z"))
-	
-	entity, err := fiware.NewWaterConsumptionObserved(entityID, properties...)
+	entityID := fmt.Sprintf("%s%s:%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor, time.Now().UTC().Format("2006-01-02T15:04:05Z"))
+
+	entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
 	if err != nil {
 		return err
 	}
