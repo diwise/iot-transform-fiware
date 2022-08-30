@@ -19,7 +19,6 @@ import (
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	temp, ok := msg.GetFloat64(measurements.Temperature)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
@@ -39,7 +38,6 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient 
 }
 
 func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	temp, ok := msg.GetFloat64(measurements.Temperature)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
@@ -64,7 +62,6 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 }
 
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		Location(msg.Latitude(), msg.Longitude()),
@@ -100,7 +97,6 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClie
 }
 
 func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	v, ok := msg.GetBool(measurements.Presence)
 
 	if !strings.EqualFold(msg.BaseName(), lwm2m.Presence) || !ok {
@@ -133,7 +129,6 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 }
 
 func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	v, ok := msg.GetBool(measurements.Presence)
 	if !ok {
 		return fmt.Errorf("unable to update lifebuoy, ignoring %s", msg.Sensor)

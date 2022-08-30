@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
-	"os"
+
+	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/iottransformfiware"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
+	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/go-chi/chi/v5"
@@ -22,6 +24,8 @@ import (
 
 const serviceName string = "iot-transform-fiware"
 
+var contextBrokerUrl string
+
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 
@@ -30,7 +34,8 @@ func main() {
 
 	logger.Info().Msg("starting up ...")
 
-	app := SetupIoTTransformFiware(logger)
+	contextBrokerUrl = env.GetVariableOrDie(logger, "NGSI_CB_URL", "URL to ngsi-ld context broker")
+	messageProcessor := messageprocessor.NewMessageProcessor()
 
 	config := messaging.LoadConfiguration(serviceName, logger)
 	messenger, err := messaging.Initialize(config)
@@ -40,30 +45,28 @@ func main() {
 	}
 
 	routingKey := "message.accepted"
-	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, app))
+	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, messageProcessor))
 
 	setupRouterAndWaitForConnections(logger)
 }
 
-func newTopicMessageHandler(messenger messaging.MsgContext, app iottransformfiware.IoTTransformFiware) messaging.TopicMessageHandler {
+func newTopicMessageHandler(messenger messaging.MsgContext, app messageprocessor.MessageProcessor) messaging.TopicMessageHandler {
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-
 		ctx = logging.NewContextWithLogger(ctx, logger)
 		logger.Info().Str("body", string(msg.Body)).Msg("received message")
 
-		err := app.MessageAccepted(ctx, msg.Body)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to handle accepted message")
+		messageAccepted := iotcore.MessageAccepted{}
+
+		if err := json.Unmarshal(msg.Body, &messageAccepted); err == nil {
+			contextBrokerClient := client.NewContextBrokerClient(contextBrokerUrl, client.Tenant(messageAccepted.Tenant()))
+
+			if err := app.ProcessMessage(ctx, messageAccepted, contextBrokerClient); err != nil {
+				logger.Error().Err(err).Msg("failed to handle accepted message")
+			}
+		} else {
+			logger.Error().Err(err).Msg("unable to unmarshal incoming message")
 		}
 	}
-}
-
-func SetupIoTTransformFiware(logger zerolog.Logger) iottransformfiware.IoTTransformFiware {
-	contextBrokerUrl := os.Getenv("NGSI_CB_URL")
-	c := client.NewContextBrokerClient(contextBrokerUrl)
-	m := messageprocessor.NewMessageProcessor(c)
-
-	return iottransformfiware.NewIoTTransformFiware(m, logger)
 }
 
 func setupRouterAndWaitForConnections(logger zerolog.Logger) {

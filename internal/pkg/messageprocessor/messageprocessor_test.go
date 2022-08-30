@@ -39,8 +39,8 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
-	mp := NewMessageProcessor(cbClient)
-	err := mp.ProcessMessage(context.Background(), msg)
+	mp := NewMessageProcessor()
+	err := mp.ProcessMessage(context.Background(), msg, cbClient)
 
 	is.NoErr(err)
 	is.Equal(len(cbClient.CreateEntityCalls()), 1) // should have been called once
@@ -69,8 +69,8 @@ func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
 
-	mp := NewMessageProcessor(cbClient)
-	err := mp.ProcessMessage(context.Background(), msg)
+	mp := NewMessageProcessor()
+	err := mp.ProcessMessage(context.Background(), msg, cbClient)
 
 	is.NoErr(err)
 	is.Equal(len(cbClient.UpdateEntityAttributesCalls()), 1) // expected a single request to context broker

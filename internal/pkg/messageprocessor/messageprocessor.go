@@ -11,15 +11,15 @@ import (
 )
 
 type MessageProcessor interface {
-	ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error
+	ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted, contextBrokerClient client.ContextBrokerClient) error
 }
 
 type messageProcessor struct {
 	transformerRegistry transform.TransformerRegistry
-	contextBrokerClient client.ContextBrokerClient
 }
 
-func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted) error {
+func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.MessageAccepted, contextBrokerClient client.ContextBrokerClient) error {
+	log := logging.GetFromContext(ctx)
 
 	sensorType := msg.BaseName()
 
@@ -31,13 +31,11 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 
 	transformer := mp.transformerRegistry.GetTransformerForSensorType(ctx, sensorType)
 
-	log := logging.GetFromContext(ctx)
-
 	if transformer == nil {
 		return fmt.Errorf("no transformer found for sensorType %s", sensorType)
 	}
 
-	err := transformer(ctx, msg, mp.contextBrokerClient)
+	err := transformer(ctx, msg, contextBrokerClient)
 
 	if err != nil {
 		log.Err(err).Msgf("unable to transform type %s", sensorType)
@@ -47,11 +45,10 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 	return nil
 }
 
-func NewMessageProcessor(contextBrokerClient client.ContextBrokerClient) MessageProcessor {
+func NewMessageProcessor() MessageProcessor {
 	tr := transform.NewTransformerRegistry()
 
 	return &messageProcessor{
 		transformerRegistry: tr,
-		contextBrokerClient: contextBrokerClient,
 	}
 }
