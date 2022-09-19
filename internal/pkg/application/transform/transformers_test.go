@@ -134,7 +134,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	},
 		senml.Record{
 			Name:        "CurrentDateTime",
-			StringValue: "2006-01-02T15:04:05Z",
+			StringValue: "2006-01-02T15:04:05.869475538Z",
 		})
 
 	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
@@ -168,7 +168,7 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	},
 		senml.Record{
 			Name:        "CurrentDateTime",
-			StringValue: "2006-01-02T15:04:05Z",
+			StringValue: "2006-01-02T15:04:05.869475538Z",
 		})
 
 	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)

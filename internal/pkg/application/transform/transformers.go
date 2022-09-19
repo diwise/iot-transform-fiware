@@ -166,6 +166,9 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
+		if idx := strings.Index(cdt, "."); idx > 0 {
+			cdt = cdt[0:idx] + "Z"
+		}
 		curDateTime = cdt
 	}
 
