@@ -124,7 +124,7 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
 
-func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
+func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	v := 1009.0
 	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
 
@@ -140,6 +140,43 @@ func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
 	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
 
 	cbClient := &test.ContextBrokerClientMock{
+		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
+			return &ngsild.UpdateEntityAttributesResult{}, nil
+		},
+	}
+
+	err := WaterConsumptionObserved(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	is.Equal(len(cbClient.UpdateEntityAttributesCalls()), 1) // update entity attributes should have been called once
+
+	expectedEntityID := "urn:ngsi-ld:WaterConsumptionObserved:watermeter-01"
+	is.Equal(cbClient.UpdateEntityAttributesCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+
+	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	is.Equal(string(b), expectedPatchBody)
+}
+
+func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
+	v := 1009.0
+	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
+
+	pack = append(pack, senml.Record{
+		Name:        "DeviceName",
+		StringValue: "deviceName",
+	},
+		senml.Record{
+			Name:        "CurrentDateTime",
+			StringValue: "2006-01-02T15:04:05Z",
+		})
+
+	msg := iotcore.NewMessageAccepted("watermeter-01", pack).AtLocation(62.362829, 17.509804)
+
+	cbClient := &test.ContextBrokerClientMock{
+		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
+			return nil, fmt.Errorf("no such entity")
+		},
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -149,7 +186,8 @@ func TestThatWaterConsumptionObservedCanBeCreated(t *testing.T) {
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), waterConsumptionFmt))
+	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	is.Equal(string(b), expectedCreateBody)
 }
 
 func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
