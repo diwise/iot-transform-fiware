@@ -215,4 +215,3 @@ func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, v
 const co2PropertyFmt string = `"co2":{"type":"Property","value":%.1f}`
 const statusPropertyWithOnValue string = `"status":{"type":"Property","value":"on"}`
 const temperaturePropertyFmt string = `"temperature":{"type":"Property","value":%.1f}`
-const waterConsumptionFmt string = `"waterConsumption":{"type":"Property","value":1009`
