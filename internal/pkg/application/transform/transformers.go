@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -163,35 +163,47 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{entities.DefaultContext()}
-
-	var observedBy string
-	if oBy, ok := msg.GetString("DeviceName"); !ok || oBy == "" {
-		observedBy = msg.Sensor // fallback to sensor ID if deviceName is not set
-	} else {
-		observedBy = oBy
-	}
 
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		curDateTime = cdt
 	}
 
-	if v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume); ok {
-		properties = append(properties, Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)))
-	} else {
+	v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume)
+	if !ok {
 		return fmt.Errorf("no CumulatedWaterVolume property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	entityID := fmt.Sprintf("%s%s:%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor, time.Now().UTC().Format("2006-01-02T15:04:05Z"))
+	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+	patchProperties := []entities.EntityDecoratorFunc{
+		Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+	}
+
+	fragment, err := entities.NewFragment(patchProperties...)
 	if err != nil {
-		return err
+		return fmt.Errorf("entities.NewFragment failed: %w", err)
 	}
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, entity, headers)
+	_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+
+	if err != nil {
+		// If we failed to update the entity's attributes, we need to create it
+		properties := append(patchProperties, entities.DefaultContext())
+		var entity types.Entity
+
+		entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+		if err != nil {
+			return fmt.Errorf("entities.New failed: %w", err)
+		}
+
+		_, err = cbClient.CreateEntity(ctx, entity, headers)
+		if err != nil {
+			err = fmt.Errorf("create entity failed: %w", err)
+		}
+	}
 
 	return err
 }
