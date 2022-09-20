@@ -3,6 +3,7 @@ package transform
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
@@ -179,6 +180,9 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	// lwm2m reports water volume in m3, but the context broker expects litres as default
+	v = math.Floor((v + 0.0005) * 1000)
 
 	patchProperties := []entities.EntityDecoratorFunc{
 		Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
