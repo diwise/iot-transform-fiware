@@ -125,7 +125,7 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 }
 
 func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
-	v := 1009.0
+	v := 1.009
 	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
 
 	pack = append(pack, senml.Record{
@@ -159,7 +159,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 }
 
 func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
-	v := 1009.0
+	v := 1.009
 	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
 
 	pack = append(pack, senml.Record{
