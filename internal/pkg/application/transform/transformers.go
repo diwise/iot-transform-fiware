@@ -214,3 +214,146 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	return err
 }
+
+func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+
+	curDateTime := msg.Timestamp
+	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
+		if idx := strings.Index(cdt, "."); idx > 0 {
+			cdt = cdt[0:idx] + "Z"
+		}
+		curDateTime = cdt
+	}
+
+	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	//var fragment types.EntityFragment
+
+	// GreenspaceRecord is called by one of its properties. First out creates the entity, all other subsequent calls, independent which property, updates the entity.
+	te, ok := msg.GetFloat64(measurements.Temperature)
+	if ok {
+		patchProperties := []entities.EntityDecoratorFunc{
+			Number("soilTemperature", te, p.UnitCode("CEL"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		}
+
+		fragment, err := entities.NewFragment(patchProperties...)
+		if err != nil {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
+		}
+
+		_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+
+		if err != nil {
+			// If we failed to update the entity's attributes, we need to create it
+			properties := append(patchProperties, entities.DefaultContext())
+			var entity types.Entity
+
+			entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+			if err != nil {
+				return fmt.Errorf("entities.New failed: %w", err)
+			}
+
+			_, err = cbClient.CreateEntity(ctx, entity, headers)
+			if err != nil {
+				err = fmt.Errorf("create entity failed: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	pr, ok := msg.GetFloat64("Pressure")
+	if ok {
+		patchProperties := []entities.EntityDecoratorFunc{
+			Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		}
+
+		fragment, err := entities.NewFragment(patchProperties...)
+		if err != nil {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
+		}
+
+		_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+
+		if err != nil {
+			// If we failed to update the entity's attributes, we need to create it
+			properties := append(patchProperties, entities.DefaultContext())
+			var entity types.Entity
+
+			entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+			if err != nil {
+				return fmt.Errorf("entities.New failed: %w", err)
+			}
+
+			_, err = cbClient.CreateEntity(ctx, entity, headers)
+			if err != nil {
+				err = fmt.Errorf("create entity failed: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	co, ok := msg.GetFloat64("Conductivity")
+	if ok {
+		patchProperties := []entities.EntityDecoratorFunc{
+			Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		}
+
+		fragment, err := entities.NewFragment(patchProperties...)
+		if err != nil {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
+		}
+
+		_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+
+		if err != nil {
+			// If we failed to update the entity's attributes, we need to create it
+			properties := append(patchProperties, entities.DefaultContext())
+			var entity types.Entity
+
+			entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+			if err != nil {
+				return fmt.Errorf("entities.New failed: %w", err)
+			}
+
+			_, err = cbClient.CreateEntity(ctx, entity, headers)
+			if err != nil {
+				err = fmt.Errorf("create entity failed: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	return nil
+
+}
+
+func GreenspaceRecordOld(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+
+	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecordTypeName:", msg.Sensor)
+
+	temp, ok := msg.GetFloat64(measurements.Temperature)
+	if !ok {
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
+	}
+
+	gr, err := entities.New(
+		entityID, "GreenspaceRecord", entities.DefaultContext(),
+		Location(msg.Latitude(), msg.Longitude()),
+		DateObserved(msg.Timestamp),
+		Temperature(temp),
+	)
+	if err != nil {
+		return err
+	}
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.CreateEntity(ctx, gr, headers)
+
+	return err
+}

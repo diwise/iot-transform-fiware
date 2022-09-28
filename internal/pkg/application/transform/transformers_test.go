@@ -124,6 +124,82 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
 
+func TestThatGreenspaceRecordTemperatureCanBeCreated(t *testing.T) {
+	temp := 14.1
+	is, pack := testSetup(t, "3303", "Temperature", "soil", &temp, nil, "")
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	var e types.Entity
+
+	cbClient := &test.ContextBrokerClientMock{
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity
+			_ = e
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	//is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+	is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+
+}
+
+func TestThatGreenspaceRecordConductivityCanBeCreated(t *testing.T) {
+	conductivity := float64(536)
+	is, pack := testSetup(t, "3327", "Concuctivity", "soil", &conductivity, nil, "")
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	var e types.Entity
+
+	cbClient := &test.ContextBrokerClientMock{
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity
+			_ = e
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	//is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+	is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+
+}
+
+func TestThatGreenspaceRecordCanBeCreated(t *testing.T) {
+	temp := 14.1
+	is, pack := testSetup(t, "3303", "Temperature", "Soil", &temp, nil, "")
+	//	is, pack2 := testSetup(t, "3323", "Concuctivity", "Soil", &temp, nil, "")
+	//	is, pack3 := testSetup(t, "3327", "Battery", "Soil", &temp, nil, "")
+	//	is, pack4 := testSetup(t, "3411", "Battery", "Soil", &temp, nil, "")
+
+	msg := iotcore.NewMessageAccepted("deviceID", pack).AtLocation(62.362829, 17.509804)
+
+	var e types.Entity
+
+	cbClient := &test.ContextBrokerClientMock{
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity
+			_ = e
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	//is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+	is.True(strings.Contains(string(b), fmt.Sprintf(temperaturePropertyFmt, *msg.Pack[1].Value))) // temperature should be 14.1
+
+}
+
 func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	v := 1.009
 	is, pack := testSetup(t, "3424", "CumulatedWaterVolume", "", &v, nil, "")
