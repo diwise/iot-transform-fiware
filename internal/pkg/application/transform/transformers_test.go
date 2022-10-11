@@ -223,7 +223,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExisting(t *testing.T) {
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoisturePressure":{"type":"Property","value":7,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
+	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoisturePressure":{"type":"Property","value":7,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
 	is.Equal(string(b), expectedCreateBody)
 }
 
@@ -257,7 +257,7 @@ func TestThatGrenspaceRecordIsPatchedIfNonExisting(t *testing.T) {
 	is.Equal(cbClient.UpdateEntityAttributesCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
 
 	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls())
-	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","soilMoisturePressure":{"type":"Property","value":0,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
+	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
 	is.Equal(string(b), expectedCreateBody)
 }
 
