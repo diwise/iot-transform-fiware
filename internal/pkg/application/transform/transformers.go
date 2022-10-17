@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -164,7 +165,6 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		if idx := strings.Index(cdt, "."); idx > 0 {
@@ -184,11 +184,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	// lwm2m reports water volume in m3, but the context broker expects litres as default
 	v = math.Floor((v + 0.0005) * 1000)
 
-	patchProperties := []entities.EntityDecoratorFunc{
-		Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
-	}
-
-	fragment, err := entities.NewFragment(patchProperties...)
+	fragment, err := entities.NewFragment(patchProperties(v, curDateTime, observedBy)...)
 	if err != nil {
 		return fmt.Errorf("entities.NewFragment failed: %w", err)
 	}
@@ -198,7 +194,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	if err != nil {
 		// If we failed to update the entity's attributes, we need to create it
-		properties := append(patchProperties, entities.DefaultContext())
+		properties := append(patchProperties(v, curDateTime, observedBy), entities.DefaultContext())
 		var entity types.Entity
 
 		entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
@@ -212,5 +208,35 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		}
 	}
 
+	if err != nil {
+		// could not update nor create entity
+		return err
+	}
+
+	for _, r := range msg.Pack {
+		if strings.EqualFold("DeltaVolume", r.Name) {
+			// lwm2m reports water volume in m3, but the context broker expects litres as default
+			aggregatedDeltaVolume := math.Floor((*r.Sum + 0.0005) * 1000)
+			logDateTime := time.UnixMilli(int64(r.Time)).Format(time.RFC3339Nano)
+
+			fragment, err = entities.NewFragment(patchProperties(aggregatedDeltaVolume, logDateTime, observedBy)...)
+			if err != nil {
+				return fmt.Errorf("entities.NewFragment failed: %w", err)
+			}
+
+			_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+			if err != nil {
+				err = fmt.Errorf("update entity with delta volume failed: %w", err)
+				break
+			}
+		}
+	}
+
 	return err
+}
+
+func patchProperties(volume float64, dateTime, observedBy string) []entities.EntityDecoratorFunc {
+	return []entities.EntityDecoratorFunc{
+		Number("waterConsumption", volume, p.UnitCode("LTR"), p.ObservedAt(dateTime), p.ObservedBy(observedBy)),
+	}
 }
