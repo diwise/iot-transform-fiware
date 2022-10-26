@@ -166,36 +166,88 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	curDateTime := msg.Timestamp
-	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
-		if idx := strings.Index(cdt, "."); idx > 0 {
-			cdt = cdt[0:idx] + "Z"
-		}
-		curDateTime = cdt
-	}
-
-	v, ok := msg.GetFloat64(measurements.CumulatedWaterVolume)
-	if !ok {
-		return fmt.Errorf("no CumulatedWaterVolume property was found in message from %s, ignoring", msg.Sensor)
-	}
-
+	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	log := logging.GetFromContext(ctx)
 	log.Debug().Msgf("transforming %s into %s", msg.Sensor, entityID)
 
-	// lwm2m reports water volume in m3, but the context broker expects litres as default
-	v = math.Floor((v + 0.0005) * 1000)
+	// start with delta volumes
+	for _, record := range msg.Pack {
+		if strings.EqualFold("DeltaVolume", record.Name) {
+			// lwm2m reports water volume in m3, but the context broker expects litres as default
+			vol := math.Floor((*record.Sum + 0.0005) * 1000)
+			dt := time.UnixMilli(int64(record.Time * 1000)).Format(time.RFC3339Nano)
 
+			props := waterConsumptionProps(vol, dt, observedBy, msg)
+
+			if err := updateWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
+				if err := createWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
+					return fmt.Errorf("failed to create delta volume: %w", err)
+				}
+			}
+		}
+	}
+
+	// add current volume
+	if cumulatedWaterVolume, ok := msg.GetFloat64(measurements.CumulatedWaterVolume); ok {
+		curDateTime := msg.Timestamp
+		if cdt, ok := msg.GetString("CurrentDateTime"); ok {
+			if idx := strings.Index(cdt, "."); idx > 0 {
+				cdt = cdt[0:idx] + "Z"
+			}
+			curDateTime = cdt
+		}
+
+		// lwm2m reports water volume in m3, but the context broker expects litres as default
+		cumulatedWaterVolume = math.Floor((cumulatedWaterVolume + 0.0005) * 1000)
+
+		props := waterConsumptionProps(cumulatedWaterVolume, curDateTime, observedBy, msg)
+
+		if err := updateWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
+			if err := createWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
+				return fmt.Errorf("failed to create new entity: %w", err)
+			}
+		}
+	} else {
+		return fmt.Errorf("no volume property was found in message from %s, ignoring", msg.Sensor)
+	}
+
+	return nil
+}
+
+func waterConsumptionProps(vol float64, dt, observedBy string, msg iotcore.MessageAccepted) []entities.EntityDecoratorFunc {
 	props := []entities.EntityDecoratorFunc{
-		Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		Number("waterConsumption", vol, p.UnitCode("LTR"), p.ObservedAt(dt), p.ObservedBy(observedBy)),
 	}
 
 	if msg.IsLocated() {
 		props = append(props, Location(msg.Latitude(), msg.Longitude()))
 	}
 
+	return props
+}
+
+func createWaterConsumption(ctx context.Context, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
+	var entity types.Entity
+
+	props = append(props, entities.DefaultContext())
+
+	entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
+	if err != nil {
+		return fmt.Errorf("entities.New failed: %w", err)
+	}
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.CreateEntity(ctx, entity, headers)
+	if err != nil {
+		return fmt.Errorf("create entity failed: %w", err)
+	}
+
+	return nil
+}
+
+func updateWaterConsumption(ctx context.Context, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
 	fragment, err := entities.NewFragment(props...)
 	if err != nil {
 		return fmt.Errorf("entities.NewFragment failed: %w", err)
@@ -203,50 +255,9 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
-
 	if err != nil {
-		// If we failed to update the entity's attributes, we need to create it
-		props := append(props, entities.DefaultContext())
-		var entity types.Entity
-
-		entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
-		if err != nil {
-			return fmt.Errorf("entities.New failed: %w", err)
-		}
-
-		_, err = cbClient.CreateEntity(ctx, entity, headers)
-		if err != nil {
-			err = fmt.Errorf("create entity failed: %w", err)
-		}
+		return fmt.Errorf("update entity failed: %w", err)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	for _, r := range msg.Pack {
-		if strings.EqualFold("DeltaVolume", r.Name) {
-			// lwm2m reports water volume in m3, but the context broker expects litres as default
-			aggregatedDeltaVolume := math.Floor((*r.Sum + 0.0005) * 1000)
-			// senML time is in seconds
-			logDateTime := time.UnixMilli(int64(r.Time * 1000)).Format(time.RFC3339Nano)
-
-			props := []entities.EntityDecoratorFunc{
-				Number("waterConsumption", aggregatedDeltaVolume, p.UnitCode("LTR"), p.ObservedAt(logDateTime), p.ObservedBy(observedBy)),
-			}
-
-			fragment, err = entities.NewFragment(props...)
-			if err != nil {
-				return fmt.Errorf("entities.NewFragment failed: %w", err)
-			}
-
-			_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
-			if err != nil {
-				err = fmt.Errorf("update entity with delta volume failed: %w", err)
-				break
-			}
-		}
-	}
-
-	return err
+	return nil
 }

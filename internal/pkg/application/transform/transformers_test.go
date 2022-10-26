@@ -214,10 +214,10 @@ func TestDeltaVolumes(t *testing.T) {
 	}, senml.Record{
 		Name:  "DeltaVolume",
 		Value: &dv1,
-		Time:  float64(time.Now().UTC().UnixMilli()),
+		Time:  float64(time.Now().UTC().UnixMilli() / 1000),
 		Sum:   &dvCumulated,
 	}, senml.Record{
-		Name:        "Env",
+		Name:        "env",
 		StringValue: "",
 	})
 
