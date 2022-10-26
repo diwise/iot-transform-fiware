@@ -155,7 +155,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	is.Equal(cbClient.UpdateEntityAttributesCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
 
 	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
-	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
 	is.Equal(string(b), expectedPatchBody)
 }
 
@@ -187,7 +187,7 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
 	is.Equal(string(b), expectedCreateBody)
 }
 
@@ -225,7 +225,7 @@ func TestDeltaVolumes(t *testing.T) {
 
 	cbClient := &test.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return nil, fmt.Errorf("no such entity")
+			return &ngsild.UpdateEntityAttributesResult{}, nil
 		},
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil

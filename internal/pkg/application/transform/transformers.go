@@ -16,6 +16,7 @@ import (
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -181,10 +182,21 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
+	log := logging.GetFromContext(ctx)
+	log.Debug().Msgf("transforming %s into %s", msg.Sensor, entityID)
+
 	// lwm2m reports water volume in m3, but the context broker expects litres as default
 	v = math.Floor((v + 0.0005) * 1000)
 
-	fragment, err := entities.NewFragment(patchProperties(v, curDateTime, observedBy)...)
+	props := []entities.EntityDecoratorFunc{
+		Number("waterConsumption", v, p.UnitCode("LTR"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+	}
+
+	if msg.IsLocated() {
+		props = append(props, Location(msg.Latitude(), msg.Longitude()))
+	}
+
+	fragment, err := entities.NewFragment(props...)
 	if err != nil {
 		return fmt.Errorf("entities.NewFragment failed: %w", err)
 	}
@@ -194,10 +206,10 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 	if err != nil {
 		// If we failed to update the entity's attributes, we need to create it
-		properties := append(patchProperties(v, curDateTime, observedBy), entities.DefaultContext())
+		props := append(props, entities.DefaultContext())
 		var entity types.Entity
 
-		entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...)
+		entity, err = entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
 		if err != nil {
 			return fmt.Errorf("entities.New failed: %w", err)
 		}
@@ -209,7 +221,6 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	}
 
 	if err != nil {
-		// could not update nor create entity
 		return err
 	}
 
@@ -217,9 +228,14 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		if strings.EqualFold("DeltaVolume", r.Name) {
 			// lwm2m reports water volume in m3, but the context broker expects litres as default
 			aggregatedDeltaVolume := math.Floor((*r.Sum + 0.0005) * 1000)
-			logDateTime := time.UnixMilli(int64(r.Time)).Format(time.RFC3339Nano)
+			// senML time is in seconds
+			logDateTime := time.UnixMilli(int64(r.Time * 1000)).Format(time.RFC3339Nano)
 
-			fragment, err = entities.NewFragment(patchProperties(aggregatedDeltaVolume, logDateTime, observedBy)...)
+			props := []entities.EntityDecoratorFunc{
+				Number("waterConsumption", aggregatedDeltaVolume, p.UnitCode("LTR"), p.ObservedAt(logDateTime), p.ObservedBy(observedBy)),
+			}
+
+			fragment, err = entities.NewFragment(props...)
 			if err != nil {
 				return fmt.Errorf("entities.NewFragment failed: %w", err)
 			}
@@ -233,10 +249,4 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	}
 
 	return err
-}
-
-func patchProperties(volume float64, dateTime, observedBy string) []entities.EntityDecoratorFunc {
-	return []entities.EntityDecoratorFunc{
-		Number("waterConsumption", volume, p.UnitCode("LTR"), p.ObservedAt(dateTime), p.ObservedBy(observedBy)),
-	}
 }
