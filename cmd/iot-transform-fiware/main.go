@@ -32,8 +32,6 @@ func main() {
 	_, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
-	logger.Info().Msg("starting up ...")
-
 	contextBrokerUrl = env.GetVariableOrDie(logger, "NGSI_CB_URL", "URL to ngsi-ld context broker")
 	messageProcessor := messageprocessor.NewMessageProcessor()
 
