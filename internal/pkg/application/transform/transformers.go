@@ -2,6 +2,7 @@ package transform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
@@ -34,10 +36,20 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient 
 		return err
 	}
 
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.CreateEntity(ctx, wo, headers)
 
-	return err
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create entity")
+		return err
+	}
+
+	logger.Info().Msg("entity created")
+
+	return nil
 }
 
 func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -58,10 +70,20 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 		return err
 	}
 
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.CreateEntity(ctx, wqo, headers)
 
-	return err
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create entity")
+		return err
+	}
+
+	logger.Info().Msg("entity created")
+
+	return nil
 }
 
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -93,10 +115,20 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClie
 		return err
 	}
 
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.CreateEntity(ctx, aqo, headers)
 
-	return err
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create entity")
+		return err
+	}
+
+	logger.Info().Msg("entity created")
+
+	return nil
 }
 
 func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -125,10 +157,20 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 		return err
 	}
 
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", entity.ID()).Logger()
+
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
 
-	return err
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to update entity attributes")
+		return err
+	}
+
+	logger.Info().Msg("entity attributes updated")
+
+	return nil
 }
 
 func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -154,15 +196,37 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 
 	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
 
-	entity, err := entities.New(id, "Lifebuoy", properties...)
+	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
 		return err
 	}
 
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
 
-	return err
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.UpdateEntityAttributes(ctx, id, fragment, headers)
+
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("unable to update entity attributes")
+			return err
+		}
+
+		logger.Info().Msg("failed to update entity attributes (entity not found)")
+
+		entity, _ := entities.New(id, "Lifebuoy", properties...)
+		_, err = cbClient.CreateEntity(ctx, entity, headers)
+
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+	}
+
+	logger.Info().Msg("entity updated")
+
+	return nil
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -170,7 +234,9 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	log.Debug().Msgf("transforming %s into %s", msg.Sensor, entityID)
+	log = log.With().Str("entityID", entityID).Logger()
+
+	log.Debug().Msgf("transforming message from %s", msg.Sensor)
 
 	// start with delta volumes
 	for _, record := range msg.Pack {
@@ -183,7 +249,9 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 			if err := updateWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
 				if err := createWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
-					return fmt.Errorf("failed to create delta volume: %w", err)
+					err = fmt.Errorf("failed to create delta volume: %w", err)
+					log.Error().Err(err).Msg("create failed")
+					return err
 				}
 			}
 		}
@@ -206,9 +274,13 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 
 		if err := updateWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
 			if err := createWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
+				log.Error().Err(err).Msg("failed to create entity")
 				return fmt.Errorf("failed to create new entity: %w", err)
 			}
 		}
+
+		log.Info().Msg("entity updated")
+
 	} else {
 		return fmt.Errorf("no volume property was found in message from %s, ignoring", msg.Sensor)
 	}
