@@ -66,6 +66,14 @@ github.com/diwise/iot-core v0.0.0-20220927200207-a94a65f39233 h1:8YIJrZIiUd9gXeQ
 github.com/diwise/iot-core v0.0.0-20220927200207-a94a65f39233/go.mod h1:kSCnZFaax9fAWBTpY3mSKOKOCwFJdBT+DqLXqbGoidA=
 github.com/diwise/iot-core v0.0.0-20221025152418-09fe9d02163c h1:vv3sWPQdxSUy43qnmdAZETYXAFRaeZtozs6nnI2tTcw=
 github.com/diwise/iot-core v0.0.0-20221025152418-09fe9d02163c/go.mod h1:UMyjvchgYIYMnko75W9BMwB9aJSFpazV3H6tHG8ztjU=
+github.com/diwise/iot-core v0.0.0-20221110132548-14e070a38d43 h1:OLvuCxzRMUU65j5u7GeGakG4xs5iT2yEtBuKF9oy5Ds=
+github.com/diwise/iot-core v0.0.0-20221110132548-14e070a38d43/go.mod h1:yTQfQyfBlSxoOJ/k56ITE74lNh2U08ir5QHgiIgK0YY=
+github.com/diwise/iot-core v0.0.0-20221110133631-417d3ec2a0b2 h1:58BvUaAIBnwfO88SQhnN2fGOLQFMJ3IQWV3/CPotCrY=
+github.com/diwise/iot-core v0.0.0-20221110133631-417d3ec2a0b2/go.mod h1:yTQfQyfBlSxoOJ/k56ITE74lNh2U08ir5QHgiIgK0YY=
+github.com/diwise/iot-core v0.0.0-20221110150619-33f21a25995e h1:sdm5vxYuBnbXPaSGABjxHRUVKfPBggSf/77mRHsn/dk=
+github.com/diwise/iot-core v0.0.0-20221110150619-33f21a25995e/go.mod h1:yTQfQyfBlSxoOJ/k56ITE74lNh2U08ir5QHgiIgK0YY=
+github.com/diwise/iot-core v0.0.0-20221110151055-5ad417737189 h1:3x6ET0pzBR5tuYNCuVVxoop86D//d/jyNMjqyOtwJmo=
+github.com/diwise/iot-core v0.0.0-20221110151055-5ad417737189/go.mod h1:yTQfQyfBlSxoOJ/k56ITE74lNh2U08ir5QHgiIgK0YY=
 github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05 h1:Z+oH58jdzH3wOIaxDKV7J+xCEpvGSnmteRz2RlqDajE=
 github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/service-chassis v0.0.0-20220609153321-22f72f7f5e21 h1:slCX3+Ni152fJdkiyGe2sjxzu9TvClfmQZ3JV+lXFmQ=
