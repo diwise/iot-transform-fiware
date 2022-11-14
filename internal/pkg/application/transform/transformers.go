@@ -177,7 +177,7 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	v, ok := msg.GetBool(measurements.Presence)
 	if !ok {
-		return fmt.Errorf("unable to update lifebuoy, ignoring %s", msg.Sensor)
+		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
 
 	properties := []entities.EntityDecoratorFunc{
