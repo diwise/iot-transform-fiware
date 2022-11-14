@@ -36,7 +36,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 		},
 	}
 	val := 22.2
-	msg := iotcore.NewMessageAccepted("deviceID", base("urn:oma:lwm2m:ext:3303/air", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Temperature, "", &val, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/air", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Temperature, "", &val, nil, 0, nil))
 
 	mp := NewMessageProcessor()
 	err := mp.ProcessMessage(context.Background(), *msg, cbClient)
@@ -55,7 +55,7 @@ func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 	}
 
 	p := true
-	msg := iotcore.NewMessageAccepted("deviceID", base("urn:oma:lwm2m:ext:3302/lifebuoy", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Presence, "", nil, &p, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302/lifebuoy", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Presence, "", nil, &p, 0, nil))
 
 	mp := NewMessageProcessor()
 	err := mp.ProcessMessage(context.Background(), *msg, cbClient)
