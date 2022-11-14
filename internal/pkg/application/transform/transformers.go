@@ -177,7 +177,7 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	v, ok := msg.GetBool(measurements.Presence)
 	if !ok {
-		return fmt.Errorf("unable to update lifebuoy, ignoring %s", msg.Sensor)
+		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
 
 	properties := []entities.EntityDecoratorFunc{
@@ -253,7 +253,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	if logVolume, ok := msg.GetFloat64("LogVolume"); ok {
 		if logDateTime, ok := msg.GetTime("LogDateTime"); ok {
 			vol := math.Floor((logVolume + 0.0005) * 1000)
-			dt := time.Unix(int64(logDateTime), 0).Format(time.RFC3339Nano)
+			dt := time.Unix(int64(logDateTime), 0).UTC().Format(time.RFC3339Nano)
 			props := waterConsumptionProps(vol, dt, observedBy, msg)
 
 			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
@@ -267,7 +267,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	for _, record := range msg.Pack {
 		if strings.EqualFold("DeltaVolume", record.Name) {
 			vol := math.Floor((*record.Sum + 0.0005) * 1000)
-			dt := time.Unix(int64(record.Time), 0).Format(time.RFC3339Nano)
+			dt := time.Unix(int64(record.Time), 0).UTC().Format(time.RFC3339Nano)
 			props := waterConsumptionProps(vol, dt, observedBy, msg)
 
 			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
@@ -281,7 +281,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	if currentVolume, ok := msg.GetFloat64("CurrentVolume"); ok {
 		if currentDateTime, ok := msg.GetTime("CurrentDateTime"); ok {
 			vol := math.Floor((currentVolume + 0.0005) * 1000)
-			dt := time.Unix(int64(currentDateTime), 0).Format(time.RFC3339Nano)
+			dt := time.Unix(int64(currentDateTime), 0).UTC().Format(time.RFC3339Nano)
 			props := waterConsumptionProps(vol, dt, observedBy, msg)
 
 			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
