@@ -227,7 +227,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExisting(t *testing.T) {
 	is.Equal(string(b), expectedCreateBody)
 }
 
-func TestThatGrenspaceRecordIsPatchedIfNonExisting(t *testing.T) {
+func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 	conductivity := float64(536)
 
 	is, pack := testSetup(t, "3304/soil", "Conductivity", "", &conductivity, nil, "")

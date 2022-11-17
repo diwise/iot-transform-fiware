@@ -3,6 +3,7 @@ package messageprocessor
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -24,13 +25,12 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 	sensorType := msg.BaseName()
 
 	for _, m := range msg.Pack {
-		if m.Name == "env" && m.StringValue != "" {
+		if strings.EqualFold(m.Name, "env") && m.StringValue != "" {
 			sensorType = sensorType + "/" + m.StringValue
 		}
 	}
 
 	transformer := mp.transformerRegistry.GetTransformerForSensorType(ctx, sensorType)
-
 	if transformer == nil {
 		return fmt.Errorf("no transformer found for sensorType %s", sensorType)
 	}
@@ -41,7 +41,6 @@ func (mp *messageProcessor) ProcessMessage(ctx context.Context, msg iotcore.Mess
 		log.Err(err).Msgf("unable to transform type %s", sensorType)
 		return err
 	}
-
 	return nil
 }
 
