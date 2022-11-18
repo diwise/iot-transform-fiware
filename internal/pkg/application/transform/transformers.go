@@ -289,8 +289,6 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 				return err
 			}
 		}
-	} else {
-		log.Debug().Msgf("no volume property was found in message from %s", msg.Sensor)
 	}
 
 	return nil
