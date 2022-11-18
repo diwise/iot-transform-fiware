@@ -15,6 +15,7 @@ import (
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	"github.com/rs/zerolog/log"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -233,6 +234,8 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	buildfragment := func(patchProperties ...entities.EntityDecoratorFunc) error {
+		log.Info().Msg("*** buildfragment ***")
+
 		fragment, err := entities.NewFragment(patchProperties...)
 		if err != nil {
 			return fmt.Errorf("entities.NewFragment failed: %w", err)
@@ -243,6 +246,7 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 		_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
 
 		if err != nil {
+			log.Info().Msg("*** buildfragment New *** ")
 			// If we failed to update the entity's attributes, we need to create it
 			properties := append(properties, entities.DefaultContext())
 
@@ -261,6 +265,8 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 				err = fmt.Errorf("create entity failed: %w", err)
 			}
 		}
+
+		log.Info().Msg("*** buildfragment Update/New *** ")
 
 		return err
 	}
