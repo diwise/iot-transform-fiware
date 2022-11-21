@@ -15,6 +15,7 @@ import (
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	"gorm.io/gorm/logger"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -60,7 +61,14 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 	_, err = cbClient.CreateEntity(ctx, wqo, headers)
 
-	return err
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create entity")
+		return err
+	}
+
+	logger.Info().Msg("entity created")
+
+	return nil
 
 }
 
