@@ -219,7 +219,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 }
 
 func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-
+	log.Info().Msg("--- GreenspaceRecord ---")
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		if idx := strings.Index(cdt, "."); idx > 0 {
@@ -272,23 +272,31 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 	}
 
 	// GreenspaceRecord is called by one of its properties. First out creates the entity, all other subsequent calls, independent which property, updates the entity.
+	log.Info().Msg("--- Checking Pressure ---")
 	pr, ok := msg.GetFloat64("Pressure")
 	if ok {
 		patchProperties := []entities.EntityDecoratorFunc{
 			Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
 		}
 
+		log.Info().Msg("--- Calling Pressure ---")
+
 		return buildfragment(patchProperties...)
 	}
+
+	log.Info().Msg("--- Checking Concuctivity ---")
 
 	co, ok := msg.GetFloat64("Conductivity")
 	if ok {
 		patchProperties := []entities.EntityDecoratorFunc{
 			Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
 		}
+		log.Info().Msg("--- Calling Conductivity ---")
 
 		return buildfragment(patchProperties...)
 	}
+
+	log.Info().Msg(" |||--- Exiting ---|||")
 
 	return nil
 }
