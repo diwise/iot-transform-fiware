@@ -15,7 +15,6 @@ import (
 	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
 	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
-	"github.com/rs/zerolog/log"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -219,7 +218,6 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 }
 
 func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	log.Info().Msg("--- GreenspaceRecord ---")
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		if idx := strings.Index(cdt, "."); idx > 0 {
@@ -234,8 +232,6 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	buildfragment := func(patchProperties ...entities.EntityDecoratorFunc) error {
-		log.Info().Msg("*** buildfragment ***")
-
 		fragment, err := entities.NewFragment(patchProperties...)
 		if err != nil {
 			return fmt.Errorf("entities.NewFragment failed: %w", err)
@@ -243,10 +239,10 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 
 		properties := append(patchProperties, DateObserved(curDateTime))
 
-		_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+		//_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+		_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
 
 		if err != nil {
-			log.Info().Msg("*** buildfragment New *** ")
 			// If we failed to update the entity's attributes, we need to create it
 			properties := append(properties, entities.DefaultContext())
 
@@ -266,37 +262,27 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 			}
 		}
 
-		log.Info().Msg("*** buildfragment Update/New *** ")
-
 		return err
 	}
 
 	// GreenspaceRecord is called by one of its properties. First out creates the entity, all other subsequent calls, independent which property, updates the entity.
-	log.Info().Msg("--- Checking Pressure ---")
 	pr, ok := msg.GetFloat64("Pressure")
 	if ok {
 		patchProperties := []entities.EntityDecoratorFunc{
 			Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
 		}
 
-		log.Info().Msg("--- Calling Pressure ---")
-
 		return buildfragment(patchProperties...)
 	}
-
-	log.Info().Msg("--- Checking Concuctivity ---")
 
 	co, ok := msg.GetFloat64("Conductivity")
 	if ok {
 		patchProperties := []entities.EntityDecoratorFunc{
 			Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
 		}
-		log.Info().Msg("--- Calling Conductivity ---")
 
 		return buildfragment(patchProperties...)
 	}
-
-	log.Info().Msg(" |||--- Exiting ---|||")
 
 	return nil
 }

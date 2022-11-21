@@ -211,7 +211,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExisting(t *testing.T) {
 	msg := iotcore.NewMessageAccepted("soilsensor-01", pack).AtLocation(62.362829, 17.509804)
 
 	cbClient := &test.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
 			return nil, fmt.Errorf("no such entity")
 		},
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
@@ -243,20 +243,20 @@ func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 	msg := iotcore.NewMessageAccepted("soilsensor-01", pack).AtLocation(62.362829, 17.509804)
 
 	cbClient := &test.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return &ngsild.UpdateEntityAttributesResult{}, nil
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, nil
 		},
 	}
 
 	err := GreenspaceRecord(context.Background(), msg, cbClient)
 	is.NoErr(err)
 
-	is.Equal(len(cbClient.UpdateEntityAttributesCalls()), 1) // update entity attributes should have been called once
+	is.Equal(len(cbClient.MergeEntityCalls()), 1) // Merge entity attributes should have been called once
 
 	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
-	is.Equal(cbClient.UpdateEntityAttributesCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls())
+	b, _ := json.Marshal(cbClient.MergeEntityCalls())
 	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
 	is.Equal(string(b), expectedCreateBody)
 }
