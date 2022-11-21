@@ -300,7 +300,6 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 		if idx := strings.Index(cdt, "."); idx > 0 {
 			cdt = cdt[0:idx] + "Z"
 		}
-		curDateTime = cdt
 	}
 
 	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)

@@ -2,63 +2,52 @@ package transform
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/diwise/iot-core/pkg/measurements"
-	"github.com/farshidtz/senml/v2"
+	"github.com/matryer/is"
 )
 
 func TestWeatherObservedMapping(t *testing.T) {
-	temp := 22.2
-	is, pack := testSetup(t, "3303", measurements.Temperature, "air", &temp, nil, "")
+	is := is.New(t)
 	r := NewTransformerRegistry()
 
-	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+	tr := r.GetTransformerForSensorType(context.Background(), "urn:oma:lwm2m:ext:3303/air")
 
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
 }
 
 func TestWaterQualityObservedMapping(t *testing.T) {
-	temp := 22.2
-	is, pack := testSetup(t, "3303", measurements.Temperature, "water", &temp, nil, "")
+	is := is.New(t)
 	r := NewTransformerRegistry()
 
-	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+	tr := r.GetTransformerForSensorType(context.Background(), "urn:oma:lwm2m:ext:3303/water")
 
 	is.True(isFunc(tr))
 	is.Equal("WaterQualityObserved", getFuncName(tr))
 }
 
 func TestLifeBuoyMapping(t *testing.T) {
-	vb := true
-	is, pack := testSetup(t, "3302", measurements.Presence, "lifebuoy", nil, &vb, "")
+	is := is.New(t)
 	r := NewTransformerRegistry()
 
-	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+	tr := r.GetTransformerForSensorType(context.Background(), "urn:oma:lwm2m:ext:3302/lifebuoy")
 
 	is.True(isFunc(tr))
 	is.Equal("Lifebuoy", getFuncName(tr))
 }
 
 func TestWaterConsumptionMapping(t *testing.T) {
-	v := 1009.0
-	is, pack := testSetup(t, "3424", measurements.CumulatedWaterVolume, "", &v, nil, "")
+	is := is.New(t)
 	r := NewTransformerRegistry()
 
-	tr := r.GetTransformerForSensorType(context.Background(), transformerName(pack))
+	tr := r.GetTransformerForSensorType(context.Background(), "urn:oma:lwm2m:ext:3424")
 
 	is.True(isFunc(tr))
 	is.Equal("WaterConsumptionObserved", getFuncName(tr))
-}
-
-func transformerName(p senml.Pack) string {
-	tn := fmt.Sprintf("%s/%s", p[0].BaseName, p[2].StringValue)
-	return strings.TrimSuffix(tn, "/")
 }
 
 func isFunc(v interface{}) bool {
