@@ -15,8 +15,6 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
-	lwm2m "github.com/diwise/iot-core/pkg/lwm2m"
-	measurements "github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/rs/zerolog"
@@ -25,7 +23,13 @@ import (
 type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	temp, ok := msg.GetFloat64(measurements.Temperature)
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3303
+		ID      Name            Type     Unit
+		5700    Sensor Value    Float	
+	*/	
+	
+	temp, ok := msg.GetFloat64("5700")
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -54,7 +58,13 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient 
 }
 
 func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	temp, ok := msg.GetFloat64(measurements.Temperature)
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3303
+		ID      Name            Type     Unit
+		5700    Sensor Value    Float	
+	*/
+	
+	temp, ok := msg.GetFloat64("5700")
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -88,18 +98,28 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 }
 
 func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3303
+		ID      Name            Type     Unit
+		5700    Sensor Value    Float	
+
+		ObjectURN: urn:oma:lwm2m:ext:3428
+		ID  Name    Type    Unit
+		17  CO2     Float   ppm	
+	*/
+	
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		Location(msg.Latitude(), msg.Longitude()),
 		DateObserved(msg.Timestamp),
 	}
 
-	temp, tempOk := msg.GetFloat64(measurements.Temperature)
+	temp, tempOk := msg.GetFloat64("5700")
 	if tempOk {
 		properties = append(properties, Temperature(temp))
 	}
 
-	co2, co2Ok := msg.GetFloat64(measurements.CO2)
+	co2, co2Ok := msg.GetFloat64("17")
 	if co2Ok {
 		properties = append(properties, Number("co2", co2))
 	}
@@ -133,9 +153,15 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClie
 }
 
 func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	v, ok := msg.GetBool(measurements.Presence)
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3302
+		ID      Name                    Type       Unit
+		5500    Digital Input State     Boolean
+	*/
 
-	if !strings.EqualFold(msg.BaseName(), lwm2m.Presence) || !ok {
+	v, ok := msg.GetBool("5500")
+
+	if !strings.EqualFold(msg.BaseName(), "urn:oma:lwm2m:ext:3302") || !ok {
 		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
 	}
 
@@ -175,7 +201,13 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 }
 
 func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	v, ok := msg.GetBool(measurements.Presence)
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3302
+		ID      Name                    Type       Unit
+		5500    Digital Input State     Boolean
+	*/
+
+	v, ok := msg.GetBool("5500")
 	if !ok {
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
@@ -231,8 +263,14 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	// w1h: currentTime, logDateTime, logVolume, deltas
-	// w1e(w1t): currentTime, currentVolume, (temperature), logDateTime, logVolume, deltas
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3424
+		ID   Name                       Type        Unit
+		1    Cumulated water volume     Float       m3
+		3    Type of meter              String
+		10   Leak detected              Boolean
+		11   Back flow detected         Boolean
+	*/
 
 	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
@@ -241,50 +279,47 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	log = log.With().Str("entityID", entityID).Logger()
 	log.Debug().Msgf("transforming message from %s", msg.Sensor)
 
-	// currentTime: sensor time
-	// currentVolume: current volume
-	// logDateTime: time for first log
-	// logVolume: volume for first log
-	// deltas: incremental volume each hour
+	var props []entities.EntityDecoratorFunc
+
+	if msg.HasLocation() {
+		props = append(props, Location(msg.Latitude(), msg.Longitude()))
+	}
+
+	if leak, ok := msg.GetBool("10"); ok {
+		l := 0
+		if leak {
+			l = 1
+		}
+		// Alarm signifying the potential for an intermittent leak
+		props = append(props, Number("alarmStopsLeaks", float64(l)))
+	}
+	if backflow, ok := msg.GetBool("11"); ok {
+		b := 0
+		if backflow {
+			b = 1
+		}
+		// Alarm signifying the potential of backflows occurring
+		props = append(props, Number("alarmWaterQuality", float64(b)))
+	}
+	if t, ok := msg.GetString("3"); ok {
+		// An alternative name for this item
+		props = append(props, Text("alternateName", t))
+	}
 
 	// lwm2m reports water volume in m3, but the context broker expects litres as default
-
-	// first create WaterConsumptionObserved for first logValue
-	if logVolume, ok := msg.GetFloat64("LogVolume"); ok {
-		if logDateTime, ok := msg.GetTime("LogDateTime"); ok {
-			vol := math.Floor((logVolume + 0.0005) * 1000)
-			dt := time.Unix(int64(logDateTime), 0).UTC().Format(time.RFC3339Nano)
-			props := waterConsumptionProps(vol, dt, observedBy, msg)
-
-			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
-			if err != nil {
-				return err
-			}
-		}
+	toLtr := func(m3 float64) float64 {
+		return math.Floor((m3 + 0.0005) * 1000)
 	}
 
-	// then continue with delta volumes
-	for _, record := range msg.Pack {
-		if strings.EqualFold("DeltaVolume", record.Name) {
-			vol := math.Floor((*record.Sum + 0.0005) * 1000)
-			dt := time.Unix(int64(record.Time), 0).UTC().Format(time.RFC3339Nano)
-			props := waterConsumptionProps(vol, dt, observedBy, msg)
-
-			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
-			if err != nil {
-				return err
-			}
-		}
+	toDate := func(t float64) string {
+		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
 	}
 
-	// last add current volume if exists
-	if currentVolume, ok := msg.GetFloat64("CurrentVolume"); ok {
-		if currentDateTime, ok := msg.GetTime("CurrentDateTime"); ok {
-			vol := math.Floor((currentVolume + 0.0005) * 1000)
-			dt := time.Unix(int64(currentDateTime), 0).UTC().Format(time.RFC3339Nano)
-			props := waterConsumptionProps(vol, dt, observedBy, msg)
-
-			err := storeWaterConsumption(ctx, log, cbClient, entityID, props...)
+	for _, rec := range msg.Pack {
+		if rec.Name == "1" {
+			w := Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDate(rec.Time)), p.ObservedBy(observedBy))
+			p := append(props, w)
+			err := storeWaterConsumption(ctx, log, cbClient, entityID, p...)
 			if err != nil {
 				return err
 			}
@@ -292,18 +327,6 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	}
 
 	return nil
-}
-
-func waterConsumptionProps(vol float64, dt, observedBy string, msg iotcore.MessageAccepted) []entities.EntityDecoratorFunc {
-	props := []entities.EntityDecoratorFunc{
-		Number("waterConsumption", vol, p.UnitCode("LTR"), p.ObservedAt(dt), p.ObservedBy(observedBy)),
-	}
-
-	if msg.HasLocation() {
-		props = append(props, Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	return props
 }
 
 func storeWaterConsumption(ctx context.Context, log zerolog.Logger, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
