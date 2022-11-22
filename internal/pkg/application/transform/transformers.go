@@ -26,9 +26,9 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient 
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
-		5700    Sensor Value    Float	
-	*/	
-	
+		5700    Sensor Value    Float
+	*/
+
 	temp, ok := msg.GetFloat64("5700")
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
@@ -61,9 +61,9 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
-		5700    Sensor Value    Float	
+		5700    Sensor Value    Float
 	*/
-	
+
 	temp, ok := msg.GetFloat64("5700")
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
@@ -101,13 +101,13 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClie
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
-		5700    Sensor Value    Float	
+		5700    Sensor Value    Float
 
 		ObjectURN: urn:oma:lwm2m:ext:3428
 		ID  Name    Type    Unit
-		17  CO2     Float   ppm	
+		17  CO2     Float   ppm
 	*/
-	
+
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		Location(msg.Latitude(), msg.Longitude()),
@@ -285,21 +285,13 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		props = append(props, Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	if leak, ok := msg.GetBool("10"); ok {
-		l := 0
-		if leak {
-			l = 1
-		}
+	if leak, ok := msg.GetBool("10"); ok && leak {
 		// Alarm signifying the potential for an intermittent leak
-		props = append(props, Number("alarmStopsLeaks", float64(l)))
+		props = append(props, Number("alarmStopsLeaks", float64(1)))
 	}
-	if backflow, ok := msg.GetBool("11"); ok {
-		b := 0
-		if backflow {
-			b = 1
-		}
+	if backflow, ok := msg.GetBool("11"); ok && backflow {
 		// Alarm signifying the potential of backflows occurring
-		props = append(props, Number("alarmWaterQuality", float64(b)))
+		props = append(props, Number("alarmWaterQuality", float64(1)))
 	}
 	if t, ok := msg.GetString("3"); ok {
 		// An alternative name for this item
@@ -311,13 +303,13 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		return math.Floor((m3 + 0.0005) * 1000)
 	}
 
-	toDate := func(t float64) string {
+	toDateStr := func(t float64) string {
 		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
 	}
 
 	for _, rec := range msg.Pack {
 		if rec.Name == "1" {
-			w := Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDate(rec.Time)), p.ObservedBy(observedBy))
+			w := Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
 			p := append(props, w)
 			err := storeWaterConsumption(ctx, log, cbClient, entityID, p...)
 			if err != nil {
