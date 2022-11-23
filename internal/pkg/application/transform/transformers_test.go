@@ -27,6 +27,25 @@ func base(baseName, deviceID string) iotcore.EventDecoratorFunc {
 	}
 }
 
+func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
+	temp := 22.2
+	is := is.New(t)
+
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/indoors", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("Temperature", "", &temp, nil, 0, nil))
+
+	cbClient := &test.ContextBrokerClientMock{
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+	}
+
+	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2},"type":"IndoorEnvironmentObserved"}`))
+}
+
 func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is := is.New(t)

@@ -3,7 +3,7 @@ module github.com/diwise/iot-transform-fiware
 go 1.19
 
 require (
-	github.com/diwise/context-broker v0.0.0-20221026061636-e620234b345f
+	github.com/diwise/context-broker v0.0.0-20221121125752-c4bab50ae445
 	github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05
 	github.com/diwise/service-chassis v0.0.0-20221025192458-3038fdabe7c7
 	github.com/farshidtz/senml/v2 v2.0.0
@@ -26,7 +26,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/diwise/iot-core v0.0.0-20221110213314-85653e8b214c
+	github.com/diwise/iot-core v0.0.0-20221117115747-554cc5d2ddd0
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
