@@ -397,7 +397,7 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	return nil
 }
 
-func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		if idx := strings.Index(cdt, "."); idx > 0 {
