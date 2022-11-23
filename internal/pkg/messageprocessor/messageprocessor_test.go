@@ -10,7 +10,6 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/context-broker/pkg/test"
-	"github.com/diwise/iot-core/pkg/measurements"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/farshidtz/senml/v2"
 	"github.com/matryer/is"
@@ -36,7 +35,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 		},
 	}
 	val := 22.2
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/air", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Temperature, "", &val, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/air", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &val, nil, 0, nil))
 
 	mp := NewMessageProcessor()
 	err := mp.ProcessMessage(context.Background(), *msg, cbClient)
@@ -55,7 +54,7 @@ func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 	}
 
 	p := true
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302/lifebuoy", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec(measurements.Presence, "", nil, &p, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302/lifebuoy", "deviceID"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
 	mp := NewMessageProcessor()
 	err := mp.ProcessMessage(context.Background(), *msg, cbClient)
