@@ -215,7 +215,78 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	is.Equal(string(b), expectedCreateBody)
 }
 
-func TestDeltaVolumes(t *testing.T) {
+// GreenspaceRecord test notes:
+// Pressure and Condctivity may come as array of values from iot-core.
+//  - first occurances of these are treated as primary measurement
+//	- subsequent occuranceses are treated as additional measurements and ignored
+
+func TestThatGreenspaceRecordIsCreatedIfNonExisting(t *testing.T) {
+	pressure := float64(7)
+
+	is, pack := testSetup(t, "3304/soil", "Pressure", "", &pressure, nil, "")
+	pack = append(pack, senml.Record{
+		Name:        "DeviceName",
+		StringValue: "deviceName",
+	},
+		senml.Record{
+			Name:        "CurrentDateTime",
+			StringValue: "2006-01-02T15:04:05.869475538Z",
+		})
+
+	msg := iotcore.NewMessageAccepted("soilsensor-01", pack).AtLocation(62.362829, 17.509804)
+
+	cbClient := &test.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, fmt.Errorf("no such entity")
+		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoisturePressure":{"type":"Property","value":7,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
+	is.Equal(string(b), expectedCreateBody)
+}
+
+func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
+	conductivity := float64(536)
+
+	is, pack := testSetup(t, "3304/soil", "Conductivity", "", &conductivity, nil, "")
+	pack = append(pack, senml.Record{
+		Name:        "DeviceName",
+		StringValue: "deviceName",
+	},
+		senml.Record{
+			Name:        "CurrentDateTime",
+			StringValue: "2006-01-02T15:04:05.869475538Z",
+		})
+
+	msg := iotcore.NewMessageAccepted("soilsensor-01", pack).AtLocation(62.362829, 17.509804)
+
+	cbClient := &test.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), msg, cbClient)
+	is.NoErr(err)
+
+	is.Equal(len(cbClient.MergeEntityCalls()), 1) // Merge entity attributes should have been called once
+
+	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
+	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+
+	b, _ := json.Marshal(cbClient.MergeEntityCalls())
+	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
+	is.Equal(string(b), expectedCreateBody)
+}
+
+func testSetup(t *testing.T, typeSuffix, typeName, typeEnv string, v *float64, vb *bool, vs string) (*is.I, senml.Pack) {
 	is := is.New(t)
 
 	v := 100.009

@@ -356,6 +356,75 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 	return nil
 }
 
+func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	curDateTime := msg.Timestamp
+	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
+		if idx := strings.Index(cdt, "."); idx > 0 {
+			cdt = cdt[0:idx] + "Z"
+		}
+	}
+
+	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	buildfragment := func(patchProperties ...entities.EntityDecoratorFunc) error {
+		fragment, err := entities.NewFragment(patchProperties...)
+		if err != nil {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
+		}
+
+		properties := append(patchProperties, DateObserved(curDateTime))
+
+		//_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+		_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
+
+		if err != nil {
+			// If we failed to update the entity's attributes, we need to create it
+			properties := append(properties, entities.DefaultContext())
+
+			if msg.IsLocated() {
+				properties = append(properties, Location(msg.Latitude(), msg.Longitude()))
+			}
+
+			var entity types.Entity
+			entity, err = entities.New(entityID, fiware.GreenspaceRecordTypeName, properties...)
+			if err != nil {
+				return fmt.Errorf("entities.New failed: %w", err)
+			}
+
+			_, err = cbClient.CreateEntity(ctx, entity, headers)
+			if err != nil {
+				err = fmt.Errorf("create entity failed: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	// GreenspaceRecord is called by one of its properties. First out creates the entity, all other subsequent calls, independent which property, updates the entity.
+	pr, ok := msg.GetFloat64("Pressure")
+	if ok {
+		patchProperties := []entities.EntityDecoratorFunc{
+			Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		}
+
+		return buildfragment(patchProperties...)
+	}
+
+	co, ok := msg.GetFloat64("Conductivity")
+	if ok {
+		patchProperties := []entities.EntityDecoratorFunc{
+			Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
+		}
+
+		return buildfragment(patchProperties...)
+	}
+
+	return nil
+}
+
 func waterConsumptionProps(vol float64, dt, observedBy string, msg iotcore.MessageAccepted) []entities.EntityDecoratorFunc {
 	props := []entities.EntityDecoratorFunc{
 		Number("waterConsumption", vol, p.UnitCode("LTR"), p.ObservedAt(dt), p.ObservedBy(observedBy)),

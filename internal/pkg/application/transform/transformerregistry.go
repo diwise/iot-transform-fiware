@@ -21,6 +21,8 @@ func NewTransformerRegistry() TransformerRegistry {
 		"urn:oma:lwm2m:ext:3428":          AirQualityObserved,
 		"urn:oma:lwm2m:ext:3302":          Device,
 		"urn:oma:lwm2m:ext:3302/lifebuoy": Lifebuoy,
+		"urn:oma:lwm2m:ext:3323/soil":     GreenspaceRecord,
+		"urn:oma:lwm2m:ext:3327/soil":     GreenspaceRecord,
 		"urn:oma:lwm2m:ext:3424":          WaterConsumptionObserved,
 	}
 
