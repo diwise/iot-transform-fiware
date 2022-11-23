@@ -360,7 +360,7 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 	curDateTime := msg.Timestamp
 	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
 		if idx := strings.Index(cdt, "."); idx > 0 {
-			cdt = cdt[0:idx] + "Z"
+			curDateTime = cdt[0:idx] + "Z"
 		}
 	}
 
@@ -384,7 +384,7 @@ func GreenspaceRecord(ctx context.Context, msg iotcore.MessageAccepted, cbClient
 			// If we failed to update the entity's attributes, we need to create it
 			properties := append(properties, entities.DefaultContext())
 
-			if msg.IsLocated() {
+			if msg.HasLocation() {
 				properties = append(properties, Location(msg.Latitude(), msg.Longitude()))
 			}
 
