@@ -15,14 +15,14 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
-	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	core "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/rs/zerolog"
 )
 
-type MessageTransformerFunc func(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error
+type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
@@ -57,7 +57,7 @@ func WeatherObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient 
 	return nil
 }
 
-func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
@@ -97,7 +97,7 @@ func WaterQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbCl
 	return nil
 }
 
-func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3303
 		ID      Name            Type     Unit
@@ -152,24 +152,34 @@ func AirQualityObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClie
 	return nil
 }
 
-func IndoorEnvironmentObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		Location(msg.Latitude(), msg.Longitude()),
 		DateObserved(msg.Timestamp),
 	}
 
-	temp, tempOk := msg.GetFloat64(measurements.Temperature)
+	/*
+		ObjectURN: urn:oma:lwm2m:ext:3303
+		ID      Name            Type     Unit
+		5700    Sensor Value    Float
+
+		ObjectURN: urn:oma:lwm2m:ext:3428
+		ID  Name    Type    Unit
+		17  CO2     Float   ppm
+	*/
+
+	temp, tempOk := msg.GetFloat64("measurements")
 	if tempOk {
 		properties = append(properties, Temperature(temp))
 	}
 
-	humidity, humidityOk := msg.GetFloat64(measurements.Humidity)
+	humidity, humidityOk := msg.GetFloat64("humidity")
 	if humidityOk {
 		properties = append(properties, Number("humidity", humidity))
 	}
 
-	luminance, luminanceOk := msg.GetFloat64(measurements.Light)
+	luminance, luminanceOk := msg.GetFloat64("luminance")
 	if luminanceOk {
 		properties = append(properties, Number("luminance", luminance))
 	}
@@ -214,7 +224,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotcore.MessageAccepted,
 	return nil
 }
 
-func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3302
 		ID      Name                    Type       Unit
@@ -262,7 +272,7 @@ func Device(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.Co
 	return nil
 }
 
-func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3302
 		ID      Name                    Type       Unit
@@ -324,7 +334,7 @@ func Lifebuoy(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.
 	return nil
 }
 
-func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	/*
 		ObjectURN: urn:oma:lwm2m:ext:3424
 		ID   Name                       Type        Unit
@@ -333,6 +343,8 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		10   Leak detected              Boolean
 		11   Back flow detected         Boolean
 	*/
+
+	const ObjectURN string = "urn:oma:lwm2m:ext:3424"
 
 	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
@@ -347,16 +359,18 @@ func WaterConsumptionObserved(ctx context.Context, msg iotcore.MessageAccepted, 
 		props = append(props, Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	if leak, ok := msg.GetBool("10"); ok && leak {
-		// Alarm signifying the potential for an intermittent leak
+	// Alarm signifying the potential for an intermittent leak
+	if leak, ok := core.Get[bool](msg, ObjectURN, 10); ok && leak {
 		props = append(props, Number("alarmStopsLeaks", float64(1)))
 	}
-	if backflow, ok := msg.GetBool("11"); ok && backflow {
-		// Alarm signifying the potential of backflows occurring
+
+	// Alarm signifying the potential of backflows occurring
+	if backflow, ok := core.Get[bool](msg, ObjectURN, 11); ok && backflow {
 		props = append(props, Number("alarmWaterQuality", float64(1)))
 	}
-	if t, ok := msg.GetString("3"); ok {
-		// An alternative name for this item
+
+	// An alternative name for this item
+	if t, ok := core.Get[string](msg, ObjectURN, 3); ok {
 		props = append(props, Text("alternateName", t))
 	}
 
