@@ -158,10 +158,9 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotcore.MessageAccepted,
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor
 
-	ieo, err := entities.New(
-		id, fiware.IndoorEnvironmentObservedTypeName, properties...)
+	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
 		return err
 	}
@@ -170,14 +169,27 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotcore.MessageAccepted,
 	logger = logger.With().Str("entityID", id).Logger()
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, ieo, headers)
-
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity")
-		return err
-	}
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
 
-	logger.Info().Msg("entity created")
+		ieo, err := entities.New(
+			id, fiware.IndoorEnvironmentObservedTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, ieo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	}
 
 	return nil
 }
