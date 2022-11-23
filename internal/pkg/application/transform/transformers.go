@@ -169,7 +169,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		17  CO2     Float   ppm
 	*/
 
-	temp, tempOk := msg.GetFloat64("temperature")
+	temp, tempOk := msg.GetFloat64("5700")
 	if tempOk {
 		properties = append(properties, Temperature(temp))
 	}
