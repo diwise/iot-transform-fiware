@@ -68,8 +68,12 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/diwise/context-broker v0.0.0-20221122175945-ef967d4f7367 h1:Lv75Y2zpt/xOxhZV8yNAHBGKCQf8TVG4qAFm0+Y5Zkc=
 github.com/diwise/context-broker v0.0.0-20221122175945-ef967d4f7367/go.mod h1:8jr3ptXRWqXH8W8GmypDG2PX2EcBGbA3RsS9RjKvFgM=
+github.com/diwise/context-broker v0.0.0-20221123224416-1d1a0c4d110a h1:h1SEu2f7Ng768BtJLHC5voGSEyDkwgVJnhgCssAFv5Q=
+github.com/diwise/context-broker v0.0.0-20221123224416-1d1a0c4d110a/go.mod h1:8jr3ptXRWqXH8W8GmypDG2PX2EcBGbA3RsS9RjKvFgM=
 github.com/diwise/iot-core v0.0.0-20221123125029-21919f70c7e8 h1:MfACP7/MsrPSMSM8voMsoSAvwxQEp0ZCVW3n9EwC98E=
 github.com/diwise/iot-core v0.0.0-20221123125029-21919f70c7e8/go.mod h1:2xS3y3peZIbPS0U1aPBsXesqUvPrHkZCQ9N68IF+mjU=
+github.com/diwise/iot-core v0.0.0-20221124101834-c80345ef35c0 h1:7AGyJQpGxDCBrlQeI7WXAgQwFOr+sgu5HPCCmAouNTU=
+github.com/diwise/iot-core v0.0.0-20221124101834-c80345ef35c0/go.mod h1:PemZmgI/td2UOSrSJKVftf5yIQ89mQoqV3e8hzVKLRY=
 github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05 h1:Z+oH58jdzH3wOIaxDKV7J+xCEpvGSnmteRz2RlqDajE=
 github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/service-chassis v0.0.0-20221102141400-67da00b28e7a h1:jzDRII3diOGVPF2HDBUS8dY6yAWT6ggxy4Nui5AXM3M=
