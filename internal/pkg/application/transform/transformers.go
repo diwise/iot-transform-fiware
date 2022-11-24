@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
-	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -155,12 +153,12 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		properties = append(properties, Number("humidity", humidity))
 	}
 
-	luminance, luminanceOk := msg.GetFloat64("luminance")
-	if luminanceOk {
-		properties = append(properties, Number("luminance", luminance))
+	illuminance, illuminanceOk := msg.GetFloat64("illuminance")
+	if illuminanceOk {
+		properties = append(properties, Number("illuminance", illuminance))
 	}
 
-	if !tempOk && !humidityOk && !luminanceOk {
+	if !tempOk && !humidityOk && !illuminanceOk {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
@@ -321,10 +319,10 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 		if fragment, err := entities.NewFragment(properties...); err == nil {
-			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {				
+			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
 				if !errors.Is(err, ngsierrors.ErrNotFound) {
 					return fmt.Errorf("could not merge entity, %w", err)
-				}								
+				}
 				if entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...); err == nil {
 					if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
 						return fmt.Errorf("create entity failed: %w", err)
@@ -381,71 +379,50 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 }
 
 func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	curDateTime := msg.Timestamp
-	if cdt, ok := msg.GetString("CurrentDateTime"); ok {
-		if idx := strings.Index(cdt, "."); idx > 0 {
-			curDateTime = cdt[0:idx] + "Z"
+	const (
+		Pressure     string = "urn:oma:lwm2m:ext:3323"
+		Conductivity string = "urn:oma:lwm2m:ext:3327"
+		SensorValue  int    = 5700
+	)
+
+	mergeOrCreateEntity := func(entityID string, properties ...entities.EntityDecoratorFunc) error {
+		headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+		if fragment, err := entities.NewFragment(properties...); err == nil {
+			if _, err = cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
+				if !errors.Is(err, ngsierrors.ErrNotFound) {
+					return fmt.Errorf("could not merge entity, %w", err)
+				}
+				if entity, err := entities.New(entityID, fiware.GreenspaceRecordTypeName, properties...); err == nil {
+					if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
+						return fmt.Errorf("entities.New failed: %w", err)
+					}
+				} else {
+					return fmt.Errorf("create entity failed: %w", err)
+				}
+			}
+		} else {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
 		}
+		return nil
 	}
 
 	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	props := []entities.EntityDecoratorFunc{entities.DefaultContext(), DateObserved(msg.Timestamp)}
 
-	buildfragment := func(patchProperties ...entities.EntityDecoratorFunc) error {
-		fragment, err := entities.NewFragment(patchProperties...)
-		if err != nil {
-			return fmt.Errorf("entities.NewFragment failed: %w", err)
-		}
-
-		properties := append(patchProperties, DateObserved(curDateTime))
-		
-		_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
-		if err != nil {
-			if !errors.Is(err, ngsierrors.ErrNotFound) {
-				return fmt.Errorf("could not merge entity, %w", err)
-			}				
-			// If we failed to update the entity's attributes, we need to create it
-			properties := append(properties, entities.DefaultContext())
-
-			if msg.HasLocation() {
-				properties = append(properties, Location(msg.Latitude(), msg.Longitude()))
-			}
-
-			var entity types.Entity
-			entity, err = entities.New(entityID, fiware.GreenspaceRecordTypeName, properties...)
-			if err != nil {
-				return fmt.Errorf("entities.New failed: %w", err)
-			}
-
-			_, err = cbClient.CreateEntity(ctx, entity, headers)
-			if err != nil {
-				err = fmt.Errorf("create entity failed: %w", err)
-			}
-		}
-
-		return err
+	if msg.HasLocation() {
+		props = append(props, Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	// GreenspaceRecord is called by one of its properties. First it creates the entity, and on all subsequent calls, independent of which property, it updates the entity.
-	pr, ok := msg.GetFloat64("Pressure")
-	if ok {
-		patchProperties := []entities.EntityDecoratorFunc{
-			Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
-		}
-
-		return buildfragment(patchProperties...)
+	if pr, ok := core.Get[float64](msg, Pressure, SensorValue); ok {
+		props = append(props, Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
-	co, ok := msg.GetFloat64("Conductivity")
-	if ok {
-		patchProperties := []entities.EntityDecoratorFunc{
-			Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(curDateTime), p.ObservedBy(observedBy)),
-		}
-
-		return buildfragment(patchProperties...)
+	if co, ok := core.Get[float64](msg, Conductivity, SensorValue); ok {
+		props = append(props, Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
-	return nil
+	return mergeOrCreateEntity(entityID, props...)
 }
