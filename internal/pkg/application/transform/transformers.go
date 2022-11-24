@@ -338,9 +338,7 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		return nil
 	}
 
-	if msg.HasLocation() {
-		props = append(props, Location(msg.Latitude(), msg.Longitude()))
-	}
+	props = append(props, Location(msg.Latitude(), msg.Longitude()))
 
 	// Alarm signifying the potential for an intermittent leak
 	if leak, ok := core.Get[bool](msg, ObjectURN, LeakDetected); ok && leak {
