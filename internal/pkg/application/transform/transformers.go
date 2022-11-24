@@ -321,8 +321,10 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 		if fragment, err := entities.NewFragment(properties...); err == nil {
-			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
-				log.Debug().Msgf("could not merge entity, will try to create a new entity %s.", entityID)
+			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {				
+				if !errors.Is(err, ngsierrors.ErrNotFound) {
+					return fmt.Errorf("could not merge entity, %w", err)
+				}								
 				if entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...); err == nil {
 					if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
 						return fmt.Errorf("create entity failed: %w", err)
@@ -398,11 +400,12 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		}
 
 		properties := append(patchProperties, DateObserved(curDateTime))
-
-		//_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
+		
 		_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
-
 		if err != nil {
+			if !errors.Is(err, ngsierrors.ErrNotFound) {
+				return fmt.Errorf("could not merge entity, %w", err)
+			}				
 			// If we failed to update the entity's attributes, we need to create it
 			properties := append(properties, entities.DefaultContext())
 
@@ -425,7 +428,7 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		return err
 	}
 
-	// GreenspaceRecord is called by one of its properties. First out creates the entity, all other subsequent calls, independent which property, updates the entity.
+	// GreenspaceRecord is called by one of its properties. First it creates the entity, and on all subsequent calls, independent of which property, it updates the entity.
 	pr, ok := msg.GetFloat64("Pressure")
 	if ok {
 		patchProperties := []entities.EntityDecoratorFunc{

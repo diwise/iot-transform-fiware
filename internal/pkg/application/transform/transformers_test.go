@@ -225,10 +225,10 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 
 // GreenspaceRecord test notes:
 // Pressure and Condctivity may come as array of values from iot-core.
-//  - first occurances of these are treated as primary measurement
-//	- subsequent occuranceses are treated as additional measurements and ignored
+//  - first occurrence is treated as primary measurement
+//	- subsequent occurrences are treated as additional measurements and ignored
 
-func TestThatGreenspaceRecordIsCreatedIfNonExisting(t *testing.T) {
+func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
 	pressure := float64(7)
 	is := is.New(t)
 
