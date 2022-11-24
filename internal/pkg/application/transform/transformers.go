@@ -17,19 +17,14 @@ import (
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	core "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	"github.com/rs/zerolog"
 )
 
 type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3303
-		ID      Name            Type     Unit
-		5700    Sensor Value    Float
-	*/
+	const SensorValue int = 5700
 
-	temp, ok := msg.GetFloat64("5700")
+	temp, ok := core.Get[float64](msg, "urn:oma:lwm2m:ext:3303", SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -58,13 +53,9 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 }
 
 func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3303
-		ID      Name            Type     Unit
-		5700    Sensor Value    Float
-	*/
+	const SensorValue int = 5700
 
-	temp, ok := msg.GetFloat64("5700")
+	temp, ok := core.Get[float64](msg, "urn:oma:lwm2m:ext:3303", SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -98,28 +89,21 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 }
 
 func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3303
-		ID      Name            Type     Unit
-		5700    Sensor Value    Float
-
-		ObjectURN: urn:oma:lwm2m:ext:3428
-		ID  Name    Type    Unit
-		17  CO2     Float   ppm
-	*/
-
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		Location(msg.Latitude(), msg.Longitude()),
 		DateObserved(msg.Timestamp),
 	}
 
-	temp, tempOk := msg.GetFloat64("5700")
+	const SensorValue int = 5700
+	const CO2 int = 17
+
+	temp, tempOk := core.Get[float64](msg, "urn:oma:lwm2m:ext:3303", SensorValue)
 	if tempOk {
 		properties = append(properties, Temperature(temp))
 	}
 
-	co2, co2Ok := msg.GetFloat64("17")
+	co2, co2Ok := core.Get[float64](msg, "urn:oma:lwm2m:ext:3428", CO2)
 	if co2Ok {
 		properties = append(properties, Number("co2", co2))
 	}
@@ -159,17 +143,9 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		DateObserved(msg.Timestamp),
 	}
 
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3303
-		ID      Name            Type     Unit
-		5700    Sensor Value    Float
+	const SensorValue int = 5700
 
-		ObjectURN: urn:oma:lwm2m:ext:3428
-		ID  Name    Type    Unit
-		17  CO2     Float   ppm
-	*/
-
-	temp, tempOk := msg.GetFloat64("5700")
+	temp, tempOk := core.Get[float64](msg, "urn:oma:lwm2m:ext:3303", SensorValue)
 	if tempOk {
 		properties = append(properties, Temperature(temp))
 	}
@@ -225,26 +201,20 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 }
 
 func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3302
-		ID      Name                    Type       Unit
-		5500    Digital Input State     Boolean
-	*/
-
-	v, ok := msg.GetBool("5500")
-
-	if !strings.EqualFold(msg.BaseName(), "urn:oma:lwm2m:ext:3302") || !ok {
-		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
-	}
-
 	properties := []entities.EntityDecoratorFunc{
 		DateLastValueReported(msg.Timestamp),
 	}
 
-	if v {
-		properties = append(properties, Status("on"))
+	const DigitalInputState int = 5500
+
+	if v, ok := core.Get[bool](msg, "urn:oma:lwm2m:ext:3302", DigitalInputState); ok {
+		if v {
+			properties = append(properties, Status("on"))
+		} else {
+			properties = append(properties, Status("off"))
+		}
 	} else {
-		properties = append(properties, Status("off"))
+		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
 	}
 
 	if msg.HasLocation() {
@@ -273,26 +243,21 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 }
 
 func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3302
-		ID      Name                    Type       Unit
-		5500    Digital Input State     Boolean
-	*/
-
-	v, ok := msg.GetBool("5500")
-	if !ok {
-		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
-	}
-
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
 		DateLastValueReported(msg.Timestamp),
 	}
 
-	if v {
-		properties = append(properties, Status("on"))
+	const DigitalInputState int = 5500
+
+	if v, ok := core.Get[bool](msg, "urn:oma:lwm2m:ext:3302", DigitalInputState); ok {
+		if v {
+			properties = append(properties, Status("on"))
+		} else {
+			properties = append(properties, Status("off"))
+		}
 	} else {
-		properties = append(properties, Status("off"))
+		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
 
 	if msg.HasLocation() {
@@ -335,16 +300,13 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	/*
-		ObjectURN: urn:oma:lwm2m:ext:3424
-		ID   Name                       Type        Unit
-		1    Cumulated water volume     Float       m3
-		3    Type of meter              String
-		10   Leak detected              Boolean
-		11   Back flow detected         Boolean
-	*/
-
-	const ObjectURN string = "urn:oma:lwm2m:ext:3424"
+	const (
+		ObjectURN            string = "urn:oma:lwm2m:ext:3424"
+		CumulatedWaterVolume string = "1"
+		TypeOfMeter          int    = 3
+		LeakDetected         int    = 10
+		BackFlowDetected     int    = 11
+	)
 
 	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
@@ -353,24 +315,45 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	log = log.With().Str("entityID", entityID).Logger()
 	log.Debug().Msgf("transforming message from %s", msg.Sensor)
 
-	var props []entities.EntityDecoratorFunc
+	props := []entities.EntityDecoratorFunc{entities.DefaultContext()}
+
+	mergeOrCreateEntity := func(entityID string, properties ...entities.EntityDecoratorFunc) error {
+		headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+		if fragment, err := entities.NewFragment(properties...); err == nil {
+			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
+				log.Debug().Msgf("could not merge entity, will try to create a new entity %s.", entityID)
+				if entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...); err == nil {
+					if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
+						return fmt.Errorf("create entity failed: %w", err)
+					}
+				} else {
+					return fmt.Errorf("entities.New failed: %w", err)
+				}
+			}
+		} else {
+			return fmt.Errorf("entities.NewFragment failed: %w", err)
+		}
+
+		return nil
+	}
 
 	if msg.HasLocation() {
 		props = append(props, Location(msg.Latitude(), msg.Longitude()))
 	}
 
 	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := core.Get[bool](msg, ObjectURN, 10); ok && leak {
+	if leak, ok := core.Get[bool](msg, ObjectURN, LeakDetected); ok && leak {
 		props = append(props, Number("alarmStopsLeaks", float64(1)))
 	}
 
 	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := core.Get[bool](msg, ObjectURN, 11); ok && backflow {
+	if backflow, ok := core.Get[bool](msg, ObjectURN, BackFlowDetected); ok && backflow {
 		props = append(props, Number("alarmWaterQuality", float64(1)))
 	}
 
 	// An alternative name for this item
-	if t, ok := core.Get[string](msg, ObjectURN, 3); ok {
+	if t, ok := core.Get[string](msg, ObjectURN, TypeOfMeter); ok {
 		props = append(props, Text("alternateName", t))
 	}
 
@@ -384,10 +367,10 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	}
 
 	for _, rec := range msg.Pack {
-		if rec.Name == "1" {
+		if rec.Name == CumulatedWaterVolume {
 			w := Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
 			p := append(props, w)
-			err := storeWaterConsumption(ctx, log, cbClient, entityID, p...)
+			err := mergeOrCreateEntity(entityID, p...)
 			if err != nil {
 				return err
 			}
@@ -461,53 +444,6 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		}
 
 		return buildfragment(patchProperties...)
-	}
-
-	return nil
-}
-
-func storeWaterConsumption(ctx context.Context, log zerolog.Logger, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
-	if err := updateWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
-		log.Debug().Msgf("could not update entity, will try to create a new entity %s.", entityID)
-
-		if err := createWaterConsumption(ctx, cbClient, entityID, props...); err != nil {
-			log.Error().Err(err).Msg("failed to create entity")
-			return fmt.Errorf("failed to create new entity: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func createWaterConsumption(ctx context.Context, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
-	var entity types.Entity
-
-	props = append(props, entities.DefaultContext())
-
-	entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
-	if err != nil {
-		return fmt.Errorf("entities.New failed: %w", err)
-	}
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, entity, headers)
-	if err != nil {
-		return fmt.Errorf("create entity failed: %w", err)
-	}
-
-	return nil
-}
-
-func updateWaterConsumption(ctx context.Context, cbClient client.ContextBrokerClient, entityID string, props ...entities.EntityDecoratorFunc) error {
-	fragment, err := entities.NewFragment(props...)
-	if err != nil {
-		return fmt.Errorf("entities.NewFragment failed: %w", err)
-	}
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, entityID, fragment, headers)
-	if err != nil {
-		return fmt.Errorf("update entity failed: %w", err)
 	}
 
 	return nil

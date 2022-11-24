@@ -32,7 +32,7 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is := is.New(t)
 
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/indoors", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("Temperature", "", &temp, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", time.Now().UTC()), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
 	cbClient := &test.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
@@ -73,7 +73,7 @@ func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is := is.New(t)
 
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303/water", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", time.Now().UTC()), iotcore.Environment("water"),iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
 	cbClient := &test.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
@@ -142,7 +142,7 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	p := true
 	is := is.New(t)
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302/lifebuoy", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()),iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
 	cbClient := &test.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
@@ -173,17 +173,20 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return &ngsild.UpdateEntityAttributesResult{}, nil
 		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, nil
+		},
 	}
 
 	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
-	is.Equal(len(cbClient.UpdateEntityAttributesCalls()), 1) // update entity attributes should have been called once
+	is.Equal(len(cbClient.MergeEntityCalls()), 1) // update entity attributes should have been called once
 
 	expectedEntityID := "urn:ngsi-ld:WaterConsumptionObserved:watermeter-01"
-	is.Equal(cbClient.UpdateEntityAttributesCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
 	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
 	is.Equal(string(b), expectedPatchBody)
 }
@@ -206,6 +209,9 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 		},
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, fmt.Errorf("no such entity")
 		},
 	}
 
