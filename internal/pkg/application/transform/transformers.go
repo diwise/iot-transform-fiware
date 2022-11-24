@@ -155,12 +155,12 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		properties = append(properties, Number("humidity", humidity))
 	}
 
-	luminance, luminanceOk := msg.GetFloat64("luminance")
-	if luminanceOk {
-		properties = append(properties, Number("luminance", luminance))
+	illuminance, illuminanceOk := msg.GetFloat64("illuminance")
+	if illuminanceOk {
+		properties = append(properties, Number("illuminance", illuminance))
 	}
 
-	if !tempOk && !humidityOk && !luminanceOk {
+	if !tempOk && !humidityOk && !illuminanceOk {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
@@ -321,10 +321,10 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 		if fragment, err := entities.NewFragment(properties...); err == nil {
-			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {				
+			if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
 				if !errors.Is(err, ngsierrors.ErrNotFound) {
 					return fmt.Errorf("could not merge entity, %w", err)
-				}								
+				}
 				if entity, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, properties...); err == nil {
 					if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
 						return fmt.Errorf("create entity failed: %w", err)
@@ -400,13 +400,13 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		}
 
 		properties := append(patchProperties, DateObserved(curDateTime))
-		
+
 		_, err = cbClient.MergeEntity(ctx, entityID, fragment, headers)
 		if err != nil {
 			if !errors.Is(err, ngsierrors.ErrNotFound) {
 				return fmt.Errorf("could not merge entity, %w", err)
-			}				
-			// If we failed to update the entity's attributes, we need to create it
+			}
+
 			properties := append(properties, entities.DefaultContext())
 
 			if msg.HasLocation() {
