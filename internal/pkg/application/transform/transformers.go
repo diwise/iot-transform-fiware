@@ -20,8 +20,8 @@ import (
 type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (		
-		SensorValue int    = 5700
+	const (
+		SensorValue int = 5700
 	)
 
 	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -53,8 +53,8 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 }
 
 func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (		
-		SensorValue int    = 5700
+	const (
+		SensorValue int = 5700
 	)
 
 	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -97,9 +97,9 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		decorators.DateObserved(msg.Timestamp),
 	}
 
-	const (		
-		SensorValue int    = 5700		
-		CO2         int    = 17
+	const (
+		SensorValue int = 5700
+		CO2         int = 17
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -148,7 +148,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	}
 
 	const (
-		SensorValue int    = 5700
+		SensorValue int = 5700
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -211,8 +211,8 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 		decorators.DateLastValueReported(msg.Timestamp),
 	}
 
-	const (		
-		DigitalInputState int    = 5500
+	const (
+		DigitalInputState int = 5500
 	)
 
 	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
@@ -256,8 +256,8 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 		decorators.DateLastValueReported(msg.Timestamp),
 	}
 
-	const (		
-		DigitalInputState int    = 5500
+	const (
+		DigitalInputState int = 5500
 	)
 
 	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
@@ -310,7 +310,7 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (		
+	const (
 		CumulatedWaterVolume string = "1"
 		TypeOfMeter          int    = 3
 		LeakDetected         int    = 10
@@ -369,7 +369,7 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 
 func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	const (
-		SensorValue  int    = 5700
+		SensorValue int = 5700
 	)
 
 	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
