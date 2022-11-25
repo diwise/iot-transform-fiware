@@ -20,12 +20,11 @@ import (
 type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		Temperature string = "urn:oma:lwm2m:ext:3303"
+	const (		
 		SensorValue int    = 5700
 	)
 
-	temp, ok := core.Get[float64](msg, Temperature, SensorValue)
+	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -54,12 +53,11 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 }
 
 func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		Temperature string = "urn:oma:lwm2m:ext:3303"
+	const (		
 		SensorValue int    = 5700
 	)
 
-	temp, ok := core.Get[float64](msg, Temperature, SensorValue)
+	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
@@ -99,19 +97,17 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		decorators.DateObserved(msg.Timestamp),
 	}
 
-	const (
-		Temperature string = "urn:oma:lwm2m:ext:3303"
-		SensorValue int    = 5700
-		AirQuality  string = "urn:oma:lwm2m:ext:3428"
+	const (		
+		SensorValue int    = 5700		
 		CO2         int    = 17
 	)
 
-	temp, tempOk := core.Get[float64](msg, Temperature, SensorValue)
+	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if tempOk {
 		properties = append(properties, decorators.Temperature(temp))
 	}
 
-	co2, co2Ok := core.Get[float64](msg, AirQuality, CO2)
+	co2, co2Ok := core.Get[float64](msg, AirQualityURN, CO2)
 	if co2Ok {
 		properties = append(properties, decorators.Number("co2", co2))
 	}
@@ -152,23 +148,20 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	}
 
 	const (
-		Temperature string = "urn:oma:lwm2m:ext:3303"
-		Illuminance string = "urn:oma:lwm2m:ext:3301"
-		Humidity    string = "urn:oma:lwm2m:ext:3304"
 		SensorValue int    = 5700
 	)
 
-	temp, tempOk := core.Get[float64](msg, Temperature, SensorValue)
+	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if tempOk {
 		properties = append(properties, decorators.Temperature(temp))
 	}
 
-	humidity, humidityOk := core.Get[float64](msg, Humidity, SensorValue)
+	humidity, humidityOk := core.Get[float64](msg, HumidityURN, SensorValue)
 	if humidityOk {
 		properties = append(properties, decorators.Number("humidity", humidity))
 	}
 
-	illuminance, illuminanceOk := core.Get[float64](msg, Illuminance, SensorValue)
+	illuminance, illuminanceOk := core.Get[float64](msg, IlluminanceURN, SensorValue)
 	if illuminanceOk {
 		properties = append(properties, decorators.Number("illuminance", illuminance))
 	}
@@ -218,12 +211,11 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 		decorators.DateLastValueReported(msg.Timestamp),
 	}
 
-	const (
-		Presence          string = "urn:oma:lwm2m:ext:3302"
+	const (		
 		DigitalInputState int    = 5500
 	)
 
-	if v, ok := core.Get[bool](msg, Presence, DigitalInputState); ok {
+	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
 		if v {
 			properties = append(properties, decorators.Status("on"))
 		} else {
@@ -264,12 +256,11 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 		decorators.DateLastValueReported(msg.Timestamp),
 	}
 
-	const (
-		Presence          string = "urn:oma:lwm2m:ext:3302"
+	const (		
 		DigitalInputState int    = 5500
 	)
 
-	if v, ok := core.Get[bool](msg, Presence, DigitalInputState); ok {
+	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
 		if v {
 			properties = append(properties, decorators.Status("on"))
 		} else {
@@ -319,8 +310,7 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		WaterMeter           string = "urn:oma:lwm2m:ext:3424"
+	const (		
 		CumulatedWaterVolume string = "1"
 		TypeOfMeter          int    = 3
 		LeakDetected         int    = 10
@@ -340,17 +330,17 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	}
 
 	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := core.Get[bool](msg, WaterMeter, LeakDetected); ok && leak {
+	if leak, ok := core.Get[bool](msg, WaterMeterURN, LeakDetected); ok && leak {
 		props = append(props, decorators.Number("alarmStopsLeaks", float64(1)))
 	}
 
 	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := core.Get[bool](msg, WaterMeter, BackFlowDetected); ok && backflow {
+	if backflow, ok := core.Get[bool](msg, WaterMeterURN, BackFlowDetected); ok && backflow {
 		props = append(props, decorators.Number("alarmWaterQuality", float64(1)))
 	}
 
 	// An alternative name for this item
-	if t, ok := core.Get[string](msg, WaterMeter, TypeOfMeter); ok {
+	if t, ok := core.Get[string](msg, WaterMeterURN, TypeOfMeter); ok {
 		props = append(props, decorators.Text("alternateName", t))
 	}
 
@@ -379,8 +369,6 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 
 func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	const (
-		Pressure     string = "urn:oma:lwm2m:ext:3323"
-		Conductivity string = "urn:oma:lwm2m:ext:3327"
 		SensorValue  int    = 5700
 	)
 
@@ -396,11 +384,11 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
 	}
 
-	if pr, ok := core.Get[float64](msg, Pressure, SensorValue); ok {
+	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
 		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
-	if co, ok := core.Get[float64](msg, Conductivity, SensorValue); ok {
+	if co, ok := core.Get[float64](msg, ConductivityURN, SensorValue); ok {
 		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
