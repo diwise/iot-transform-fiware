@@ -4,6 +4,17 @@ import (
 	"context"
 )
 
+const (
+	AirQualityURN   string = "urn:oma:lwm2m:ext:3428"
+	ConductivityURN string = "urn:oma:lwm2m:ext:3327"
+	HumidityURN     string = "urn:oma:lwm2m:ext:3304"
+	IlluminanceURN  string = "urn:oma:lwm2m:ext:3301"
+	PresenceURN     string = "urn:oma:lwm2m:ext:3302"
+	PressureURN     string = "urn:oma:lwm2m:ext:3323"
+	TemperatureURN  string = "urn:oma:lwm2m:ext:3303"
+	WaterMeterURN   string = "urn:oma:lwm2m:ext:3424"
+)
+
 type TransformerRegistry interface {
 	GetTransformerForSensorType(ctx context.Context, typeOfSensor string) MessageTransformerFunc
 }
@@ -14,16 +25,17 @@ type transformerRegistry struct {
 
 func NewTransformerRegistry() TransformerRegistry {
 	transformers := map[string]MessageTransformerFunc{
-		"urn:oma:lwm2m:ext:3303/water":    WaterQualityObserved,
-		"urn:oma:lwm2m:ext:3303/air":      WeatherObserved,
-		"urn:oma:lwm2m:ext:3303/indoors":  IndoorEnvironmentObserved,
-		"urn:oma:lwm2m:ext:3428/indoors":  IndoorEnvironmentObserved,
-		"urn:oma:lwm2m:ext:3428":          AirQualityObserved,
-		"urn:oma:lwm2m:ext:3302":          Device,
-		"urn:oma:lwm2m:ext:3302/lifebuoy": Lifebuoy,
-		"urn:oma:lwm2m:ext:3323/soil":     GreenspaceRecord,
-		"urn:oma:lwm2m:ext:3327/soil":     GreenspaceRecord,
-		"urn:oma:lwm2m:ext:3424":          WaterConsumptionObserved,
+		AirQualityURN:               AirQualityObserved,
+		AirQualityURN + "/indoors":  IndoorEnvironmentObserved,
+		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
+		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
+		ConductivityURN + "/soil":   GreenspaceRecord,
+		PressureURN + "/soil":       GreenspaceRecord,
+		PresenceURN:                 Device,
+		PresenceURN + "/lifebuoy":   Lifebuoy,
+		TemperatureURN + "/air":     WeatherObserved,
+		TemperatureURN + "/water":   WaterQualityObserved,
+		WaterMeterURN:               WaterConsumptionObserved,
 	}
 
 	return &transformerRegistry{
@@ -32,12 +44,9 @@ func NewTransformerRegistry() TransformerRegistry {
 }
 
 func (tr *transformerRegistry) GetTransformerForSensorType(ctx context.Context, typeOfSensor string) MessageTransformerFunc {
-
-	mt, ok := tr.registeredTransformers[typeOfSensor] //TODO: better lookup logic...
-
-	if !ok {
-		return nil
+	if mt, ok := tr.registeredTransformers[typeOfSensor]; ok {
+		return mt
 	}
 
-	return mt
+	return nil
 }
