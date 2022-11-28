@@ -332,11 +332,15 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	// Alarm signifying the potential for an intermittent leak
 	if leak, ok := core.Get[bool](msg, WaterMeterURN, LeakDetected); ok && leak {
 		props = append(props, decorators.Number("alarmStopsLeaks", float64(1)))
+	} else {
+		props = append(props, decorators.Number("alarmStopsLeaks", float64(0)))
 	}
 
 	// Alarm signifying the potential of backflows occurring
 	if backflow, ok := core.Get[bool](msg, WaterMeterURN, BackFlowDetected); ok && backflow {
 		props = append(props, decorators.Number("alarmWaterQuality", float64(1)))
+	} else {
+		props = append(props, decorators.Number("alarmWaterQuality", float64(0)))
 	}
 
 	// An alternative name for this item
