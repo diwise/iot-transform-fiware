@@ -148,7 +148,8 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	}
 
 	const (
-		SensorValue int = 5700
+		SensorValue           int = 5700
+		ActualNumberOfPersons int = 1
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -166,7 +167,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		properties = append(properties, decorators.Number("illuminance", illuminance))
 	}
 
-	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, SensorValue)
+	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
 	if peopleCountOk {
 		properties = append(properties, decorators.Number("peopleCount", peopleCount))
 	}
