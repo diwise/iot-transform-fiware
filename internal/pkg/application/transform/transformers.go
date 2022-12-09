@@ -148,8 +148,8 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	}
 
 	const (
-		SensorValue           int = 5700
 		ActualNumberOfPersons int = 1
+		SensorValue           int = 5700
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
