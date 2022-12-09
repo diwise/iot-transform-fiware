@@ -36,7 +36,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/diwise/iot-core v0.0.0-20221124101834-c80345ef35c0
+	github.com/diwise/iot-core v0.0.0-20221125082506-396e0bff3297
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
