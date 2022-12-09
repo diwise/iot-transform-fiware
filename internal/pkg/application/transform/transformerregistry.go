@@ -9,6 +9,7 @@ const (
 	ConductivityURN string = "urn:oma:lwm2m:ext:3327"
 	HumidityURN     string = "urn:oma:lwm2m:ext:3304"
 	IlluminanceURN  string = "urn:oma:lwm2m:ext:3301"
+	PeopleCountURN  string = "urn:oma:lwm2m:ext:3434"
 	PresenceURN     string = "urn:oma:lwm2m:ext:3302"
 	PressureURN     string = "urn:oma:lwm2m:ext:3323"
 	TemperatureURN  string = "urn:oma:lwm2m:ext:3303"
@@ -29,6 +30,7 @@ func NewTransformerRegistry() TransformerRegistry {
 		AirQualityURN + "/indoors":  IndoorEnvironmentObserved,
 		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
 		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
+		PeopleCountURN + "/indoors": IndoorEnvironmentObserved,
 		ConductivityURN + "/soil":   GreenspaceRecord,
 		PressureURN + "/soil":       GreenspaceRecord,
 		PresenceURN:                 Device,
