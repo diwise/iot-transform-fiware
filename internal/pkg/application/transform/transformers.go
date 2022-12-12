@@ -148,7 +148,8 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	}
 
 	const (
-		SensorValue int = 5700
+		ActualNumberOfPersons int = 1
+		SensorValue           int = 5700
 	)
 
 	toDateStr := func(t float64) string {
@@ -172,7 +173,12 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		properties = append(properties, decorators.Number("illuminance", illuminance, p.ObservedAt(t)))
 	}
 
-	if !tempOk && !humidityOk && !illuminanceOk {
+	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
+	if peopleCountOk {
+		properties = append(properties, decorators.Number("peopleCount", peopleCount))
+	}
+
+	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
