@@ -151,19 +151,25 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		SensorValue int = 5700
 	)
 
+	toDateStr := func(t float64) string {
+		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
+	}
+
+	t := toDateStr(msg.BaseTime())
+
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if tempOk {
-		properties = append(properties, decorators.Temperature(temp))
+		properties = append(properties, decorators.Number("temperature", temp, p.ObservedAt(t)))
 	}
 
 	humidity, humidityOk := core.Get[float64](msg, HumidityURN, SensorValue)
 	if humidityOk {
-		properties = append(properties, decorators.Number("humidity", humidity))
+		properties = append(properties, decorators.Number("humidity", humidity, p.ObservedAt(t)))
 	}
 
 	illuminance, illuminanceOk := core.Get[float64](msg, IlluminanceURN, SensorValue)
 	if illuminanceOk {
-		properties = append(properties, decorators.Number("illuminance", illuminance))
+		properties = append(properties, decorators.Number("illuminance", illuminance, p.ObservedAt(t)))
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk {
