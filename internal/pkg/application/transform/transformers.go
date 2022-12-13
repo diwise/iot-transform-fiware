@@ -98,8 +98,8 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 	}
 
 	const (
-		SensorValue int = 5700
-		Co2         int = 17
+		SensorValue   int = 5700
+		CarbonDioxide int = 17
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
@@ -107,7 +107,7 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
-	co2, co2Ok := core.Get[float64](msg, AirQualityURN, Co2)
+	co2, co2Ok := core.Get[float64](msg, AirQualityURN, CarbonDioxide)
 	if co2Ok {
 		properties = append(properties, CO2(co2, time.Unix(int64(msg.BaseTime()), 0)))
 	}
