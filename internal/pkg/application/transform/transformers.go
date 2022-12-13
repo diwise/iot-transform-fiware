@@ -31,7 +31,7 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 
 	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
 
-	wo, err := fiware.NewWeatherObserved(id, msg.Latitude(), msg.Longitude(), msg.Timestamp, decorators.Temperature(temp))
+	wo, err := fiware.NewWeatherObserved(id, msg.Latitude(), msg.Longitude(), msg.Timestamp, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 		id, fiware.WaterQualityObservedTypeName, entities.DefaultContext(),
 		decorators.Location(msg.Latitude(), msg.Longitude()),
 		decorators.DateObserved(msg.Timestamp),
-		decorators.Temperature(temp),
+		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
 	)
 	if err != nil {
 		return err
@@ -99,17 +99,17 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 
 	const (
 		SensorValue int = 5700
-		CO2         int = 17
+		Co2         int = 17
 	)
 
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if tempOk {
-		properties = append(properties, decorators.Temperature(temp))
+		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
-	co2, co2Ok := core.Get[float64](msg, AirQualityURN, CO2)
+	co2, co2Ok := core.Get[float64](msg, AirQualityURN, Co2)
 	if co2Ok {
-		properties = append(properties, decorators.Number("co2", co2))
+		properties = append(properties, CO2(co2, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
 	if !tempOk && !co2Ok {
@@ -152,30 +152,24 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		SensorValue           int = 5700
 	)
 
-	toDateStr := func(t float64) string {
-		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
-	}
-
-	t := toDateStr(msg.BaseTime())
-
 	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if tempOk {
-		properties = append(properties, decorators.Number("temperature", temp, p.ObservedAt(t)))
+		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
 	humidity, humidityOk := core.Get[float64](msg, HumidityURN, SensorValue)
 	if humidityOk {
-		properties = append(properties, decorators.Number("humidity", humidity, p.ObservedAt(t)))
+		properties = append(properties, Humidity(humidity, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
 	illuminance, illuminanceOk := core.Get[float64](msg, IlluminanceURN, SensorValue)
 	if illuminanceOk {
-		properties = append(properties, decorators.Number("illuminance", illuminance, p.ObservedAt(t)))
+		properties = append(properties, Illuminance(illuminance, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
 	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
 	if peopleCountOk {
-		properties = append(properties, decorators.Number("peopleCount", peopleCount))
+		properties = append(properties, PeopleCount(peopleCount, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
