@@ -70,8 +70,8 @@ github.com/diwise/context-broker v0.0.0-20221123224416-1d1a0c4d110a h1:h1SEu2f7N
 github.com/diwise/context-broker v0.0.0-20221123224416-1d1a0c4d110a/go.mod h1:8jr3ptXRWqXH8W8GmypDG2PX2EcBGbA3RsS9RjKvFgM=
 github.com/diwise/iot-core v0.0.0-20221125082506-396e0bff3297 h1:K7oRa/BCzJy6APrYW1mvp80D1lmTf9iSK2+GQE25ROU=
 github.com/diwise/iot-core v0.0.0-20221125082506-396e0bff3297/go.mod h1:rfOAzu8JKXb2MfsU1baJ1Z5TorROazYas47KroJrAhk=
-github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05 h1:Z+oH58jdzH3wOIaxDKV7J+xCEpvGSnmteRz2RlqDajE=
-github.com/diwise/messaging-golang v0.0.0-20220923095330-874218800e05/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
+github.com/diwise/messaging-golang v0.0.0-20230112181152-6d313f5f9451 h1:GhzzE21xAqakeo2GcSsPtON54p4jlVLhTnXczZZ3BKM=
+github.com/diwise/messaging-golang v0.0.0-20230112181152-6d313f5f9451/go.mod h1:pHvhFWcSLMct965DpgubvuxdKjdF1fm/Y6rFkz4dHtg=
 github.com/diwise/service-chassis v0.0.0-20221209133941-0250677afa17 h1:Nt29NflPOGokGUlSUU5EdWq6P7M/iMTJ8FKo2paOXuw=
 github.com/diwise/service-chassis v0.0.0-20221209133941-0250677afa17/go.mod h1:i+XoRVrKIeULI8WEUpANXcHxXRZ6R83e8ikQTDECzEI=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
