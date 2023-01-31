@@ -10,7 +10,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
-	"github.com/diwise/context-broker/pkg/test"
+	client "github.com/diwise/context-broker/pkg/test"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/farshidtz/senml/v2"
 	"github.com/matryer/is"
@@ -33,7 +33,7 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -57,7 +57,7 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -77,7 +77,7 @@ func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("water"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -96,7 +96,7 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3428", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("17", "", &temp, nil, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -115,7 +115,7 @@ func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804))
 
-	cbClient := &test.ContextBrokerClientMock{}
+	cbClient := &client.ContextBrokerClientMock{}
 	err := AirQualityObserved(context.Background(), *msg, cbClient)
 
 	is.True(err != nil)
@@ -128,7 +128,7 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
 		},
@@ -146,7 +146,7 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	is := is.New(t)
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
 		},
@@ -171,7 +171,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 		iotcore.Lon(17.509804),
 		iotcore.Rec("1", "", &v, nil, float64(ct.Unix()), &v))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return &ngsild.UpdateEntityAttributesResult{}, nil
 		},
@@ -205,7 +205,7 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 		iotcore.Lon(17.509804),
 		iotcore.Rec("1", "", &v, nil, float64(ct.Unix()), &v))
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return nil, ngsierrors.ErrNotFound
 		},
@@ -245,7 +245,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
 
 	msg.Timestamp = "2006-01-02T15:04:05Z"
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
 			return nil, ngsierrors.ErrNotFound
 		},
@@ -277,7 +277,7 @@ func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 
 	msg.Timestamp = "2006-01-02T15:04:05Z"
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
 			return &ngsild.MergeEntityResult{}, nil
 		},

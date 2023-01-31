@@ -9,7 +9,7 @@ import (
 
 	"github.com/diwise/context-broker/pkg/ngsild"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
-	"github.com/diwise/context-broker/pkg/test"
+	client "github.com/diwise/context-broker/pkg/test"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/farshidtz/senml/v2"
 	"github.com/matryer/is"
@@ -29,7 +29,7 @@ func base(baseName, deviceID string) iotcore.EventDecoratorFunc {
 func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 	is := is.New(t)
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
@@ -47,7 +47,7 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 	is := is.New(t)
 
-	cbClient := &test.ContextBrokerClientMock{
+	cbClient := &client.ContextBrokerClientMock{
 		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
 			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
 		},
