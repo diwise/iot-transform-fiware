@@ -18,6 +18,7 @@ flowchart LR
  - [iot-device-mgmt](https://github.com/diwise/iot-device-mgmt)
  - [RabbitMQ](https://www.rabbitmq.com/)
  - [Context Broker](https://github.com/diwise/context-broker)
+
 ## Transformers
 Transformers purpose is to transform measurements into [Smart Data Models](https://smartdatamodels.org/) (FIWARE). Additional transformers could easily be developed using the context-broker client api and [decorator functions](https://github.com/diwise/context-broker/blob/main/pkg/ngsild/types/entities/decorators/decorators.go). 
 ### AirQualityObserved
