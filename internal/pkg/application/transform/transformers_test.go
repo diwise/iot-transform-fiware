@@ -43,6 +43,34 @@ func testSetup(t *testing.T) (*is.I, *client.ContextBrokerClientMock) {
 	return is, cbClient
 }
 
+func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
+	temp := 22.2
+	is, cbClient := testSetup(t)
+	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3428", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("17", "", &temp, nil, 0, nil))
+
+	err := AirQualityObserved(context.Background(), *msg, cbClient)
+
+	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"co2":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"}`))
+}
+
+func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
+	is := is.New(t)
+
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804))
+
+	cbClient := &client.ContextBrokerClientMock{}
+	err := AirQualityObserved(context.Background(), *msg, cbClient)
+
+	is.True(err != nil)
+	is.Equal(len(cbClient.MergeEntityCalls()), 0)  // should not have been called
+	is.Equal(len(cbClient.CreateEntityCalls()), 0) // should not have been called
+}
+
 func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is := is.New(t)
@@ -65,23 +93,6 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
 }
 
-func TestThatWeatherObservedCanBeCreated(t *testing.T) {
-	temp := 22.2
-	is, cbClient := testSetup(t)
-
-	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
-
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
-
-	err := WeatherObserved(context.Background(), *msg, cbClient)
-	is.NoErr(err)
-
-	is.Equal(len(cbClient.MergeEntityCalls()), 1)
-
-	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WeatherObserved"`))
-}
-
 func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is, cbClient := testSetup(t)
@@ -98,36 +109,21 @@ func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WaterQualityObserved"`))
 }
 
-func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
+func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
-	is := is.New(t)
+	is, cbClient := testSetup(t)
+
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3428", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("17", "", &temp, nil, 0, nil))
 
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-	}
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	err := AirQualityObserved(context.Background(), *msg, cbClient)
-
+	err := WeatherObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"co2":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"}`))
-}
-
-func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
-	is := is.New(t)
-
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804))
-
-	cbClient := &client.ContextBrokerClientMock{}
-	err := AirQualityObserved(context.Background(), *msg, cbClient)
-
-	is.True(err != nil)
-	is.Equal(len(cbClient.CreateEntityCalls()), 0) // should not have been called
+	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WeatherObserved"`))
 }
 
 func TestThatDeviceCanBeCreated(t *testing.T) {
