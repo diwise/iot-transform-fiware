@@ -136,6 +136,34 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 	return nil
 }
 
+func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	const (
+		SensorValue int = 5700
+	)
+
+	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	props := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		decorators.DateObserved(msg.Timestamp),
+	}
+
+	if msg.HasLocation() {
+		props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
+	}
+
+	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
+		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+	}
+
+	if co, ok := core.Get[float64](msg, ConductivityURN, SensorValue); ok {
+		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+	}
+
+	return mergeOrCreateEntity(ctx, entityID, fiware.GreenspaceRecordTypeName, cbClient, props...)
+}
+
 func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
@@ -204,6 +232,127 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		}
 
 		logger.Info().Msg("entity created")
+	}
+
+	return nil
+}
+
+func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		decorators.DateLastValueReported(msg.Timestamp),
+	}
+
+	const (
+		DigitalInputState int = 5500
+	)
+
+	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
+		if v {
+			properties = append(properties, decorators.Status("on"))
+		} else {
+			properties = append(properties, decorators.Status("off"))
+		}
+	} else {
+		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
+	}
+
+	if msg.HasLocation() {
+		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	}
+
+	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
+
+	fragment, err := entities.NewFragment(properties...)
+	if err != nil {
+		return err
+	}
+
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("unable to update entity attributes")
+			return err
+		}
+
+		logger.Info().Msg("failed to update entity attributes (entity not found)")
+
+		entity, _ := entities.New(id, "Lifebuoy", properties...)
+		_, err = cbClient.CreateEntity(ctx, entity, headers)
+
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+	}
+
+	logger.Info().Msg("entity updated")
+
+	return nil
+}
+
+func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	const (
+		CumulatedWaterVolume string = "1"
+		TypeOfMeter          int    = 3
+		LeakDetected         int    = 10
+		BackFlowDetected     int    = 11
+	)
+
+	log := logging.GetFromContext(ctx)
+	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	log = log.With().Str("entityID", entityID).Logger()
+	log.Debug().Msgf("transforming message from %s", msg.Sensor)
+
+	props := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		decorators.Location(msg.Latitude(), msg.Longitude()),
+	}
+
+	// Alarm signifying the potential for an intermittent leak
+	if leak, ok := core.Get[bool](msg, WatermeterURN, LeakDetected); ok && leak {
+		props = append(props, decorators.Number("alarmStopsLeaks", float64(1)))
+	} else {
+		props = append(props, decorators.Number("alarmStopsLeaks", float64(0)))
+	}
+
+	// Alarm signifying the potential of backflows occurring
+	if backflow, ok := core.Get[bool](msg, WatermeterURN, BackFlowDetected); ok && backflow {
+		props = append(props, decorators.Number("alarmWaterQuality", float64(1)))
+	} else {
+		props = append(props, decorators.Number("alarmWaterQuality", float64(0)))
+	}
+
+	// An alternative name for this item
+	if t, ok := core.Get[string](msg, WatermeterURN, TypeOfMeter); ok {
+		props = append(props, decorators.Text("alternateName", t))
+	}
+
+	// lwm2m reports water volume in m3, but the context broker expects litres as default
+	toLtr := func(m3 float64) float64 {
+		return math.Floor((m3 + 0.0005) * 1000)
+	}
+
+	toDateStr := func(t float64) string {
+		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
+	}
+
+	for _, rec := range msg.Pack {
+		if rec.Name == CumulatedWaterVolume {
+			w := decorators.Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
+			p := append(props, w)
+			err := mergeOrCreateEntity(ctx, entityID, fiware.WaterConsumptionObservedTypeName, cbClient, p...)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -323,155 +472,6 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 	logger.Info().Msg("entity merged")
 
 	return nil
-}
-
-func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.DateLastValueReported(msg.Timestamp),
-	}
-
-	const (
-		DigitalInputState int = 5500
-	)
-
-	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
-		if v {
-			properties = append(properties, decorators.Status("on"))
-		} else {
-			properties = append(properties, decorators.Status("off"))
-		}
-	} else {
-		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
-	}
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
-
-	fragment, err := entities.NewFragment(properties...)
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", id).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, id, fragment, headers)
-
-	if err != nil {
-		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			logger.Error().Err(err).Msg("unable to update entity attributes")
-			return err
-		}
-
-		logger.Info().Msg("failed to update entity attributes (entity not found)")
-
-		entity, _ := entities.New(id, "Lifebuoy", properties...)
-		_, err = cbClient.CreateEntity(ctx, entity, headers)
-
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create entity")
-			return err
-		}
-	}
-
-	logger.Info().Msg("entity updated")
-
-	return nil
-}
-
-func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		CumulatedWaterVolume string = "1"
-		TypeOfMeter          int    = 3
-		LeakDetected         int    = 10
-		BackFlowDetected     int    = 11
-	)
-
-	log := logging.GetFromContext(ctx)
-	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
-
-	log = log.With().Str("entityID", entityID).Logger()
-	log.Debug().Msgf("transforming message from %s", msg.Sensor)
-
-	props := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.Location(msg.Latitude(), msg.Longitude()),
-	}
-
-	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := core.Get[bool](msg, WatermeterURN, LeakDetected); ok && leak {
-		props = append(props, decorators.Number("alarmStopsLeaks", float64(1)))
-	} else {
-		props = append(props, decorators.Number("alarmStopsLeaks", float64(0)))
-	}
-
-	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := core.Get[bool](msg, WatermeterURN, BackFlowDetected); ok && backflow {
-		props = append(props, decorators.Number("alarmWaterQuality", float64(1)))
-	} else {
-		props = append(props, decorators.Number("alarmWaterQuality", float64(0)))
-	}
-
-	// An alternative name for this item
-	if t, ok := core.Get[string](msg, WatermeterURN, TypeOfMeter); ok {
-		props = append(props, decorators.Text("alternateName", t))
-	}
-
-	// lwm2m reports water volume in m3, but the context broker expects litres as default
-	toLtr := func(m3 float64) float64 {
-		return math.Floor((m3 + 0.0005) * 1000)
-	}
-
-	toDateStr := func(t float64) string {
-		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
-	}
-
-	for _, rec := range msg.Pack {
-		if rec.Name == CumulatedWaterVolume {
-			w := decorators.Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
-			p := append(props, w)
-			err := mergeOrCreateEntity(ctx, entityID, fiware.WaterConsumptionObservedTypeName, cbClient, p...)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
-
-	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
-
-	props := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.DateObserved(msg.Timestamp),
-	}
-
-	if msg.HasLocation() {
-		props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
-		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
-	}
-
-	if co, ok := core.Get[float64](msg, ConductivityURN, SensorValue); ok {
-		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
-	}
-
-	return mergeOrCreateEntity(ctx, entityID, fiware.GreenspaceRecordTypeName, cbClient, props...)
 }
 
 func mergeOrCreateEntity(ctx context.Context, entityID, typeName string, cbClient client.ContextBrokerClient, properties ...entities.EntityDecoratorFunc) error {
