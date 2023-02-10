@@ -79,6 +79,78 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 	return nil
 }
 
+func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := []entities.EntityDecoratorFunc{
+		entities.DefaultContext(),
+		decorators.Location(msg.Latitude(), msg.Longitude()),
+		decorators.DateObserved(msg.Timestamp),
+	}
+
+	const (
+		ActualNumberOfPersons int = 1
+		SensorValue           int = 5700
+	)
+
+	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
+	if tempOk {
+		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	humidity, humidityOk := core.Get[float64](msg, HumidityURN, SensorValue)
+	if humidityOk {
+		properties = append(properties, Humidity(humidity, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	illuminance, illuminanceOk := core.Get[float64](msg, IlluminanceURN, SensorValue)
+	if illuminanceOk {
+		properties = append(properties, Illuminance(illuminance, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
+	if peopleCountOk {
+		properties = append(properties, PeopleCount(peopleCount, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	}
+
+	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor
+
+	fragment, err := entities.NewFragment(properties...)
+	if err != nil {
+		return err
+	}
+
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		ieo, err := entities.New(
+			id, fiware.IndoorEnvironmentObservedTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, ieo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	}
+
+	return nil
+}
+
 func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	const (
 		SensorValue int = 5700
@@ -191,78 +263,6 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 	}
 
 	logger.Info().Msg("entity merged")
-
-	return nil
-}
-
-func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.Location(msg.Latitude(), msg.Longitude()),
-		decorators.DateObserved(msg.Timestamp),
-	}
-
-	const (
-		ActualNumberOfPersons int = 1
-		SensorValue           int = 5700
-	)
-
-	temp, tempOk := core.Get[float64](msg, TemperatureURN, SensorValue)
-	if tempOk {
-		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
-	}
-
-	humidity, humidityOk := core.Get[float64](msg, HumidityURN, SensorValue)
-	if humidityOk {
-		properties = append(properties, Humidity(humidity, time.Unix(int64(msg.BaseTime()), 0)))
-	}
-
-	illuminance, illuminanceOk := core.Get[float64](msg, IlluminanceURN, SensorValue)
-	if illuminanceOk {
-		properties = append(properties, Illuminance(illuminance, time.Unix(int64(msg.BaseTime()), 0)))
-	}
-
-	peopleCount, peopleCountOk := core.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
-	if peopleCountOk {
-		properties = append(properties, PeopleCount(peopleCount, time.Unix(int64(msg.BaseTime()), 0)))
-	}
-
-	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
-	}
-
-	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor
-
-	fragment, err := entities.NewFragment(properties...)
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", id).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
-	if err != nil {
-		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			logger.Error().Err(err).Msg("failed to merge entity")
-			return err
-		}
-
-		ieo, err := entities.New(
-			id, fiware.IndoorEnvironmentObservedTypeName, properties...)
-		if err != nil {
-			return err
-		}
-
-		_, err = cbClient.CreateEntity(ctx, ieo, headers)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to create entity")
-			return err
-		}
-
-		logger.Info().Msg("entity created")
-	}
 
 	return nil
 }

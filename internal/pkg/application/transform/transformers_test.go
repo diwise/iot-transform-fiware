@@ -73,21 +73,13 @@ func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
 
 func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
-	is := is.New(t)
+	is, cbClient := testSetup(t)
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
-			return &ngsild.MergeEntityResult{}, ngsierrors.ErrNotFound
-		},
-	}
-
 	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
