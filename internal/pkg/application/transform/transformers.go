@@ -21,8 +21,6 @@ type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, 
 
 func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.Location(msg.Latitude(), msg.Longitude()),
 		decorators.DateObserved(msg.Timestamp),
 	}
 
@@ -60,6 +58,8 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 			logger.Error().Err(err).Msg("failed to merge entity")
 			return err
 		}
+
+		properties = append(properties, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
 
 		aqo, err := entities.New(id, fiware.AirQualityObservedTypeName, properties...)
 		if err != nil {
@@ -132,6 +132,7 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 
 		logger.Info().Msg("entity created")
 	}
+	logger.Info().Msg("entity merged")
 
 	return nil
 }
@@ -257,10 +258,6 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
 	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
 
 	fragment, err := entities.NewFragment(properties...)
@@ -276,11 +273,13 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			logger.Error().Err(err).Msg("unable to update entity attributes")
+			logger.Error().Err(err).Msg("failed to merge entity")
 			return err
 		}
 
-		logger.Info().Msg("failed to update entity attributes (entity not found)")
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
 
 		entity, _ := entities.New(id, "Lifebuoy", properties...)
 		_, err = cbClient.CreateEntity(ctx, entity, headers)
@@ -289,9 +288,11 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 			logger.Error().Err(err).Msg("failed to create entity")
 			return err
 		}
+
+		logger.Info().Msg("entity created")
 	}
 
-	logger.Info().Msg("entity updated")
+	logger.Info().Msg("entity merged")
 
 	return nil
 }
