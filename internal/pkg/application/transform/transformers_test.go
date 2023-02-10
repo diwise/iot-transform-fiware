@@ -146,7 +146,7 @@ func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 	err := GreenspaceRecord(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
-	is.Equal(len(cbClient.MergeEntityCalls()), 1) // Merge entity attributes should have been called once
+	is.Equal(len(cbClient.MergeEntityCalls()), 1) // merge entity attributes should have been called once
 
 	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
 	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...

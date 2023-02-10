@@ -118,8 +118,9 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
 		}
 
-		dev, err := entities.New(
-			id, fiware.DeviceTypeName, properties...)
+		properties = append(properties, entities.DefaultContext())
+
+		dev, err := entities.New(id, fiware.DeviceTypeName, properties...)
 		if err != nil {
 			return err
 		}
@@ -220,8 +221,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 			return err
 		}
 
-		ieo, err := entities.New(
-			id, fiware.IndoorEnvironmentObservedTypeName, properties...)
+		ieo, err := entities.New(id, fiware.IndoorEnvironmentObservedTypeName, properties...)
 		if err != nil {
 			return err
 		}
