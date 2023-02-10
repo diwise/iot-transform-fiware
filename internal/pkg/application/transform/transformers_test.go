@@ -27,6 +27,22 @@ func base(baseName, deviceID string, baseTime time.Time) iotcore.EventDecoratorF
 	}
 }
 
+func testSetup(t *testing.T) (*is.I, *client.ContextBrokerClientMock) {
+
+	is := is.New(t)
+
+	cbClient := &client.ContextBrokerClientMock{
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, ngsierrors.ErrNotFound
+		},
+	}
+
+	return is, cbClient
+}
+
 func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is := is.New(t)
@@ -51,20 +67,11 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 
 func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
-	is := is.New(t)
+	is, cbClient := testSetup(t)
 
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
-
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
-			return &ngsild.MergeEntityResult{}, ngsierrors.ErrNotFound
-		},
-	}
 
 	err := WeatherObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
