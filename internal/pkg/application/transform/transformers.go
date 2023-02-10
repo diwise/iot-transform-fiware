@@ -98,10 +98,6 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
 	}
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
 	id := fiware.DeviceIDPrefix + msg.Sensor
 
 	fragment, _ := entities.NewFragment(properties...)
@@ -116,6 +112,10 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
 			logger.Error().Err(err).Msg("failed to merge entity")
 			return err
+		}
+
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
 		}
 
 		dev, err := entities.New(
