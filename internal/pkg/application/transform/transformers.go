@@ -53,13 +53,13 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 			return err
 		}
 
-		wo, err := fiware.NewWeatherObserved(
-			id,
-			msg.Latitude(),
-			msg.Longitude(),
-			msg.Timestamp,
+		properties = append(properties,
+			decorators.Location(msg.Latitude(), msg.Longitude()),
+			decorators.DateObserved(msg.Timestamp),
 			Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
 		)
+
+		wo, err := entities.New(id, fiware.WeatherObservedTypeName, properties...)
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,6 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 		}
 
 		_, err = cbClient.CreateEntity(ctx, wqo, headers)
-
 		if err != nil {
 			logger.Error().Err(err).Msg("failed to create entity")
 			return err
