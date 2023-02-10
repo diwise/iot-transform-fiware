@@ -29,12 +29,17 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
+	properties := []entities.EntityDecoratorFunc{
+		decorators.DateObserved(msg.Timestamp),
+		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+	}
+
 	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
 
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
 
-	fragment, err := entities.NewFragment(decorators.DateObserved(msg.Timestamp), Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
+	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create fragment")
 	}
@@ -83,6 +88,11 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
+	properties := []entities.EntityDecoratorFunc{
+		decorators.DateObserved(msg.Timestamp),
+		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+	}
+
 	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
 
 	logger := logging.GetFromContext(ctx)
@@ -90,7 +100,7 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	fragment, err := entities.NewFragment(decorators.DateObserved(msg.Timestamp), Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
+	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to create fragment")
 		return err
@@ -103,11 +113,11 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 			return err
 		}
 
+		properties = append(properties, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
+
 		wqo, err := entities.New(
-			id, fiware.WaterQualityObservedTypeName, entities.DefaultContext(),
-			decorators.Location(msg.Latitude(), msg.Longitude()),
-			decorators.DateObserved(msg.Timestamp),
-			Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+			id, fiware.WaterQualityObservedTypeName,
+			properties...,
 		)
 		if err != nil {
 			return err
