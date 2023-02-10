@@ -374,14 +374,42 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
 	}
 
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", entityID).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
 	for _, rec := range msg.Pack {
 		if rec.Name == CumulatedWaterVolume {
 			w := decorators.Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
-			p := append(props, w)
-			err := mergeOrCreateEntity(ctx, entityID, fiware.WaterConsumptionObservedTypeName, cbClient, p...)
+			props := append(props, w)
+
+			fragment, _ := entities.NewFragment(props...)
+
+			_, err := cbClient.MergeEntity(ctx, entityID, fragment, headers)
 			if err != nil {
-				return err
+				if !errors.Is(err, ngsierrors.ErrNotFound) {
+					logger.Error().Err(err).Msg("failed to merge entity")
+					return err
+				}
+
+				props = append(props, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
+
+				wqo, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
+				if err != nil {
+					return err
+				}
+
+				_, err = cbClient.CreateEntity(ctx, wqo, headers)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to create entity")
+					return err
+				}
+
+				logger.Info().Msg("entity created")
 			}
+
+			logger.Info().Msg("entity merged")
 		}
 	}
 
@@ -500,29 +528,6 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 	}
 
 	logger.Info().Msg("entity merged")
-
-	return nil
-}
-
-func mergeOrCreateEntity(ctx context.Context, entityID, typeName string, cbClient client.ContextBrokerClient, properties ...entities.EntityDecoratorFunc) error {
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-
-	if fragment, err := entities.NewFragment(properties...); err == nil {
-		if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
-			if !errors.Is(err, ngsierrors.ErrNotFound) {
-				return fmt.Errorf("merge entity failed:, %w", err)
-			}
-			if entity, err := entities.New(entityID, typeName, properties...); err == nil {
-				if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
-					return fmt.Errorf("create entity failed: %w", err)
-				}
-			} else {
-				return fmt.Errorf("entities.New failed: %w", err)
-			}
-		}
-	} else {
-		return fmt.Errorf("entities.NewFragment failed: %w", err)
-	}
 
 	return nil
 }
