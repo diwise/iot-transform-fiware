@@ -31,23 +31,44 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 
 	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
 
-	wo, err := fiware.NewWeatherObserved(id, msg.Latitude(), msg.Longitude(), msg.Timestamp, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
-	if err != nil {
-		return err
-	}
-
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
 
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, wo, headers)
-
+	fragment, err := entities.NewFragment(decorators.DateObserved(msg.Timestamp), Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity")
-		return err
+		logger.Error().Err(err).Msg("failed to create fragment")
 	}
 
-	logger.Info().Msg("entity created")
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		wo, err := fiware.NewWeatherObserved(
+			id,
+			msg.Latitude(),
+			msg.Longitude(),
+			msg.Timestamp,
+			Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+		)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, wo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	}
+
+	logger.Info().Msg("entity merged")
 
 	return nil
 }
