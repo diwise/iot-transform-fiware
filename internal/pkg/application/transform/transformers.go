@@ -79,6 +79,63 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 	return nil
 }
 
+func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := []entities.EntityDecoratorFunc{
+		decorators.DateLastValueReported(msg.Timestamp),
+	}
+
+	const (
+		DigitalInputState int = 5500
+	)
+
+	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
+		if v {
+			properties = append(properties, decorators.Status("on"))
+		} else {
+			properties = append(properties, decorators.Status("off"))
+		}
+	} else {
+		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
+	}
+
+	if msg.HasLocation() {
+		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	}
+
+	id := fiware.DeviceIDPrefix + msg.Sensor
+
+	fragment, _ := entities.NewFragment(properties...)
+
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	_, err := cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		dev, err := entities.New(
+			id, fiware.DeviceTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, dev, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	}
+
+	return nil
+}
+
 func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := []entities.EntityDecoratorFunc{
 		entities.DefaultContext(),
@@ -126,6 +183,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	logger = logger.With().Str("entityID", id).Logger()
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
 	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
@@ -263,50 +321,6 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 	}
 
 	logger.Info().Msg("entity merged")
-
-	return nil
-}
-
-func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		decorators.DateLastValueReported(msg.Timestamp),
-	}
-
-	const (
-		DigitalInputState int = 5500
-	)
-
-	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
-		if v {
-			properties = append(properties, decorators.Status("on"))
-		} else {
-			properties = append(properties, decorators.Status("off"))
-		}
-	} else {
-		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
-	}
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	entity, err := fiware.NewDevice(msg.Sensor, properties...)
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", entity.ID()).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
-
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to update entity attributes")
-		return err
-	}
-
-	logger.Info().Msg("entity attributes updated")
 
 	return nil
 }
