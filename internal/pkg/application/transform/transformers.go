@@ -143,16 +143,11 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		SensorValue int = 5700
 	)
 
-	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
+	id := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
 	props := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
 		decorators.DateObserved(msg.Timestamp),
-	}
-
-	if msg.HasLocation() {
-		props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
 	}
 
 	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
@@ -163,7 +158,41 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
-	return mergeOrCreateEntity(ctx, entityID, fiware.GreenspaceRecordTypeName, cbClient, props...)
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	fragment, _ := entities.NewFragment(props...)
+
+	_, err := cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		if msg.HasLocation() {
+			props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		props = append(props, entities.DefaultContext())
+
+		gsr, err := entities.New(id, fiware.GreenspaceRecordTypeName, props...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, gsr, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	}
+
+	return nil
 }
 
 func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
