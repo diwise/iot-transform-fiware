@@ -27,11 +27,9 @@ func base(baseName, deviceID string, baseTime time.Time) iotcore.EventDecoratorF
 	}
 }
 
-func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
-	temp := 22.2
+func testSetup(t *testing.T) (*is.I, *client.ContextBrokerClientMock) {
+
 	is := is.New(t)
-	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
 	cbClient := &client.ContextBrokerClientMock{
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
@@ -42,69 +40,19 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 		},
 	}
 
-	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient)
-	is.NoErr(err)
-
-	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
-}
-
-func TestThatWeatherObservedCanBeCreated(t *testing.T) {
-	temp := 22.2
-	is := is.New(t)
-
-	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
-
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
-
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-	}
-
-	err := WeatherObserved(context.Background(), *msg, cbClient)
-	is.NoErr(err)
-
-	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WeatherObserved"`))
-}
-
-func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
-	temp := 22.2
-	is := is.New(t)
-	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
-
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("water"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
-
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-	}
-
-	err := WaterQualityObserved(context.Background(), *msg, cbClient)
-	is.NoErr(err)
-
-	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WaterQualityObserved"`))
+	return is, cbClient
 }
 
 func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
-	is := is.New(t)
+	is, cbClient := testSetup(t)
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3428", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("17", "", &temp, nil, 0, nil))
-
-	cbClient := &client.ContextBrokerClientMock{
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-	}
 
 	err := AirQualityObserved(context.Background(), *msg, cbClient)
 
 	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), `"co2":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"}`))
@@ -119,43 +67,119 @@ func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
 	err := AirQualityObserved(context.Background(), *msg, cbClient)
 
 	is.True(err != nil)
+	is.Equal(len(cbClient.MergeEntityCalls()), 0)  // should not have been called
 	is.Equal(len(cbClient.CreateEntityCalls()), 0) // should not have been called
 }
 
 func TestThatDeviceCanBeCreated(t *testing.T) {
 	p := true
-	is := is.New(t)
+	is, cbClient := testSetup(t)
 
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
+	err := Device(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+
+	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
+	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
+}
+
+// GreenspaceRecord test notes:
+// Pressure and Condctivity may come as array of values from iot-core.
+//  - first occurrence is treated as primary measurement
+//	- subsequent occurrences are treated as additional measurements and ignored
+
+func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
+	pressure := float64(7)
+	is := is.New(t)
+
+	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
+
+	msg := iotcore.NewMessageAccepted("soilsensor-01", senml.Pack{},
+		base("urn:oma:lwm2m:ext:3323", "soilsensor-01", ct),
+		iotcore.Lat(62.362829),
+		iotcore.Lon(17.509804),
+		iotcore.Environment("soil"),
+		iotcore.Rec("5700", "", &pressure, nil, 0, nil))
+
+	msg.Timestamp = "2006-01-02T15:04:05Z"
+
 	cbClient := &client.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, ngsierrors.ErrNotFound
+		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
 	}
 
-	err := Device(context.Background(), *msg, cbClient)
+	err := GreenspaceRecord(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
-	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoisturePressure":{"type":"Property","value":7,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
+	is.Equal(string(b), expectedCreateBody)
+}
+
+func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
+	conductivity := float64(536)
+	is := is.New(t)
+
+	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
+
+	msg := iotcore.NewMessageAccepted("soilsensor-01", senml.Pack{},
+		base("urn:oma:lwm2m:ext:3327", "soilsensor-01", ct),
+		iotcore.Lat(62.362829),
+		iotcore.Lon(17.509804),
+		iotcore.Environment("soil"),
+		iotcore.Rec("5700", "", &conductivity, nil, 0, nil))
+
+	msg.Timestamp = "2006-01-02T15:04:05Z"
+
+	cbClient := &client.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, nil
+		},
+	}
+
+	err := GreenspaceRecord(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+
+	is.Equal(len(cbClient.MergeEntityCalls()), 1) // merge entity attributes should have been called once
+
+	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
+	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+
+	b, _ := json.Marshal(cbClient.MergeEntityCalls())
+	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
+	is.Equal(string(b), expectedCreateBody)
+}
+
+func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
+	temp := 22.2
+	is, cbClient := testSetup(t)
+	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
+
+	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
 }
 
 func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	p := true
-	is := is.New(t)
+	is, cbClient := testSetup(t)
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
-
-	cbClient := &client.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
-		},
-	}
 
 	err := Lifebuoy(context.Background(), *msg, cbClient)
 	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
 
@@ -225,75 +249,37 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	is.Equal(string(b), expectedCreateBody)
 }
 
-// GreenspaceRecord test notes:
-// Pressure and Condctivity may come as array of values from iot-core.
-//  - first occurrence is treated as primary measurement
-//	- subsequent occurrences are treated as additional measurements and ignored
+func TestThatWaterQualityObservedCanBeCreated(t *testing.T) {
+	temp := 22.2
+	is, cbClient := testSetup(t)
+	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 
-func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
-	pressure := float64(7)
-	is := is.New(t)
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("water"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
-
-	msg := iotcore.NewMessageAccepted("soilsensor-01", senml.Pack{},
-		base("urn:oma:lwm2m:ext:3323", "soilsensor-01", ct),
-		iotcore.Lat(62.362829),
-		iotcore.Lon(17.509804),
-		iotcore.Environment("soil"),
-		iotcore.Rec("5700", "", &pressure, nil, 0, nil))
-
-	msg.Timestamp = "2006-01-02T15:04:05Z"
-
-	cbClient := &client.ContextBrokerClientMock{
-		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
-			return nil, ngsierrors.ErrNotFound
-		},
-		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
-			return ngsild.NewCreateEntityResult("ignored"), nil
-		},
-	}
-
-	err := GreenspaceRecord(context.Background(), *msg, cbClient)
+	err := WaterQualityObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
+
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	const expectedCreateBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"id":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoisturePressure":{"type":"Property","value":7,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"KPA"},"type":"GreenspaceRecord"}`
-	is.Equal(string(b), expectedCreateBody)
+	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WaterQualityObserved"`))
 }
 
-func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
-	conductivity := float64(536)
-	is := is.New(t)
+func TestThatWeatherObservedCanBeCreated(t *testing.T) {
+	temp := 22.2
+	is, cbClient := testSetup(t)
 
-	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
+	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 
-	msg := iotcore.NewMessageAccepted("soilsensor-01", senml.Pack{},
-		base("urn:oma:lwm2m:ext:3327", "soilsensor-01", ct),
-		iotcore.Lat(62.362829),
-		iotcore.Lon(17.509804),
-		iotcore.Environment("soil"),
-		iotcore.Rec("5700", "", &conductivity, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	msg.Timestamp = "2006-01-02T15:04:05Z"
-
-	cbClient := &client.ContextBrokerClientMock{
-		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
-			return &ngsild.MergeEntityResult{}, nil
-		},
-	}
-
-	err := GreenspaceRecord(context.Background(), *msg, cbClient)
+	err := WeatherObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
-	is.Equal(len(cbClient.MergeEntityCalls()), 1) // Merge entity attributes should have been called once
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
-	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
-	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
-
-	b, _ := json.Marshal(cbClient.MergeEntityCalls())
-	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
-	is.Equal(string(b), expectedCreateBody)
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"WeatherObserved"`))
 }
 
 const statusPropertyWithOnValue string = `"status":{"type":"Property","value":"on"}`

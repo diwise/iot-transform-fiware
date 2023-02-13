@@ -19,83 +19,12 @@ import (
 
 type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
-
-	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
-	if !ok {
-		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
-	}
-
-	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
-
-	wo, err := fiware.NewWeatherObserved(id, msg.Latitude(), msg.Longitude(), msg.Timestamp, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", id).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, wo, headers)
-
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity")
-		return err
-	}
-
-	logger.Info().Msg("entity created")
-
-	return nil
-}
-
-func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
-
-	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
-	if !ok {
-		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
-	}
-
-	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
-
-	wqo, err := entities.New(
-		id, fiware.WaterQualityObservedTypeName, entities.DefaultContext(),
-		decorators.Location(msg.Latitude(), msg.Longitude()),
-		decorators.DateObserved(msg.Timestamp),
-		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
-	)
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", id).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, wqo, headers)
-
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity")
-		return err
-	}
-
-	logger.Info().Msg("entity created")
-
-	return nil
-}
-
 func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.Location(msg.Latitude(), msg.Longitude()),
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
 		decorators.DateObserved(msg.Timestamp),
-	}
+	)
 
 	const (
 		SensorValue   int = 5700
@@ -116,36 +45,166 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	id := fiware.AirQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+	id := fiware.AirQualityObservedIDPrefix + msg.Sensor
 
-	aqo, err := entities.New(
-		id, fiware.AirQualityObservedTypeName, properties...)
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	fragment, _ := entities.NewFragment(properties...)
+
+	_, err := cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
-		return err
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		properties = append(properties, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
+
+		aqo, err := entities.New(id, fiware.AirQualityObservedTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, aqo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
+	}
+
+	return nil
+}
+
+func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
+		decorators.DateLastValueReported(msg.Timestamp),
+	)
+
+	const DigitalInputState int = 5500
+	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
+		if v {
+			properties = append(properties, decorators.Status("on"))
+		} else {
+			properties = append(properties, decorators.Status("off"))
+		}
+	} else {
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+	}
+
+	id := fiware.DeviceIDPrefix + msg.Sensor
+
+	fragment, _ := entities.NewFragment(properties...)
+
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	_, err := cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		properties = append(properties, entities.DefaultContext())
+
+		dev, err := entities.New(id, fiware.DeviceTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, dev, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
+	}
+
+	return nil
+}
+
+func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	props := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	props = append(props, decorators.DateObserved(msg.Timestamp))
+
+	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.Sensor)
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+
+	const SensorValue int = 5700
+	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
+		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+	}
+
+	if co, ok := core.Get[float64](msg, ConductivityURN, SensorValue); ok {
+		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.CreateEntity(ctx, aqo, headers)
 
+	fragment, _ := entities.NewFragment(props...)
+
+	_, err := cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to create entity")
-		return err
-	}
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
 
-	logger.Info().Msg("entity created")
+		if msg.HasLocation() {
+			props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		props = append(props, entities.DefaultContext())
+
+		gsr, err := entities.New(id, fiware.GreenspaceRecordTypeName, props...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, gsr, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
+	}
 
 	return nil
 }
 
 func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
+	properties := make([]entities.EntityDecoratorFunc, 0, 10)
+
+	properties = append(properties,
 		entities.DefaultContext(),
 		decorators.Location(msg.Latitude(), msg.Longitude()),
 		decorators.DateObserved(msg.Timestamp),
-	}
+	)
 
 	const (
 		ActualNumberOfPersons int = 1
@@ -187,6 +246,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 	logger = logger.With().Str("entityID", id).Logger()
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
 	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
@@ -194,8 +254,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 			return err
 		}
 
-		ieo, err := entities.New(
-			id, fiware.IndoorEnvironmentObservedTypeName, properties...)
+		ieo, err := entities.New(id, fiware.IndoorEnvironmentObservedTypeName, properties...)
 		if err != nil {
 			return err
 		}
@@ -207,65 +266,22 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		}
 
 		logger.Info().Msg("entity created")
-	}
-
-	return nil
-}
-
-func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		decorators.DateLastValueReported(msg.Timestamp),
-	}
-
-	const (
-		DigitalInputState int = 5500
-	)
-
-	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
-		if v {
-			properties = append(properties, decorators.Status("on"))
-		} else {
-			properties = append(properties, decorators.Status("off"))
-		}
 	} else {
-		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
+		logger.Info().Msg("entity merged")
 	}
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	entity, err := fiware.NewDevice(msg.Sensor, properties...)
-	if err != nil {
-		return err
-	}
-
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", entity.ID()).Logger()
-
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, entity.ID(), entity, headers)
-
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to update entity attributes")
-		return err
-	}
-
-	logger.Info().Msg("entity attributes updated")
 
 	return nil
 }
 
 func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
 		entities.DefaultContext(),
 		decorators.DateLastValueReported(msg.Timestamp),
-	}
-
-	const (
-		DigitalInputState int = 5500
 	)
 
+	const DigitalInputState int = 5500
 	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
 		if v {
 			properties = append(properties, decorators.Status("on"))
@@ -274,10 +290,6 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 		}
 	} else {
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
-	}
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
 	}
 
 	id := "urn:ngsi-ld:Lifebuoy:" + msg.Sensor
@@ -291,15 +303,17 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 	logger = logger.With().Str("entityID", id).Logger()
 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-	_, err = cbClient.UpdateEntityAttributes(ctx, id, fragment, headers)
 
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err != nil {
 		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			logger.Error().Err(err).Msg("unable to update entity attributes")
+			logger.Error().Err(err).Msg("failed to merge entity")
 			return err
 		}
 
-		logger.Info().Msg("failed to update entity attributes (entity not found)")
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
 
 		entity, _ := entities.New(id, "Lifebuoy", properties...)
 		_, err = cbClient.CreateEntity(ctx, entity, headers)
@@ -308,14 +322,18 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 			logger.Error().Err(err).Msg("failed to create entity")
 			return err
 		}
-	}
 
-	logger.Info().Msg("entity updated")
+		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
+	}
 
 	return nil
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	props := make([]entities.EntityDecoratorFunc, 0, 10)
+
 	const (
 		CumulatedWaterVolume string = "1"
 		TypeOfMeter          int    = 3
@@ -323,17 +341,16 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		BackFlowDetected     int    = 11
 	)
 
-	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	log = log.With().Str("entityID", entityID).Logger()
-	log.Debug().Msgf("transforming message from %s", msg.Sensor)
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", entityID).Logger()
 
-	props := []entities.EntityDecoratorFunc{
+	props = append(props,
 		entities.DefaultContext(),
 		decorators.Location(msg.Latitude(), msg.Longitude()),
-	}
+	)
 
 	// Alarm signifying the potential for an intermittent leak
 	if leak, ok := core.Get[bool](msg, WatermeterURN, LeakDetected); ok && leak {
@@ -363,13 +380,42 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
 	}
 
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
 	for _, rec := range msg.Pack {
 		if rec.Name == CumulatedWaterVolume {
 			w := decorators.Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
-			p := append(props, w)
-			err := mergeOrCreateEntity(ctx, entityID, fiware.WaterConsumptionObservedTypeName, cbClient, p...)
+			props := append(props, w)
+
+			fragment, _ := entities.NewFragment(props...)
+
+			_, err := cbClient.MergeEntity(ctx, entityID, fragment, headers)
 			if err != nil {
-				return err
+				if !errors.Is(err, ngsierrors.ErrNotFound) {
+					logger.Error().Err(err).Msg("failed to merge entity")
+					return err
+				}
+
+				if msg.HasLocation() {
+					props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
+				}
+
+				props = append(props, entities.DefaultContext())
+
+				wqo, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
+				if err != nil {
+					return err
+				}
+
+				_, err = cbClient.CreateEntity(ctx, wqo, headers)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to create entity")
+					return err
+				}
+
+				logger.Info().Msg("entity created")
+			} else {
+				logger.Info().Msg("entity merged")
 			}
 		}
 	}
@@ -377,52 +423,120 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 	return nil
 }
 
-func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
+func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	const SensorValue int = 5700
+	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
+	if !ok {
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
+	}
+
+	properties = append(properties,
+		decorators.DateObserved(msg.Timestamp),
+		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
 	)
 
-	entityID := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor
 
-	props := []entities.EntityDecoratorFunc{
-		entities.DefaultContext(),
-		decorators.DateObserved(msg.Timestamp),
-	}
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
 
-	if msg.HasLocation() {
-		props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
-		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
-	}
-
-	if co, ok := core.Get[float64](msg, ConductivityURN, SensorValue); ok {
-		props = append(props, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
-	}
-
-	return mergeOrCreateEntity(ctx, entityID, fiware.GreenspaceRecordTypeName, cbClient, props...)
-}
-
-func mergeOrCreateEntity(ctx context.Context, entityID, typeName string, cbClient client.ContextBrokerClient, properties ...entities.EntityDecoratorFunc) error {
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
-	if fragment, err := entities.NewFragment(properties...); err == nil {
-		if _, err := cbClient.MergeEntity(ctx, entityID, fragment, headers); err != nil {
-			if !errors.Is(err, ngsierrors.ErrNotFound) {
-				return fmt.Errorf("merge entity failed:, %w", err)
-			}
-			if entity, err := entities.New(entityID, typeName, properties...); err == nil {
-				if _, err = cbClient.CreateEntity(ctx, entity, headers); err != nil {
-					return fmt.Errorf("create entity failed: %w", err)
-				}
-			} else {
-				return fmt.Errorf("entities.New failed: %w", err)
-			}
+	fragment, err := entities.NewFragment(properties...)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create fragment")
+		return err
+	}
+
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
 		}
+
+		// TODO: Decide if we should filter out observations without a location
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		properties = append(properties, entities.DefaultContext())
+
+		wqo, err := entities.New(id, fiware.WaterQualityObservedTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, wqo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
 	} else {
-		return fmt.Errorf("entities.NewFragment failed: %w", err)
+		logger.Info().Msg("entity merged")
+	}
+
+	return nil
+}
+
+func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	const SensorValue int = 5700
+	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
+	if !ok {
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
+	}
+
+	properties = append(properties,
+		decorators.DateObserved(msg.Timestamp),
+		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+	)
+
+	id := fiware.WeatherObservedIDPrefix + msg.Sensor
+
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", id).Logger()
+
+	fragment, err := entities.NewFragment(properties...)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to create fragment")
+	}
+
+	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
+
+	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+	if err != nil {
+		if !errors.Is(err, ngsierrors.ErrNotFound) {
+			logger.Error().Err(err).Msg("failed to merge entity")
+			return err
+		}
+
+		// TODO: Decide if we should filter out observations without a location
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		properties = append(properties, entities.DefaultContext())
+
+		wo, err := entities.New(id, fiware.WeatherObservedTypeName, properties...)
+		if err != nil {
+			return err
+		}
+
+		_, err = cbClient.CreateEntity(ctx, wo, headers)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create entity")
+			return err
+		}
+
+		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
 
 	return nil

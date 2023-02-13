@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
+	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	client "github.com/diwise/context-broker/pkg/test"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -33,6 +34,9 @@ func TestThatWeatherObservedCanBeCreatedAndPosted(t *testing.T) {
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return ngsild.NewCreateEntityResult("ignored"), nil
 		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, ngsierrors.ErrNotFound
+		},
 	}
 	val := 22.2
 	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID"), iotcore.Environment("air"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &val, nil, 0, nil))
@@ -48,8 +52,11 @@ func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 	is := is.New(t)
 
 	cbClient := &client.ContextBrokerClientMock{
-		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
-			return &ngsild.UpdateEntityAttributesResult{Updated: []string{entityID}}, nil
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return &ngsild.MergeEntityResult{}, ngsierrors.ErrNotFound
 		},
 	}
 
@@ -60,9 +67,9 @@ func TestThatLifeBouyCanBeCreatedAndPosted(t *testing.T) {
 	err := mp.ProcessMessage(context.Background(), *msg, cbClient)
 
 	is.NoErr(err)
-	is.Equal(len(cbClient.UpdateEntityAttributesCalls()), 1) // expected a single request to context broker
+	is.Equal(len(cbClient.CreateEntityCalls()), 1) // expected a single request to context broker
 
-	b, _ := json.Marshal(cbClient.UpdateEntityAttributesCalls()[0].Fragment)
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue)) // status should be "on"
 }
 
