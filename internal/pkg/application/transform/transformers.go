@@ -20,9 +20,11 @@ import (
 type MessageTransformerFunc func(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
 		decorators.DateObserved(msg.Timestamp),
-	}
+	)
 
 	const (
 		SensorValue   int = 5700
@@ -43,7 +45,7 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
-	id := fiware.AirQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+	id := fiware.AirQualityObservedIDPrefix + msg.Sensor
 
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
@@ -73,21 +75,21 @@ func AirQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient 
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
-	logger.Info().Msg("entity merged")
 
 	return nil
 }
 
 func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
-		decorators.DateLastValueReported(msg.Timestamp),
-	}
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	const (
-		DigitalInputState int = 5500
+	properties = append(properties,
+		decorators.DateLastValueReported(msg.Timestamp),
 	)
 
+	const DigitalInputState int = 5500
 	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
 		if v {
 			properties = append(properties, decorators.Status("on"))
@@ -95,7 +97,7 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 			properties = append(properties, decorators.Status("off"))
 		}
 	} else {
-		return fmt.Errorf("unable to update Device for deviceID %s", msg.Sensor)
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
 	id := fiware.DeviceIDPrefix + msg.Sensor
@@ -132,24 +134,22 @@ func Device(ctx context.Context, msg core.MessageAccepted, cbClient client.Conte
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
-	logger.Info().Msg("entity merged")
 
 	return nil
 }
 
 func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
+	props := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	id := fmt.Sprintf("%s%s", "urn:ngsi-ld:GreenspaceRecord:", msg.Sensor)
+	props = append(props, decorators.DateObserved(msg.Timestamp))
+
+	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	props := []entities.EntityDecoratorFunc{
-		decorators.DateObserved(msg.Timestamp),
-	}
-
+	const SensorValue int = 5700
 	if pr, ok := core.Get[float64](msg, PressureURN, SensorValue); ok {
 		props = append(props, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
@@ -190,17 +190,21 @@ func GreenspaceRecord(ctx context.Context, msg core.MessageAccepted, cbClient cl
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
 
 	return nil
 }
 
 func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
+	properties := make([]entities.EntityDecoratorFunc, 0, 10)
+
+	properties = append(properties,
 		entities.DefaultContext(),
 		decorators.Location(msg.Latitude(), msg.Longitude()),
 		decorators.DateObserved(msg.Timestamp),
-	}
+	)
 
 	const (
 		ActualNumberOfPersons int = 1
@@ -262,21 +266,22 @@ func IndoorEnvironmentObserved(ctx context.Context, msg core.MessageAccepted, cb
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
 
 	return nil
 }
 
 func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := []entities.EntityDecoratorFunc{
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
 		entities.DefaultContext(),
 		decorators.DateLastValueReported(msg.Timestamp),
-	}
-
-	const (
-		DigitalInputState int = 5500
 	)
 
+	const DigitalInputState int = 5500
 	if v, ok := core.Get[bool](msg, PresenceURN, DigitalInputState); ok {
 		if v {
 			properties = append(properties, decorators.Status("on"))
@@ -319,14 +324,16 @@ func Lifebuoy(ctx context.Context, msg core.MessageAccepted, cbClient client.Con
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
-
-	logger.Info().Msg("entity merged")
 
 	return nil
 }
 
 func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	props := make([]entities.EntityDecoratorFunc, 0, 10)
+
 	const (
 		CumulatedWaterVolume string = "1"
 		TypeOfMeter          int    = 3
@@ -334,17 +341,16 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		BackFlowDetected     int    = 11
 	)
 
-	log := logging.GetFromContext(ctx)
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
 
-	log = log.With().Str("entityID", entityID).Logger()
-	log.Debug().Msgf("transforming message from %s", msg.Sensor)
+	logger := logging.GetFromContext(ctx)
+	logger = logger.With().Str("entityID", entityID).Logger()
 
-	props := []entities.EntityDecoratorFunc{
+	props = append(props,
 		entities.DefaultContext(),
 		decorators.Location(msg.Latitude(), msg.Longitude()),
-	}
+	)
 
 	// Alarm signifying the potential for an intermittent leak
 	if leak, ok := core.Get[bool](msg, WatermeterURN, LeakDetected); ok && leak {
@@ -374,9 +380,6 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
 	}
 
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", entityID).Logger()
-
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	for _, rec := range msg.Pack {
@@ -393,7 +396,11 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 					return err
 				}
 
-				props = append(props, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
+				if msg.HasLocation() {
+					props = append(props, decorators.Location(msg.Latitude(), msg.Longitude()))
+				}
+
+				props = append(props, entities.DefaultContext())
 
 				wqo, err := entities.New(entityID, fiware.WaterConsumptionObservedTypeName, props...)
 				if err != nil {
@@ -407,9 +414,9 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 				}
 
 				logger.Info().Msg("entity created")
+			} else {
+				logger.Info().Msg("entity merged")
 			}
-
-			logger.Info().Msg("entity merged")
 		}
 	}
 
@@ -417,21 +424,20 @@ func WaterConsumptionObserved(ctx context.Context, msg core.MessageAccepted, cbC
 }
 
 func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
+	const SensorValue int = 5700
 	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	properties := []entities.EntityDecoratorFunc{
+	properties = append(properties,
 		decorators.DateObserved(msg.Timestamp),
 		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
-	}
+	)
 
-	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor
 
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
@@ -451,7 +457,12 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 			return err
 		}
 
-		properties = append(properties, entities.DefaultContext(), decorators.Location(msg.Latitude(), msg.Longitude()))
+		// TODO: Decide if we should filter out observations without a location
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		properties = append(properties, entities.DefaultContext())
 
 		wqo, err := entities.New(id, fiware.WaterQualityObservedTypeName, properties...)
 		if err != nil {
@@ -465,29 +476,28 @@ func WaterQualityObserved(ctx context.Context, msg core.MessageAccepted, cbClien
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
-
-	logger.Info().Msg("entity merged")
 
 	return nil
 }
 
 func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	const (
-		SensorValue int = 5700
-	)
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
+	const SensorValue int = 5700
 	temp, ok := core.Get[float64](msg, TemperatureURN, SensorValue)
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
 	}
 
-	properties := []entities.EntityDecoratorFunc{
+	properties = append(properties,
 		decorators.DateObserved(msg.Timestamp),
 		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
-	}
+	)
 
-	id := fiware.WeatherObservedIDPrefix + msg.Sensor + ":" + msg.Timestamp
+	id := fiware.WeatherObservedIDPrefix + msg.Sensor
 
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With().Str("entityID", id).Logger()
@@ -506,12 +516,12 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 			return err
 		}
 
-		properties = append(properties,
-			entities.DefaultContext(),
-			decorators.Location(msg.Latitude(), msg.Longitude()),
-			decorators.DateObserved(msg.Timestamp),
-			Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
-		)
+		// TODO: Decide if we should filter out observations without a location
+		if msg.HasLocation() {
+			properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+		}
+
+		properties = append(properties, entities.DefaultContext())
 
 		wo, err := entities.New(id, fiware.WeatherObservedTypeName, properties...)
 		if err != nil {
@@ -525,9 +535,9 @@ func WeatherObserved(ctx context.Context, msg core.MessageAccepted, cbClient cli
 		}
 
 		logger.Info().Msg("entity created")
+	} else {
+		logger.Info().Msg("entity merged")
 	}
-
-	logger.Info().Msg("entity merged")
 
 	return nil
 }
