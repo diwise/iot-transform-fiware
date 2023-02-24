@@ -8,6 +8,7 @@ import (
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/messageprocessor"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
@@ -42,8 +43,8 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to init messenger")
 	}
 
-	routingKey := "message.accepted"
-	messenger.RegisterTopicMessageHandler(routingKey, newTopicMessageHandler(messenger, messageProcessor))
+	messenger.RegisterTopicMessageHandler("message.accepted", newTopicMessageHandler(messenger, messageProcessor))
+	messenger.RegisterTopicMessageHandler("feature.updated", features.TopicMessageHandler(messenger, contextBrokerUrl))
 
 	setupRouterAndWaitForConnections(logger)
 }
