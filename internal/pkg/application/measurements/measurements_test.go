@@ -1,4 +1,4 @@
-package transform
+package measurements
 
 import (
 	"context"
@@ -152,7 +152,8 @@ func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
 
 	b, _ := json.Marshal(cbClient.MergeEntityCalls())
-	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
+	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
+
 	is.Equal(string(b), expectedCreateBody)
 }
 

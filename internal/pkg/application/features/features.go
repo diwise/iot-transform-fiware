@@ -2,7 +2,6 @@ package features
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,11 +10,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
-	"github.com/diwise/messaging-golang/pkg/messaging"
-	"github.com/rs/zerolog"
-
-	amqp "github.com/rabbitmq/amqp091-go"
+	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 )
 
 type waterQuality struct {
@@ -42,7 +37,7 @@ type location struct {
 	Longitude float64 `json:"longitude"`
 }
 
-type feat struct {
+type Feat struct {
 	ID       string    `json:"id"`
 	Type     string    `json:"type"`
 	SubType  string    `json:"subtype"`
@@ -53,38 +48,18 @@ type feat struct {
 	Level        *level        `json:"level,omitempty"`
 	Presence     *presence     `json:"presence,omitempty"`
 	WaterQuality *waterQuality `json:"waterQuality"`
+
+	Timestamp time.Time
 }
 
-func TopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
-	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-		feature := feat{}
-
-		err := json.Unmarshal(msg.Body, &feature)
-		if err != nil {
-			logger.Error().Err(err).Msgf("failed to unmarshal message body")
-			return
-		}
-
-		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(feature.Tenant))
-
-		switch feature.Type {
-		case "waterQuality":
-			WaterQualityObserved(ctx, feature, cbClient)
-		default:
-			logger.Debug().Msgf("unknown feature type: %s", feature.Type)
-		}
-
-	}
-}
-
-func WaterQualityObserved(ctx context.Context, feature feat, cbClient client.ContextBrokerClient) error {
+func WaterQualityObserved(ctx context.Context, feature Feat, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	id := fmt.Sprintf("%s%s:%s:%s", fiware.WaterQualityObservedIDPrefix, feature.SubType, feature.Type, feature.ID)
 
 	properties = append(properties,
-		decorators.DateObserved(time.Now().UTC().Format(time.RFC3339Nano)),
-		transform.Temperature(feature.WaterQuality.Temperature, time.Now()),
+		decorators.DateObserved(feature.Timestamp.UTC().Format(time.RFC3339Nano)),
+		Temperature(feature.WaterQuality.Temperature, time.Now()),
 	)
 
 	if feature.Location != nil {
