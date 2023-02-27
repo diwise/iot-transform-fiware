@@ -3,15 +3,14 @@ package features
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/transform"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/rs/zerolog"
@@ -88,34 +87,9 @@ func WaterQualityObserved(ctx context.Context, feature feat, cbClient client.Con
 		transform.Temperature(feature.WaterQuality.Temperature, time.Now()),
 	)
 
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-
-	fragment, err := entities.NewFragment(properties...)
-	if err != nil {
-		return err
+	if feature.Location != nil {
+		properties = append(properties, decorators.Location(feature.Location.Latitude, feature.Location.Longitude))
 	}
 
-	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
-	if err != nil {
-		if !errors.Is(err, ngsierrors.ErrNotFound) {
-			return fmt.Errorf("failed to merge entity %s, %w", id, err)
-		}
-
-		if feature.Location != nil {
-			properties = append(properties, decorators.Location(feature.Location.Latitude, feature.Location.Longitude))
-		}
-
-		properties = append(properties, entities.DefaultContext())
-
-		wqo, err := entities.New(id, fiware.WaterQualityObservedTypeName, properties...)
-		if err != nil {
-			return err
-		}
-
-		_, err = cbClient.CreateEntity(ctx, wqo, headers)
-		if err != nil {
-			return fmt.Errorf("failed to create entity %s, %w", id, err)
-		}
-	}
-	return nil
+	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
 }
