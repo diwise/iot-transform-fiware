@@ -91,6 +91,8 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 			return
 		}
 
+		logger.Debug().Msgf("handle message from %s of type %s", messageAccepted.Sensor, measurementType)
+
 		err = transformer(ctx, messageAccepted, contextBrokerClient)
 		if err != nil {
 			logger.Err(err).Msgf("unable to transform type %s", measurementType)
@@ -123,6 +125,8 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 			logger.Error().Str("feature type", feature.Type).Msg("transformer not found!")
 			return
 		}
+
+		logger.Debug().Msgf("handle message from %s of type %s:%s", feature.ID, feature.Type, feature.SubType)
 
 		err = transformer(ctx, feature, cbClient)
 		if err != nil {
