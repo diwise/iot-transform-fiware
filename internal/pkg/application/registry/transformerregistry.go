@@ -23,6 +23,10 @@ const (
 	WatermeterURN   string = "urn:oma:lwm2m:ext:3424"
 )
 
+const (
+	WaterQualityFeature string = "waterquality"
+)
+
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
 type FeatureTransformerFunc func(ctx context.Context, feat features.Feat, cbClient client.ContextBrokerClient) error
@@ -69,7 +73,7 @@ func (tr *transformerRegistry) GetTransformerForFeature(ctx context.Context, fea
 	logger := logging.GetFromContext(ctx)
 
 	switch featureType {
-	case "waterQuality":
+	case WaterQualityFeature:
 		return features.WaterQualityObserved
 	default:
 		logger.Debug().Msgf("unknown feature type: %s", featureType)

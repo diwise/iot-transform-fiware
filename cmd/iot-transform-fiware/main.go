@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -71,9 +72,6 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-		ctx = logging.NewContextWithLogger(ctx, logger)
-		logger.Info().Str("body", string(msg.Body)).Msg("received message")
-
 		messageAccepted := iotCore.MessageAccepted{}
 
 		err := json.Unmarshal(msg.Body, &messageAccepted)
@@ -84,18 +82,21 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 
 		contextBrokerClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(messageAccepted.Tenant()))
 		measurementType := measurements.GetMeasurementType(messageAccepted)
+		
+		logger = logger.With().Str("measurement_type", measurementType).Logger()
+		ctx = logging.NewContextWithLogger(ctx, logger)
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
 		if transformer == nil {
-			logger.Error().Str("measurement type", measurementType).Msg("transformer not found!")
+			logger.Error().Msg("transformer not found!")
 			return
 		}
 
-		logger.Debug().Msgf("handle message from %s of type %s", messageAccepted.Sensor, measurementType)
+		logger.Debug().Msgf("handle message from %s", messageAccepted.Sensor)
 
 		err = transformer(ctx, messageAccepted, contextBrokerClient)
 		if err != nil {
-			logger.Err(err).Msgf("unable to transform type %s", measurementType)
+			logger.Err(err).Msgf("transform failed")
 			return
 		}
 	}
@@ -105,8 +106,6 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-		ctx = logging.NewContextWithLogger(ctx, logger)
-
 		feature := features.Feat{}
 
 		err := json.Unmarshal(msg.Body, &feature)
@@ -115,6 +114,9 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 			return
 		}
 
+		logger = logger.With().Str("feature_type", fmt.Sprintf("%s:%s", feature.Type, feature.SubType)).Logger()
+		ctx = logging.NewContextWithLogger(ctx, logger)
+
 		//TODO: should this come from the json body?
 		feature.Timestamp = msg.Timestamp
 
@@ -122,15 +124,13 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 
 		transformer := transformerRegistry.GetTransformerForFeature(ctx, feature.Type)
 		if transformer == nil {
-			logger.Error().Str("feature type", feature.Type).Msg("transformer not found!")
+			logger.Error().Msg("transformer not found!")
 			return
 		}
-
-		logger.Debug().Msgf("handle message from %s of type %s:%s", feature.ID, feature.Type, feature.SubType)
-
+		
 		err = transformer(ctx, feature, cbClient)
 		if err != nil {
-			logger.Err(err).Msgf("unable to transform type %s", feature.Type)
+			logger.Err(err).Msg("transform failed")
 			return
 		}
 	}

@@ -13,7 +13,7 @@ import (
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 )
 
-type waterQuality struct {
+type waterquality struct {
 	Temperature float64 `json:"temperature"`
 }
 
@@ -47,7 +47,7 @@ type Feat struct {
 	Counter      *counter      `json:"counter,omitempty"`
 	Level        *level        `json:"level,omitempty"`
 	Presence     *presence     `json:"presence,omitempty"`
-	WaterQuality *waterQuality `json:"waterQuality"`
+	WaterQuality *waterquality `json:"waterquality,omitempty"`
 
 	Timestamp time.Time
 }
@@ -55,11 +55,11 @@ type Feat struct {
 func WaterQualityObserved(ctx context.Context, feature Feat, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	id := fmt.Sprintf("%s%s:%s:%s", fiware.WaterQualityObservedIDPrefix, feature.SubType, feature.Type, feature.ID)
+	id := fmt.Sprintf("%s%s:%s:%s", fiware.WaterQualityObservedIDPrefix, feature.Type, feature.SubType, feature.ID)
 
 	properties = append(properties,
 		decorators.DateObserved(feature.Timestamp.UTC().Format(time.RFC3339Nano)),
-		Temperature(feature.WaterQuality.Temperature, time.Now()),
+		Temperature(feature.WaterQuality.Temperature, feature.Timestamp.UTC()),
 	)
 
 	if feature.Location != nil {

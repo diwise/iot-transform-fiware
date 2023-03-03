@@ -20,7 +20,7 @@ func TestWaterQualityObserved(t *testing.T) {
 		Type:     "waterQuality",
 		SubType:  "temperature",
 		Location: nil,
-		WaterQuality: &waterQuality{
+		WaterQuality: &waterquality{
 			Temperature: 20,
 		},
 		Timestamp: time.Date(2023, 2, 27, 12, 0, 0, 0, time.UTC),
