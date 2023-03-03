@@ -52,7 +52,7 @@ func TestWaterQualityObserved(t *testing.T) {
 	err := WaterQualityObserved(context.Background(), f, cbClient)
 
 	is.NoErr(err)
-	is.Equal("urn:ngsi-ld:WaterQualityObserved:temperature:waterQuality:waterQuality-01", id)
+	is.Equal("urn:ngsi-ld:WaterQualityObserved:waterQuality:temperature:waterQuality-01", id)
 	is.Equal(float64(20), temp)
 	is.Equal("2023-02-27T12:00:00Z", date)
 }
