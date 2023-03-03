@@ -31,6 +31,8 @@ const (
 	WatermeterURN   string = "urn:oma:lwm2m:ext:3424"
 )
 
+var statusValue = map[bool]string{true: "on", false: "off"}
+
 func GetMeasurementType(m iotCore.MessageAccepted) string {
 	typeOfMeasurement := m.BaseName()
 
@@ -86,15 +88,12 @@ func Device(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.Co
 	)
 
 	const DigitalInputState int = 5500
-	if v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState); ok {
-		if v {
-			properties = append(properties, decorators.Status("on"))
-		} else {
-			properties = append(properties, decorators.Status("off"))
-		}
-	} else {
+	v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState)
+	if !ok {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
+
+	properties = append(properties, decorators.Status(statusValue[v]))
 
 	if msg.HasLocation() {
 		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
@@ -177,15 +176,12 @@ func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.
 	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp))
 
 	const DigitalInputState int = 5500
-	if v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState); ok {
-		if v {
-			properties = append(properties, decorators.Status("on"))
-		} else {
-			properties = append(properties, decorators.Status("off"))
-		}
-	} else {
+	v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState)
+	if !ok {
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
+	
+	properties = append(properties, decorators.Status(statusValue[v]))
 
 	if msg.HasLocation() {
 		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))

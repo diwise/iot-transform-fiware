@@ -5,7 +5,6 @@ import (
 
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
-	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -70,13 +69,10 @@ func (tr *transformerRegistry) GetTransformerForMeasurement(ctx context.Context,
 }
 
 func (tr *transformerRegistry) GetTransformerForFeature(ctx context.Context, featureType string) FeatureTransformerFunc {
-	logger := logging.GetFromContext(ctx)
-
 	switch featureType {
 	case WaterQualityFeature:
 		return features.WaterQualityObserved
 	default:
-		logger.Debug().Msgf("unknown feature type: %s", featureType)
 		return nil
 	}
 }
