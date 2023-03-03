@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
@@ -82,7 +83,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 
 		contextBrokerClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(messageAccepted.Tenant()))
 		measurementType := measurements.GetMeasurementType(messageAccepted)
-		
+
 		logger = logger.With().Str("measurement_type", measurementType).Logger()
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
@@ -118,7 +119,7 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
 		//TODO: should this come from the json body?
-		feature.Timestamp = msg.Timestamp
+		feature.Timestamp = time.Now().UTC()
 
 		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(feature.Tenant))
 
@@ -127,7 +128,9 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 			logger.Error().Msg("transformer not found!")
 			return
 		}
-		
+
+		logger.Debug().Msgf("handle message from %s", feature.ID)
+
 		err = transformer(ctx, feature, cbClient)
 		if err != nil {
 			logger.Err(err).Msg("transform failed")
