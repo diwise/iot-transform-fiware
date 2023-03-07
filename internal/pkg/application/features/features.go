@@ -55,7 +55,7 @@ type Feat struct {
 func WaterQualityObserved(ctx context.Context, feature Feat, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	id := fmt.Sprintf("%s%s:%s:%s", fiware.WaterQualityObservedIDPrefix, feature.Type, feature.SubType, feature.ID)
+	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, feature.SubType, feature.ID)
 
 	properties = append(properties,
 		decorators.DateObserved(feature.Timestamp.UTC().Format(time.RFC3339Nano)),

@@ -11,65 +11,58 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/registry"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/presentation/api"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	"github.com/go-chi/chi/v5"
 
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 )
 
 const serviceName string = "iot-transform-fiware"
 
-var contextBrokerUrl string
-
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 
-	_, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
-	contextBrokerUrl = env.GetVariableOrDie(logger, "NGSI_CB_URL", "URL to ngsi-ld context broker")
+	contextBrokerUrl := env.GetVariableOrDie(logger, "NGSI_CB_URL", "URL to ngsi-ld context broker")
+	messenger := createMessagingContextOrDie(ctx, logger)
 
+	api_ := initialize(ctx, messenger, contextBrokerUrl)
+
+	servicePort := env.GetVariableOrDefault(logger, "SERVICE_PORT", "8080")
+	err := http.ListenAndServe(":"+servicePort, api_.Router())
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to start request router")
+	}
+}
+
+func initialize(ctx context.Context, messenger messaging.MsgContext, contextBrokerUrl string) api.API {
+	messenger.RegisterTopicMessageHandler("message.accepted", newMeasurementTopicMessageHandler(messenger, contextBrokerUrl))
+	messenger.RegisterTopicMessageHandler("feature.updated", newFeatureTopicMessageHandler(messenger, contextBrokerUrl))
+
+	return api.New()
+}
+
+func createMessagingContextOrDie(ctx context.Context, logger zerolog.Logger) messaging.MsgContext {
 	config := messaging.LoadConfiguration(serviceName, logger)
 	messenger, err := messaging.Initialize(config)
-
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to init messenger")
+		logger.Fatal().Err(err).Msg("failed to init messaging")
 	}
 
-	messenger.RegisterTopicMessageHandler("message.accepted", NewMeasurementTopicMessageHandler(messenger, contextBrokerUrl))
-	messenger.RegisterTopicMessageHandler("feature.updated", NewFeatureTopicMessageHandler(messenger, contextBrokerUrl))
-
-	setupRouterAndWaitForConnections(logger)
+	return messenger
 }
 
-func setupRouterAndWaitForConnections(logger zerolog.Logger) {
-	r := chi.NewRouter()
-	r.Use(cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowCredentials: true,
-		Debug:            false,
-	}).Handler)
-
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	err := http.ListenAndServe(":8080", r)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to start router")
-	}
-}
-
-func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
+func newMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
@@ -89,7 +82,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
 		if transformer == nil {
-			logger.Error().Msg("transformer not found!")
+			logger.Error().Msg("transformer not found")
 			return
 		}
 
@@ -103,7 +96,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 	}
 }
 
-func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
+func newFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
@@ -125,7 +118,7 @@ func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBroker
 
 		transformer := transformerRegistry.GetTransformerForFeature(ctx, feature.Type)
 		if transformer == nil {
-			logger.Error().Msg("transformer not found!")
+			logger.Error().Msg("transformer not found")
 			return
 		}
 
