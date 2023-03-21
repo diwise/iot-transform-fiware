@@ -91,7 +91,7 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 //	- subsequent occurrences are treated as additional measurements and ignored
 
 func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
-	pressure := float64(7)
+	pressure := float64(7000)
 	is := is.New(t)
 
 	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05Z")
