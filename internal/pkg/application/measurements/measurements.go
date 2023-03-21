@@ -114,7 +114,8 @@ func GreenspaceRecord(ctx context.Context, msg iotCore.MessageAccepted, cbClient
 
 	const SensorValue int = 5700
 	if pr, ok := iotCore.Get[float64](msg, PressureURN, SensorValue); ok {
-		properties = append(properties, decorators.Number("soilMoisturePressure", pr, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+		kPa := pr / 1000.0
+		properties = append(properties, decorators.Number("soilMoisturePressure", kPa, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
 	}
 
 	if co, ok := iotCore.Get[float64](msg, ConductivityURN, SensorValue); ok {
@@ -180,7 +181,7 @@ func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.
 	if !ok {
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
 	}
-	
+
 	properties = append(properties, decorators.Status(statusValue[v]))
 
 	if msg.HasLocation() {
