@@ -10,7 +10,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/functions"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/registry"
 	"github.com/diwise/messaging-golang/pkg/messaging"
@@ -52,35 +52,35 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 	}
 }
 
-func NewFeatureTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
+func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
-		feature := features.Feat{}
+		fn := functions.Func{}
 
-		err := json.Unmarshal(msg.Body, &feature)
+		err := json.Unmarshal(msg.Body, &fn)
 		if err != nil {
 			logger.Error().Err(err).Msgf("failed to unmarshal message body")
 			return
 		}
 
-		logger = logger.With().Str("feature_type", fmt.Sprintf("%s:%s", feature.Type, feature.SubType)).Logger()
+		logger = logger.With().Str("function_type", fmt.Sprintf("%s:%s", fn.Type, fn.SubType)).Logger()
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
 		//TODO: should this come from the json body?
-		feature.Timestamp = time.Now().UTC()
+		fn.Timestamp = time.Now().UTC()
 
-		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(feature.Tenant))
+		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(fn.Tenant))
 
-		transformer := transformerRegistry.GetTransformerForFeature(ctx, feature.Type)
+		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn.Type)
 		if transformer == nil {
 			logger.Error().Msg("transformer not found")
 			return
 		}
 
-		logger.Debug().Msgf("handle message from %s", feature.ID)
+		logger.Debug().Msgf("handle message from %s", fn.ID)
 
-		err = transformer(ctx, feature, cbClient)
+		err = transformer(ctx, fn, cbClient)
 		if err != nil {
 			logger.Err(err).Msg("transform failed")
 			return

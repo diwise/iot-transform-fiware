@@ -19,7 +19,7 @@ var Returns = testutils.Returns
 var method = expects.RequestMethod
 var path = expects.RequestPath
 
-func TestHandleUpdatedFeature(t *testing.T) {
+func TestHandleUpdatedFunction(t *testing.T) {
 	ctx, is, msgCtx := testSetup(t)
 	l := zerolog.Logger{}
 
@@ -35,7 +35,7 @@ func TestHandleUpdatedFeature(t *testing.T) {
 	app.Start()
 
 	topicMessageHandler := msgCtx.RegisterTopicMessageHandlerCalls()[1].Handler
-	topicMessageHandler(ctx, amqp091.Delivery{Body: []byte(featureUpdatedMessage)}, l)
+	topicMessageHandler(ctx, amqp091.Delivery{Body: []byte(functionUpdatedMessage)}, l)
 
 	is.True(true)
 }
@@ -51,7 +51,7 @@ func testSetup(t *testing.T) (context.Context, *is.I, *messaging.MsgContextMock)
 	return context.Background(), is, msgctx
 }
 
-const featureUpdatedMessage string = `{
+const functionUpdatedMessage string = `{
 	"id": "a81758fffe04d819",
 	"type": "waterquality",
 	"subtype": "beach",
