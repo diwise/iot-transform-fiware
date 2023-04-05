@@ -3,7 +3,7 @@ package registry
 import (
 	"context"
 
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/features"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/functions"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -23,16 +23,16 @@ const (
 )
 
 const (
-	WaterQualityFeature string = "waterquality"
+	WaterQualityFunction string = "waterquality"
 )
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-type FeatureTransformerFunc func(ctx context.Context, feat features.Feat, cbClient client.ContextBrokerClient) error
+type FunctionTransformerFunc func(ctx context.Context, f functions.Func, cbClient client.ContextBrokerClient) error
 
 type TransformerRegistry interface {
 	GetTransformerForMeasurement(ctx context.Context, measurementType string) MeasurementTransformerFunc
-	GetTransformerForFeature(ctx context.Context, featureType string) FeatureTransformerFunc
+	GetTransformerForFunction(ctx context.Context, functionType string) FunctionTransformerFunc
 }
 
 type transformerRegistry struct {
@@ -68,10 +68,10 @@ func (tr *transformerRegistry) GetTransformerForMeasurement(ctx context.Context,
 	return nil
 }
 
-func (tr *transformerRegistry) GetTransformerForFeature(ctx context.Context, featureType string) FeatureTransformerFunc {
-	switch featureType {
-	case WaterQualityFeature:
-		return features.WaterQualityObserved
+func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, functionType string) FunctionTransformerFunc {
+	switch functionType {
+	case WaterQualityFunction:
+		return functions.WaterQualityObserved
 	default:
 		return nil
 	}

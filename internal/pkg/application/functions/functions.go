@@ -1,4 +1,4 @@
-package features
+package functions
 
 import (
 	"context"
@@ -37,7 +37,7 @@ type location struct {
 	Longitude float64 `json:"longitude"`
 }
 
-type Feat struct {
+type Func struct {
 	ID       string    `json:"id"`
 	Type     string    `json:"type"`
 	SubType  string    `json:"subtype"`
@@ -52,18 +52,18 @@ type Feat struct {
 	Timestamp time.Time
 }
 
-func WaterQualityObserved(ctx context.Context, feature Feat, cbClient client.ContextBrokerClient) error {
+func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, feature.SubType, feature.ID)
+	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, fn.SubType, fn.ID)
 
 	properties = append(properties,
-		decorators.DateObserved(feature.Timestamp.UTC().Format(time.RFC3339Nano)),
-		Temperature(feature.WaterQuality.Temperature, feature.Timestamp.UTC()),
+		decorators.DateObserved(fn.Timestamp.UTC().Format(time.RFC3339Nano)),
+		Temperature(fn.WaterQuality.Temperature, fn.Timestamp.UTC()),
 	)
 
-	if feature.Location != nil {
-		properties = append(properties, decorators.Location(feature.Location.Latitude, feature.Location.Longitude))
+	if fn.Location != nil {
+		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
