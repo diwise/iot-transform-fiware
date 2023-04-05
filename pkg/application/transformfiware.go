@@ -17,7 +17,7 @@ func New(ctx context.Context, r infra.Router, messenger messaging.MsgContext, co
 	tfw := &impl{}
 
 	messenger.RegisterTopicMessageHandler("message.accepted", app.NewMeasurementTopicMessageHandler(messenger, contextBrokerUrl))
-	messenger.RegisterTopicMessageHandler("feature.updated", app.NewFeatureTopicMessageHandler(messenger, contextBrokerUrl))
+	messenger.RegisterTopicMessageHandler("function.updated", app.NewFunctionUpdatedTopicMessageHandler(messenger, contextBrokerUrl))
 
 	return tfw
 }

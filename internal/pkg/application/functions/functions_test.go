@@ -1,4 +1,4 @@
-package features
+package functions
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 func TestWaterQualityObserved(t *testing.T) {
 	is := is.New(t)
 
-	f := Feat{
+	f := Func{
 		ID:       "waterQuality-01",
 		Type:     "waterquality",
 		SubType:  "beach",
