@@ -51,7 +51,6 @@ func NewTransformerRegistry() TransformerRegistry {
 		PresenceURN:                 measurements.Device,
 		PresenceURN + "/lifebuoy":   measurements.Lifebuoy,
 		TemperatureURN + "/air":     measurements.WeatherObserved,
-		TemperatureURN + "/water":   measurements.WaterQualityObserved,
 		WatermeterURN:               measurements.WaterConsumptionObserved,
 	}
 

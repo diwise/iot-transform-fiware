@@ -58,7 +58,7 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, fn.SubType, fn.ID)
 
 	properties = append(properties,
-		decorators.DateObserved(fn.Timestamp.UTC().Format(time.RFC3339Nano)),
+		decorators.DateObserved(fn.Timestamp.UTC().Format(time.RFC3339)),
 		Temperature(fn.WaterQuality.Temperature, fn.Timestamp.UTC()),
 	)
 

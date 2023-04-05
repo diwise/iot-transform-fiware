@@ -255,29 +255,6 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 	return nil
 }
 
-func WaterQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := make([]entities.EntityDecoratorFunc, 0, 5)
-
-	const SensorValue int = 5700
-	temp, ok := iotCore.Get[float64](msg, TemperatureURN, SensorValue)
-	if !ok {
-		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
-	}
-
-	properties = append(properties,
-		decorators.DateObserved(msg.Timestamp),
-		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
-	)
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	id := fiware.WaterQualityObservedIDPrefix + msg.Sensor
-
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
-}
-
 func WeatherObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
