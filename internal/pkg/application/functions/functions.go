@@ -43,6 +43,7 @@ type Func struct {
 	SubType  string    `json:"subtype"`
 	Location *location `json:"location,omitempty"`
 	Tenant   string    `json:"tenant,omitempty"`
+	Source   string    `json:"source,omitempty"`
 
 	Counter      *counter      `json:"counter,omitempty"`
 	Level        *level        `json:"level,omitempty"`
@@ -62,6 +63,10 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 		Temperature(fn.WaterQuality.Temperature, fn.Timestamp.UTC()),
 	)
 
+	if fn.Source != "" {
+		properties = append(properties, decorators.Source(fn.Source))
+	}
+	
 	if fn.Location != nil {
 		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
 	}

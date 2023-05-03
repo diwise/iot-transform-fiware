@@ -256,7 +256,7 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil),iotcore.Rec("source", "src", nil, nil, 0, nil))
 
 	err := WeatherObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)

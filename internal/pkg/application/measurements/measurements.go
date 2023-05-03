@@ -269,6 +269,10 @@ func WeatherObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient 
 		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
 	)
 
+	if src, ok := msg.GetString("source"); ok {
+		properties = append(properties, decorators.Source(src))
+	}
+
 	if msg.HasLocation() {
 		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
 	}
