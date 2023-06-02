@@ -14,7 +14,8 @@ import (
 )
 
 type waterquality struct {
-	Temperature float64 `json:"temperature"`
+	Temperature float64   `json:"temperature"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 type counter struct {
@@ -59,14 +60,14 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, fn.SubType, fn.ID)
 
 	properties = append(properties,
-		decorators.DateObserved(fn.Timestamp.UTC().Format(time.RFC3339)),
-		Temperature(fn.WaterQuality.Temperature, fn.Timestamp.UTC()),
+		decorators.DateObserved(fn.WaterQuality.Timestamp.UTC().Format(time.RFC3339)),
+		Temperature(fn.WaterQuality.Temperature, fn.WaterQuality.Timestamp.UTC()),
 	)
 
 	if fn.Source != "" {
 		properties = append(properties, decorators.Source(fn.Source))
 	}
-	
+
 	if fn.Location != nil {
 		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
 	}
