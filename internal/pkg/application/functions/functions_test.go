@@ -22,8 +22,9 @@ func TestWaterQualityObserved(t *testing.T) {
 		Location: nil,
 		WaterQuality: &waterquality{
 			Temperature: 20,
+			Timestamp: time.Date(2023, 2, 27, 12, 0, 0, 0, time.UTC),
 		},
-		Timestamp: time.Date(2023, 2, 27, 12, 0, 0, 0, time.UTC),
+		Timestamp: time.Date(2023, 3, 27, 12, 0, 0, 0, time.UTC),
 	}
 
 	var id string
@@ -37,7 +38,7 @@ func TestWaterQualityObserved(t *testing.T) {
 				if attributeType == "Property" {
 					if attributeName == "temperature" {
 						p := contents.(types.Property)
-						temp = p.Value().(float64)
+						temp = p.Value().(float64)						
 					}
 					if attributeName == "dateObserved" {
 						p := contents.(*properties.DateTimeProperty)
