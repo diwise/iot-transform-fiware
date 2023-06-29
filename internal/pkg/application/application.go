@@ -33,7 +33,9 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 		contextBrokerClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(messageAccepted.Tenant()))
 		measurementType := measurements.GetMeasurementType(messageAccepted)
 
-		logger = logger.With().Str("measurement_type", measurementType).Logger()
+		logger = logger.With().
+			Str("measurement_type", measurementType).
+			Str("device_id", messageAccepted.Sensor).Logger()
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
@@ -42,7 +44,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 			return
 		}
 
-		logger.Debug().Msgf("handle message from %s", messageAccepted.Sensor)
+		logger.Debug().Msg("handling message")
 
 		err = transformer(ctx, messageAccepted, contextBrokerClient)
 		if err != nil {
@@ -64,7 +66,9 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 			return
 		}
 
-		logger = logger.With().Str("function_type", fmt.Sprintf("%s:%s", fn.Type, fn.SubType)).Logger()
+		logger = logger.With().
+			Str("function_type", fmt.Sprintf("%s:%s", fn.Type, fn.SubType)).
+			Str("function_id", fn.ID).Logger()
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
 		//TODO: should this come from the json body?
@@ -78,7 +82,7 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 			return
 		}
 
-		logger.Debug().Msgf("handle message from %s", fn.ID)
+		logger.Debug().Msg("handling message")
 
 		err = transformer(ctx, fn, cbClient)
 		if err != nil {
