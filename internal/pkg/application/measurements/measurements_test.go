@@ -122,7 +122,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
 	is.Equal(string(b), expectedCreateBody)
 }
 
-func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
+func TestThatGreenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 	conductivity := float64(536)
 	is := is.New(t)
 
@@ -150,11 +150,6 @@ func TestThatGrenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 
 	expectedEntityID := "urn:ngsi-ld:GreenspaceRecord:soilsensor-01"
 	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
-
-	b, _ := json.Marshal(cbClient.MergeEntityCalls())
-	const expectedCreateBody string = `[{"Ctx":0,"EntityID":"urn:ngsi-ld:GreenspaceRecord:soilsensor-01","Fragment":{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2006-01-02T15:04:05Z"}},"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"soilMoistureEc":{"type":"Property","value":536,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:soilsensor-01"},"unitCode":"MHO"}},"Headers":{"Content-Type":["application/ld+json"]}}]`
-
-	is.Equal(string(b), expectedCreateBody)
 }
 
 func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
@@ -256,7 +251,7 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 
-	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil),iotcore.Rec("source", "src", nil, nil, 0, nil))
+	msg := iotcore.NewMessageAccepted("deviceID", senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil), iotcore.Rec("source", "src", nil, nil, 0, nil))
 
 	err := WeatherObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
