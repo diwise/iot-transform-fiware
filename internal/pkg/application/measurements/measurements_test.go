@@ -170,7 +170,7 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
 }
-
+/*
 func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	p := true
 	is, cbClient := testSetup(t)
@@ -183,7 +183,7 @@ func TestThatLifebuoyCanBeCreated(t *testing.T) {
 	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
-
+*/
 func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	v := 1.009
 	is := is.New(t)

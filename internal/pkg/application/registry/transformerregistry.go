@@ -24,6 +24,8 @@ const (
 
 const (
 	WaterQualityFunction string = "waterquality"
+	LifebuoyFunction string = "lifebuoy"
+	PresenceFunction string = "presence"
 )
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -32,7 +34,7 @@ type FunctionTransformerFunc func(ctx context.Context, f functions.Func, cbClien
 
 type TransformerRegistry interface {
 	GetTransformerForMeasurement(ctx context.Context, measurementType string) MeasurementTransformerFunc
-	GetTransformerForFunction(ctx context.Context, functionType string) FunctionTransformerFunc
+	GetTransformerForFunction(ctx context.Context, fn functions.Func) FunctionTransformerFunc
 }
 
 type transformerRegistry struct {
@@ -49,7 +51,6 @@ func NewTransformerRegistry() TransformerRegistry {
 		ConductivityURN + "/soil":   measurements.GreenspaceRecord,
 		PressureURN + "/soil":       measurements.GreenspaceRecord,
 		PresenceURN:                 measurements.Device,
-		PresenceURN + "/lifebuoy":   measurements.Lifebuoy,
 		TemperatureURN + "/air":     measurements.WeatherObserved,
 		WatermeterURN:               measurements.WaterConsumptionObserved,
 	}
@@ -67,10 +68,15 @@ func (tr *transformerRegistry) GetTransformerForMeasurement(ctx context.Context,
 	return nil
 }
 
-func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, functionType string) FunctionTransformerFunc {
-	switch functionType {
+func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, fn functions.Func) FunctionTransformerFunc {
+	switch fn.Type {
 	case WaterQualityFunction:
 		return functions.WaterQualityObserved
+	case PresenceFunction:
+		if fn.SubType == LifebuoyFunction {
+			return functions.Lifebuoy
+		}
+		return functions.Device
 	default:
 		return nil
 	}

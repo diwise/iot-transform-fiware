@@ -19,7 +19,7 @@ func TestWeatherObservedMapping(t *testing.T) {
 	is.True(isFunc(tr))
 	is.Equal("WeatherObserved", getFuncName(tr))
 }
-
+/*
 func TestLifeBuoyMapping(t *testing.T) {
 	is := is.New(t)
 	r := NewTransformerRegistry()
@@ -29,7 +29,7 @@ func TestLifeBuoyMapping(t *testing.T) {
 	is.True(isFunc(tr))
 	is.Equal("Lifebuoy", getFuncName(tr))
 }
-
+*/
 func TestWaterConsumptionMapping(t *testing.T) {
 	is := is.New(t)
 	r := NewTransformerRegistry()

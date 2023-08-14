@@ -54,6 +54,8 @@ type Func struct {
 	Timestamp time.Time
 }
 
+var statusValue = map[bool]string{true: "on", false: "off"}
+
 func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
@@ -73,4 +75,39 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
+}
+
+func Lifebuoy(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0)
+
+	properties = append(properties, decorators.DateLastValueReported(fn.Timestamp.UTC().Format(time.RFC3339)))
+	properties = append(properties, decorators.Status(statusValue[fn.Presence.State]))
+
+	if fn.Location != nil {
+		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
+	}
+
+	const (
+		LifebuoyIDPrefix string = "urn:ngsi-ld:Lifebuoy:"
+		LifebuoyTypeName string = "Lifebuoy"
+	)
+
+	id := fmt.Sprintf("%s%s", LifebuoyIDPrefix, fn.ID)
+
+	return cip.MergeOrCreate(ctx, cbClient, id, LifebuoyTypeName, properties)
+}
+
+func Device(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0)
+
+	properties = append(properties, decorators.DateLastValueReported(fn.Timestamp.UTC().Format(time.RFC3339)))
+	properties = append(properties, decorators.Status(statusValue[fn.Presence.State]))
+
+	if fn.Location != nil {
+		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
+	}
+
+	id := fiware.DeviceIDPrefix + fn.ID
+
+	return cip.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }

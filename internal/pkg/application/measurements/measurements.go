@@ -171,29 +171,6 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted,
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
-func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := make([]entities.EntityDecoratorFunc, 0, 5)
-
-	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp))
-
-	const DigitalInputState int = 5500
-	v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState)
-	if !ok {
-		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
-	}
-
-	properties = append(properties, decorators.Status(statusValue[v]))
-
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
-	}
-
-	typeName := "Lifebuoy"
-	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, msg.Sensor)
-
-	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
-}
-
 func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 

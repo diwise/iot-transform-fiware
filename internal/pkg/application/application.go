@@ -76,7 +76,7 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 
 		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(fn.Tenant))
 
-		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn.Type)
+		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn)
 		if transformer == nil {
 			logger.Error().Msg("transformer not found")
 			return
