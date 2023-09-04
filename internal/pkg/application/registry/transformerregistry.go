@@ -24,8 +24,8 @@ const (
 
 const (
 	WaterQualityFunction string = "waterquality"
-	LifebuoyFunction string = "lifebuoy"
-	PresenceFunction string = "presence"
+	LifebuoyFunction     string = "lifebuoy"
+	PresenceFunction     string = "presence"
 )
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error

@@ -40,7 +40,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
 		if transformer == nil {
-			logger.Error().Msg("transformer not found")
+			logger.Debug().Msg("transformer not found")
 			return
 		}
 
@@ -78,7 +78,7 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 
 		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn)
 		if transformer == nil {
-			logger.Error().Msg("transformer not found")
+			logger.Debug().Msg("transformer not found")
 			return
 		}
 

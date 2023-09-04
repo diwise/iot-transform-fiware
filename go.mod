@@ -1,6 +1,6 @@
 module github.com/diwise/iot-transform-fiware
 
-go 1.20
+go 1.21
 
 require (
 	github.com/diwise/context-broker v0.0.0-20230620081938-8b3ba8919d34
