@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
+	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/router"
 	transformfiware "github.com/diwise/iot-transform-fiware/pkg/application"
 
@@ -29,7 +31,9 @@ func main() {
 	messenger := createMessagingContextOrDie(ctx, logger)
 	r := createRouterAndRegisterHealthEndpoint()
 
-	tfw := transformfiware.New(ctx, r, messenger, contextBrokerUrl)
+	factory := newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion)
+
+	tfw := transformfiware.New(ctx, r, messenger, factory)
 	tfw.Start()
 
 	servicePort := env.GetVariableOrDefault(logger, "SERVICE_PORT", "8080")
@@ -57,4 +61,41 @@ func createRouterAndRegisterHealthEndpoint() infra.Router {
 	})
 
 	return r
+}
+
+type ContextBrokerClientFactoryFunc func(string) client.ContextBrokerClient
+
+func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion string) ContextBrokerClientFactoryFunc {
+
+	type request struct {
+		tenant string
+		result chan client.ContextBrokerClient
+	}
+
+	requestQueue := make(chan request)
+
+	go func() {
+		clients := map[string]client.ContextBrokerClient{}
+
+		for r := range requestQueue {
+			c, ok := clients[r.tenant]
+
+			if !ok {
+				c = client.NewContextBrokerClient(
+					contextBrokerUrl,
+					client.Tenant(r.tenant),
+					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+				)
+				clients[r.tenant] = c
+			}
+
+			r.result <- c
+		}
+	}()
+
+	return func(tenant string) client.ContextBrokerClient {
+		r := request{tenant: tenant, result: make(chan client.ContextBrokerClient)}
+		requestQueue <- r
+		return <-r.result
+	}
 }
