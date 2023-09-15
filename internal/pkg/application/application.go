@@ -18,7 +18,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
+func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
@@ -30,7 +30,6 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 			return
 		}
 
-		contextBrokerClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(messageAccepted.Tenant()))
 		measurementType := measurements.GetMeasurementType(messageAccepted)
 
 		logger = logger.With().
@@ -46,7 +45,8 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 
 		logger.Debug().Msg("handling message")
 
-		err = transformer(ctx, messageAccepted, contextBrokerClient)
+		cbClient := getClientForTenant(messageAccepted.Tenant())
+		err = transformer(ctx, messageAccepted, cbClient)
 		if err != nil {
 			logger.Err(err).Msgf("transform failed")
 			return
@@ -54,7 +54,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, contextBr
 	}
 }
 
-func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, contextBrokerClientUrl string) messaging.TopicMessageHandler {
+func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger zerolog.Logger) {
@@ -74,8 +74,6 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 		//TODO: should this come from the json body?
 		fn.Timestamp = time.Now().UTC()
 
-		cbClient := client.NewContextBrokerClient(contextBrokerClientUrl, client.Tenant(fn.Tenant))
-
 		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn.Type)
 		if transformer == nil {
 			logger.Error().Msg("transformer not found")
@@ -84,6 +82,7 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, conte
 
 		logger.Debug().Msg("handling message")
 
+		cbClient := getClientForTenant(fn.Tenant)
 		err = transformer(ctx, fn, cbClient)
 		if err != nil {
 			logger.Err(err).Msg("transform failed")
