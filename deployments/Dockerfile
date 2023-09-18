@@ -23,7 +23,6 @@ WORKDIR /opt/diwise
 COPY --from=builder --chown=1001 /app/cmd/iot-transform-fiware/iot-transform-fiware /opt/diwise
 
 RUN chown 1001 /opt/diwise
-RUN chmod 700 /opt/diwise
 
 EXPOSE 8080
 USER 1001
