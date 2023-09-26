@@ -53,8 +53,13 @@ func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClie
 	)
 
 	const (
-		SensorValue   int = 5700
-		CarbonDioxide int = 17
+		SensorValue         int = 5700
+		CarbonDioxide       int = 17
+		ParticulateMatter10 int = 1
+		ParticulateMatter25 int = 3
+		ParticulateMatter1  int = 5
+		NitrogenDioxide     int = 15
+		NitrogenMonoxide    int = 19
 	)
 
 	temp, tempOk := iotCore.Get[float64](msg, TemperatureURN, SensorValue)
@@ -67,7 +72,32 @@ func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClie
 		properties = append(properties, CO2(co2, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
-	if !tempOk && !co2Ok {
+	pm10, pm10Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter10)
+	if pm10Ok {
+		properties = append(properties, PM10(pm10, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	pm1, pm1Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter1)
+	if pm1Ok {
+		properties = append(properties, PM1(pm1, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	pm25, pm25Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter25)
+	if pm25Ok {
+		properties = append(properties, PM25(pm25, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	no2, no2Ok := iotCore.Get[float64](msg, AirQualityURN, NitrogenDioxide)
+	if no2Ok {
+		properties = append(properties, NO2(no2, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	no, noOk := iotCore.Get[float64](msg, AirQualityURN, NitrogenMonoxide)
+	if noOk {
+		properties = append(properties, NO(no, time.Unix(int64(msg.BaseTime()), 0)))
+	}
+
+	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk{
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 

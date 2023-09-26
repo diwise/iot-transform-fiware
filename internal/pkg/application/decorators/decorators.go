@@ -32,3 +32,28 @@ func CO2(co2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
 	ts := observedAt.UTC().Format(time.RFC3339Nano)
 	return decorators.Number("co2", co2, properties.ObservedAt(ts))
 }
+
+func PM10(pm10 float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("pm10", pm10, properties.ObservedAt(ts))
+}
+
+func PM25(pm25 float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("pm25", pm25, properties.ObservedAt(ts))
+}
+
+func PM1(pm1 float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("pm1", pm1, properties.ObservedAt(ts))
+}
+
+func NO2(no2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("no2", no2, properties.ObservedAt(ts))
+}
+
+func NO(no float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("no", no, properties.ObservedAt(ts))
+}
