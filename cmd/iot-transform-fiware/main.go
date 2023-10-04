@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/router"
@@ -14,9 +15,8 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	infra "github.com/diwise/service-chassis/pkg/infrastructure/router"
-
-	"github.com/rs/zerolog"
 )
 
 const serviceName string = "iot-transform-fiware"
@@ -24,11 +24,11 @@ const serviceName string = "iot-transform-fiware"
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 
-	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+	ctx, _, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
 
-	contextBrokerUrl := env.GetVariableOrDie(logger, "NGSI_CB_URL", "URL to ngsi-ld context broker")
-	messenger := createMessagingContextOrDie(ctx, logger)
+	contextBrokerUrl := env.GetVariableOrDie(ctx, "NGSI_CB_URL", "URL to ngsi-ld context broker")
+	messenger := createMessagingContextOrDie(ctx)
 	r := createRouterAndRegisterHealthEndpoint()
 
 	factory := newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion)
@@ -36,18 +36,19 @@ func main() {
 	tfw := transformfiware.New(ctx, r, messenger, factory)
 	tfw.Start()
 
-	servicePort := env.GetVariableOrDefault(logger, "SERVICE_PORT", "8080")
+	servicePort := env.GetVariableOrDefault(ctx, "SERVICE_PORT", "8080")
 	err := http.ListenAndServe(":"+servicePort, r.Router())
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to start request router")
+		fatal(ctx, "failed to start request router", err)
 	}
 }
 
-func createMessagingContextOrDie(ctx context.Context, logger zerolog.Logger) messaging.MsgContext {
-	config := messaging.LoadConfiguration(serviceName, logger)
-	messenger, err := messaging.Initialize(config)
+func createMessagingContextOrDie(ctx context.Context) messaging.MsgContext {
+	logger := logging.GetFromContext(ctx)
+	config := messaging.LoadConfiguration(ctx, serviceName, logger)
+	messenger, err := messaging.Initialize(ctx, config)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to init messaging")
+		fatal(ctx, "failed to init messaging", err)
 	}
 
 	return messenger
@@ -98,4 +99,10 @@ func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion
 		requestQueue <- r
 		return <-r.result
 	}
+}
+
+func fatal(ctx context.Context, msg string, err error) {
+	logger := logging.GetFromContext(ctx)
+	logger.Error(msg, "err", err.Error())
+	os.Exit(1)
 }

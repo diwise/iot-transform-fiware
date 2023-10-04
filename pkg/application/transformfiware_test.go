@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
@@ -11,12 +13,11 @@ import (
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 	"github.com/rabbitmq/amqp091-go"
-	"github.com/rs/zerolog"
 )
 
 func TestHandleUpdatedFunction(t *testing.T) {
 	ctx, is, msgCtx := testSetup(t)
-	l := zerolog.Logger{}
+	l := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	brokerClientMock := &cbtest.ContextBrokerClientMock{
 		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
