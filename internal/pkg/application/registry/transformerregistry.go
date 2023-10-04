@@ -24,6 +24,7 @@ const (
 
 const (
 	WaterQualityFunction string = "waterquality"
+	AirQualityFunction   string = "airquality"
 )
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error
@@ -71,6 +72,8 @@ func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, fu
 	switch functionType {
 	case WaterQualityFunction:
 		return functions.WaterQualityObserved
+	case AirQualityFunction:
+		return functions.AirQualityObserved
 	default:
 		return nil
 	}

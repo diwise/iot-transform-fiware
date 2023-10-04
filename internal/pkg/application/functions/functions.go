@@ -38,6 +38,19 @@ type location struct {
 	Longitude float64 `json:"longitude"`
 }
 
+type airquality struct {
+	Particulates struct {
+		PM1  float64 `json:"pm1"`
+		PM10 float64 `json:"pm10"`
+		PM25 float64 `json:"pm25"`
+		NO   float64 `json:"no"`
+		NO2  float64 `json:"no2"`
+		CO2  float64 `json:"co2"`
+	} `json:"particulates"`
+	Temperature float64   `json:"temperature"`
+	Timestamp   time.Time `json:"timestamp"`
+}
+
 type Func struct {
 	ID       string    `json:"id"`
 	Type     string    `json:"type"`
@@ -50,9 +63,12 @@ type Func struct {
 	Level        *level        `json:"level,omitempty"`
 	Presence     *presence     `json:"presence,omitempty"`
 	WaterQuality *waterquality `json:"waterquality,omitempty"`
+	AirQuality   *airquality   `json:"airquality,omitempty"`
 
 	Timestamp time.Time
 }
+
+
 
 func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
@@ -73,4 +89,35 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
+}
+
+func AirQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	id := fmt.Sprintf("%s%s:%s", fiware.AirQualityObservedIDPrefix, fn.SubType, fn.ID)
+
+	aq := *fn.AirQuality
+	p := aq.Particulates
+	ts := aq.Timestamp.UTC()
+
+	properties = append(properties,
+		decorators.DateObserved(ts.Format(time.RFC3339)),
+		Temperature(aq.Temperature, ts),
+		CO2(p.CO2, ts),
+		PM10(p.PM10, ts),
+		PM1(p.PM1, ts),
+		PM25(p.PM25, ts),
+		NO2(p.NO2, ts),
+		NO(p.NO, ts),
+	)
+
+	if fn.Source != "" {
+		properties = append(properties, decorators.Source(fn.Source))
+	}
+
+	if fn.Location != nil {
+		properties = append(properties, decorators.Location(fn.Location.Latitude, fn.Location.Longitude))
+	}
+
+	return cip.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
