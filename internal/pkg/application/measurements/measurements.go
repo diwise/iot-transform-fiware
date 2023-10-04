@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -97,7 +98,7 @@ func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClie
 		properties = append(properties, NO(no, time.Unix(int64(msg.BaseTime()), 0)))
 	}
 
-	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk{
+	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
 	}
 
@@ -268,7 +269,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 	}
 
 	logger := logging.GetFromContext(ctx)
-	logger = logger.With().Str("entityID", entityID).Logger()
+	logger = logger.With(slog.String("entityID", entityID))
 
 	for _, rec := range msg.Pack {
 		if rec.Name == CumulatedWaterVolume {
@@ -277,7 +278,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 
 			err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
 			if err != nil {
-				logger.Error().Err(err).Msg("failed to merge or create waterConsumption")
+				logger.Error("failed to merge or create waterConsumption", "err", err.Error())
 			}
 		}
 	}
