@@ -5,9 +5,9 @@ go 1.21
 toolchain go1.21.1
 
 require (
-	github.com/diwise/context-broker v0.0.0-20231004073953-4a77c7130ac1
-	github.com/diwise/messaging-golang v0.0.0-20230907151254-8928403cf42d
-	github.com/diwise/service-chassis v0.0.0-20231003093159-33c02f91595f
+	github.com/diwise/context-broker v0.0.0-20231004084840-df77d480b0b0
+	github.com/diwise/messaging-golang v0.0.0-20231004082357-60ba8013c5b8
+	github.com/diwise/service-chassis v0.0.0-20231004081412-c07949c1b076
 	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/rabbitmq/amqp091-go v1.8.1
