@@ -29,7 +29,7 @@ const (
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-type FunctionTransformerFunc func(ctx context.Context, f functions.Func, cbClient client.ContextBrokerClient) error
+type FunctionTransformerFunc func(ctx context.Context, f functions.FnctUpdated, cbClient client.ContextBrokerClient) error
 
 type TransformerRegistry interface {
 	GetTransformerForMeasurement(ctx context.Context, measurementType string) MeasurementTransformerFunc

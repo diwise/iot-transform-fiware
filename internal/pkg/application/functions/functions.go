@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -40,44 +41,47 @@ type location struct {
 
 type airquality struct {
 	Particulates struct {
-		PM1  float64 `json:"pm1"`
-		PM10 float64 `json:"pm10"`
-		PM25 float64 `json:"pm25"`
-		NO   float64 `json:"no"`
-		NO2  float64 `json:"no2"`
-		CO2  float64 `json:"co2"`
+		PM1  *float64 `json:"pm1,omitempty"`
+		PM10 *float64 `json:"pm10,omitempty"`
+		PM25 *float64 `json:"pm25,omitempty"`
+		NO   *float64 `json:"no,omitempty"`
+		NO2  *float64 `json:"no2,omitempty"`
+		CO2  *float64 `json:"co2,omitempty"`
 	} `json:"particulates"`
-	Temperature float64   `json:"temperature"`
+	Temperature *float64  `json:"temperature,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
 }
 
-type Func struct {
+type fnctMetadata struct {
 	ID       string    `json:"id"`
+	Name     string    `json:"name"`
 	Type     string    `json:"type"`
 	SubType  string    `json:"subtype"`
 	Location *location `json:"location,omitempty"`
 	Tenant   string    `json:"tenant,omitempty"`
 	Source   string    `json:"source,omitempty"`
+}
 
-	Counter      *counter      `json:"counter,omitempty"`
-	Level        *level        `json:"level,omitempty"`
-	Presence     *presence     `json:"presence,omitempty"`
-	WaterQuality *waterquality `json:"waterquality,omitempty"`
-	AirQuality   *airquality   `json:"airquality,omitempty"`
-
+type FnctUpdated struct {
+	fnctMetadata
+	Data      json.RawMessage `json:"data"`
 	Timestamp time.Time
 }
 
-
-
-func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+func WaterQualityObserved(ctx context.Context, fn FnctUpdated, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	id := fmt.Sprintf("%s%s:%s", fiware.WaterQualityObservedIDPrefix, fn.SubType, fn.ID)
 
+	var wq waterquality
+	err := json.Unmarshal(fn.Data, &wq)
+	if err != nil {
+		return err
+	}
+
 	properties = append(properties,
-		decorators.DateObserved(fn.WaterQuality.Timestamp.UTC().Format(time.RFC3339)),
-		Temperature(fn.WaterQuality.Temperature, fn.WaterQuality.Timestamp.UTC()),
+		decorators.DateObserved(wq.Timestamp.UTC().Format(time.RFC3339)),
+		Temperature(wq.Temperature, wq.Timestamp.UTC()),
 	)
 
 	if fn.Source != "" {
@@ -91,25 +95,49 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
 }
 
-func AirQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+func AirQualityObserved(ctx context.Context, fn FnctUpdated, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	id := fmt.Sprintf("%s%s:%s", fiware.AirQualityObservedIDPrefix, fn.SubType, fn.ID)
 
-	aq := *fn.AirQuality
-	p := aq.Particulates
+	var aq airquality
+	err := json.Unmarshal(fn.Data, &aq)
+	if err != nil {
+		return err
+	}
+
+	particulates := aq.Particulates
 	ts := aq.Timestamp.UTC()
 
-	properties = append(properties,
-		decorators.DateObserved(ts.Format(time.RFC3339)),
-		Temperature(aq.Temperature, ts),
-		CO2(p.CO2, ts),
-		PM10(p.PM10, ts),
-		PM1(p.PM1, ts),
-		PM25(p.PM25, ts),
-		NO2(p.NO2, ts),
-		NO(p.NO, ts),
-	)
+	properties = append(properties, decorators.DateObserved(ts.Format(time.RFC3339)))
+
+	if aq.Temperature != nil {
+		properties = append(properties, Temperature(*aq.Temperature, ts))
+	}
+
+	if particulates.CO2 != nil {
+		properties = append(properties, CO2(*particulates.CO2, ts))
+	}
+
+	if particulates.PM10 != nil {
+		properties = append(properties, PM10(*particulates.PM10, ts))
+	}
+
+	if particulates.PM1 != nil {
+		properties = append(properties, PM1(*particulates.PM1, ts))
+	}
+
+	if particulates.PM25 != nil {
+		properties = append(properties, PM25(*particulates.PM25, ts))
+	}
+
+	if particulates.NO2 != nil {
+		properties = append(properties, NO2(*particulates.NO2, ts))
+	}
+
+	if particulates.NO != nil {
+		properties = append(properties, NO(*particulates.NO, ts))
+	}
 
 	if fn.Source != "" {
 		properties = append(properties, decorators.Source(fn.Source))

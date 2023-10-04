@@ -59,7 +59,7 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger *slog.Logger) {
-		fn := functions.Func{}
+		fn := functions.FnctUpdated{}
 
 		err := json.Unmarshal(msg.Body, &fn)
 		if err != nil {
