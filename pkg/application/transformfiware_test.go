@@ -54,5 +54,5 @@ const functionUpdatedMessage string = `{
 	"subtype": "beach",
 	"location":{"latitude":62.35277,"longitude":17.374},
 	"tenant":"default",
-	"waterquality":{"temperature":21.9}
+	"data":{"temperature":21.9}
 }`

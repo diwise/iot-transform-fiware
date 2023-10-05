@@ -42,7 +42,6 @@ type transformerRegistry struct {
 
 func NewTransformerRegistry() TransformerRegistry {
 	transformers := map[string]MeasurementTransformerFunc{
-		AirQualityURN:               measurements.AirQualityObserved,
 		AirQualityURN + "/indoors":  measurements.IndoorEnvironmentObserved,
 		HumidityURN + "/indoors":    measurements.IndoorEnvironmentObserved,
 		TemperatureURN + "/indoors": measurements.IndoorEnvironmentObserved,

@@ -19,21 +19,6 @@ type waterquality struct {
 	Timestamp   time.Time `json:"timestamp"`
 }
 
-type counter struct {
-	Count int  `json:"count"`
-	State bool `json:"state"`
-}
-
-type level struct {
-	Current float64  `json:"current"`
-	Percent *float64 `json:"percent,omitempty"`
-	Offset  *float64 `json:"offset,omitempty"`
-}
-
-type presence struct {
-	State bool `json:"state"`
-}
-
 type location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
@@ -96,7 +81,7 @@ func WaterQualityObserved(ctx context.Context, fn FnctUpdated, cbClient client.C
 }
 
 func AirQualityObserved(ctx context.Context, fn FnctUpdated, cbClient client.ContextBrokerClient) error {
-	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
 	id := fmt.Sprintf("%s%s:%s", fiware.AirQualityObservedIDPrefix, fn.SubType, fn.ID)
 
