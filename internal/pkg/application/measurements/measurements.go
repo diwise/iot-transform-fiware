@@ -39,7 +39,7 @@ func GetMeasurementType(m iotCore.MessageAccepted) string {
 
 	for _, m := range m.Pack {
 		if strings.EqualFold(m.Name, "env") && m.StringValue != "" {
-			return typeOfMeasurement + "/" + m.StringValue
+			return fmt.Sprintf("%s/%s", typeOfMeasurement, m.StringValue)
 		}
 	}
 
@@ -129,7 +129,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted,
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+		return nil
 	}
 
 	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor

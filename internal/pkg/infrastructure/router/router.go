@@ -7,7 +7,7 @@ import (
 	infra "github.com/diwise/service-chassis/pkg/infrastructure/router"
 )
 
-func New(serviceName string) infra.Router {
+func New(_ string) infra.Router {
 	r := chi.NewRouter()
 
 	r.Use(cors.New(cors.Options{

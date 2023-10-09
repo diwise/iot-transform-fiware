@@ -18,7 +18,7 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
-func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewMeasurementTopicMessageHandler(_ messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger *slog.Logger) {
@@ -40,11 +40,10 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
 		if transformer == nil {
-			logger.Error("transformer not found")
 			return
 		}
 
-		logger.Debug("handling message")
+		logger.Info("handling message")
 
 		cbClient := getClientForTenant(messageAccepted.Tenant())
 		err = transformer(ctx, messageAccepted, cbClient)
@@ -55,7 +54,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 	}
 }
 
-func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewFunctionUpdatedTopicMessageHandler(_ messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
 	return func(ctx context.Context, msg amqp.Delivery, logger *slog.Logger) {
@@ -78,11 +77,10 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 
 		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn.Type)
 		if transformer == nil {
-			logger.Error("transformer not found")
 			return
 		}
 
-		logger.Debug("handling message")
+		logger.Info("handling message")
 
 		cbClient := getClientForTenant(fn.Tenant)
 		err = transformer(ctx, fn, cbClient)

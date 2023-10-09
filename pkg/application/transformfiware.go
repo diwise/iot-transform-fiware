@@ -13,7 +13,7 @@ type Application interface {
 	Start()
 }
 
-func New(ctx context.Context, r infra.Router, messenger messaging.MsgContext, clientFactory func(string) client.ContextBrokerClient) Application {
+func New(_ context.Context, _ infra.Router, messenger messaging.MsgContext, clientFactory func(string) client.ContextBrokerClient) Application {
 
 	tfw := &impl{}
 
