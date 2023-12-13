@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
+	"github.com/diwise/messaging-golang/pkg/messaging"
 )
 
 type waterquality struct {
@@ -33,6 +35,13 @@ type presence struct {
 	State bool `json:"state"`
 }
 
+type sewagepumpingstation struct {
+	ID        string    `json:"id"`
+	Status    bool      `json:"status"`
+	Timestamp time.Time `json:"timestamp"`
+	Location  *location `json:"location,omitempty"`
+}
+
 type location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
@@ -52,6 +61,33 @@ type Func struct {
 	WaterQuality *waterquality `json:"waterquality,omitempty"`
 
 	Timestamp time.Time
+}
+
+var statusValue = map[bool]string{true: "on", false: "off"}
+
+func SewagePumpingStation(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
+	sps := sewagepumpingstation{}
+
+	err := json.Unmarshal(incMsg.Body(), &sps)
+	if err != nil {
+		return err
+	}
+
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	properties = append(properties,
+		decorators.DateLastValueReported(sps.Timestamp.Format(time.RFC3339)),
+		decorators.Status(statusValue[sps.Status]),
+	)
+
+	if sps.Location != nil {
+		properties = append(properties, decorators.Location(sps.Location.Latitude, sps.Location.Longitude))
+	}
+
+	typeName := "SewagePumpingStation"
+	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, sps.ID)
+
+	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
 
 func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
