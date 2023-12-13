@@ -8,7 +8,6 @@ import (
 	"time"
 
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
-	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/functions"
@@ -21,10 +20,10 @@ import (
 func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
-	return func(ctx context.Context, msg amqp.Delivery, logger *slog.Logger) {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
 		messageAccepted := iotCore.MessageAccepted{}
 
-		err := json.Unmarshal(msg.Body, &messageAccepted)
+		err := json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
 			logger.Error("unable to unmarshal incoming message", "err", err.Error())
 			return
@@ -58,10 +57,10 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	transformerRegistry := registry.NewTransformerRegistry()
 
-	return func(ctx context.Context, msg amqp.Delivery, logger *slog.Logger) {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
 		fn := functions.Func{}
 
-		err := json.Unmarshal(msg.Body, &fn)
+		err := json.Unmarshal(msg.Body(), &fn)
 		if err != nil {
 			logger.Error("failed to unmarshal message body", "err", err.Error())
 			return

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"testing"
@@ -10,13 +11,13 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	cbtest "github.com/diwise/context-broker/pkg/test"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/functions"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
-	"github.com/rabbitmq/amqp091-go"
 )
 
 func TestHandleUpdatedFunction(t *testing.T) {
-	ctx, is, msgCtx := testSetup(t)
+	ctx, is, msgCtx, incMsg := testSetup(t, functionUpdatedMessage)
 	l := slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	brokerClientMock := &cbtest.ContextBrokerClientMock{
@@ -31,21 +32,42 @@ func TestHandleUpdatedFunction(t *testing.T) {
 	app.Start()
 
 	topicMessageHandler := msgCtx.RegisterTopicMessageHandlerCalls()[1].Handler
-	topicMessageHandler(ctx, amqp091.Delivery{Body: []byte(functionUpdatedMessage)}, l)
+	topicMessageHandler(ctx, incMsg, l)
 
 	is.Equal(len(brokerClientMock.MergeEntityCalls()), 1)
 	is.Equal(brokerClientMock.MergeEntityCalls()[0].EntityID, "urn:ngsi-ld:WaterQualityObserved:beach:a81758fffe04d819")
 }
 
-func testSetup(t *testing.T) (context.Context, *is.I, *messaging.MsgContextMock) {
+func testSetup(t *testing.T, body string) (context.Context, *is.I, *messaging.MsgContextMock, *messaging.IncomingTopicMessageMock) {
 	is := is.New(t)
 
 	msgctx := &messaging.MsgContextMock{
-		RegisterTopicMessageHandlerFunc: func(string, messaging.TopicMessageHandler) {
+		RegisterTopicMessageHandlerFunc: func(routingKey string, handler messaging.TopicMessageHandler) error {
+			return nil
 		},
 	}
 
-	return context.Background(), is, msgctx
+	incMsg := &messaging.IncomingTopicMessageMock{
+		BodyFunc: func() []byte {
+			msg := functions.Func{}
+
+			err := json.Unmarshal([]byte(body), &msg)
+			is.NoErr(err)
+
+			bytes, err := json.Marshal(msg)
+			is.NoErr(err)
+
+			return bytes
+		},
+		TopicNameFunc: func() string {
+			return ""
+		},
+		ContentTypeFunc: func() string {
+			return ""
+		},
+	}
+
+	return context.Background(), is, msgctx, incMsg
 }
 
 const functionUpdatedMessage string = `{
