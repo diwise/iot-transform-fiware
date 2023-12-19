@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -93,32 +92,18 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 	}
 }
 
-func NewCIPFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
-	transformerRegistry := registry.NewTransformerRegistry()
-
+func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
-
-		noPrefix := strings.TrimPrefix(msg.ContentType(), "application/vnd+diwise.")
-		msgType := strings.TrimSuffix(noPrefix, "+json")
-
 		logger = logger.With(
-			slog.String("function_type", fmt.Sprintf("%s", msgType)),
+			slog.String("function_type", "sewagepumpingstation"),
 		)
 		ctx = logging.NewContextWithLogger(ctx, logger)
-
-		//TODO: should this come from the json body?
-		//fn.Timestamp = time.Now().UTC()
-
-		transformer := transformerRegistry.GetTransformerForCIPFunction(ctx, msgType)
-		if transformer == nil {
-			logger.Error("transformer not found")
-			return
-		}
 
 		logger.Debug("handling message")
 
 		cbClient := getClientForTenant("default")
-		err := transformer(ctx, msg, cbClient)
+
+		err := functions.SewagePumpingStation(ctx, msg, cbClient)
 		if err != nil {
 			logger.Error("transform failed", "err", err.Error())
 			return

@@ -36,10 +36,12 @@ type presence struct {
 }
 
 type sewagepumpingstation struct {
-	ID        string    `json:"id"`
-	Status    bool      `json:"status"`
-	Timestamp time.Time `json:"timestamp"`
-	Location  *location `json:"location,omitempty"`
+	ID        string     `json:"id"`
+	State     bool       `json:"state"`
+	StartTime time.Time  `json:"startTime"`
+	EndTime   *time.Time `json:"endTime,omitempty"`
+	Timestamp time.Time  `json:"timestamp"`
+	Location  *location  `json:"location,omitempty"`
 }
 
 type location struct {
@@ -76,9 +78,22 @@ func SewagePumpingStation(ctx context.Context, incMsg messaging.IncomingTopicMes
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties,
-		decorators.DateLastValueReported(sps.Timestamp.Format(time.RFC3339)),
-		decorators.Status(statusValue[sps.Status]),
+		decorators.Status(statusValue[sps.State]),
 	)
+
+	if !sps.StartTime.IsZero() {
+		properties = append(properties, decorators.DateTime("startTime", sps.StartTime.Format(time.RFC3339)))
+	}
+
+	if sps.EndTime != nil && !sps.EndTime.IsZero() {
+		properties = append(properties, decorators.DateTime("endTime", sps.StartTime.Format(time.RFC3339)))
+	}
+
+	if sps.Timestamp.IsZero() {
+		properties = append(properties, decorators.DateObserved(time.Now().UTC().Format(time.RFC3339)))
+	} else {
+		properties = append(properties, decorators.DateObserved(sps.Timestamp.Format(time.RFC3339)))
+	}
 
 	if sps.Location != nil {
 		properties = append(properties, decorators.Location(sps.Location.Latitude, sps.Location.Longitude))
