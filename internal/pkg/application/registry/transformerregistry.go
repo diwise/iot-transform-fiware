@@ -5,7 +5,6 @@ import (
 
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/functions"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
-	"github.com/diwise/messaging-golang/pkg/messaging"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -32,12 +31,9 @@ type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAcc
 
 type FunctionTransformerFunc func(ctx context.Context, f functions.Func, cbClient client.ContextBrokerClient) error
 
-type CIPFunctionTransformerFunc func(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error
-
 type TransformerRegistry interface {
 	GetTransformerForMeasurement(ctx context.Context, measurementType string) MeasurementTransformerFunc
 	GetTransformerForFunction(ctx context.Context, functionType string) FunctionTransformerFunc
-	GetTransformerForCIPFunction(ctx context.Context, functionType string) CIPFunctionTransformerFunc
 }
 
 type transformerRegistry struct {
@@ -76,15 +72,6 @@ func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, fu
 	switch functionType {
 	case WaterQualityFunction:
 		return functions.WaterQualityObserved
-	default:
-		return nil
-	}
-}
-
-func (tr *transformerRegistry) GetTransformerForCIPFunction(ctx context.Context, functionType string) CIPFunctionTransformerFunc {
-	switch functionType {
-	case SewagePumpingStationFunction:
-		return functions.SewagePumpingStation
 	default:
 		return nil
 	}
