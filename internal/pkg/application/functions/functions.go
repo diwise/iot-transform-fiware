@@ -42,6 +42,7 @@ type sewagepumpingstation struct {
 	EndTime   *time.Time `json:"endTime,omitempty"`
 	Timestamp time.Time  `json:"timestamp"`
 	Location  *location  `json:"location,omitempty"`
+	Tenant    string     `json:"tenant"`
 }
 
 type location struct {

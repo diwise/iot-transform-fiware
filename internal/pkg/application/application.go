@@ -101,12 +101,22 @@ func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientFor
 
 		logger.Debug("handling message")
 
-		cbClient := getClientForTenant("default")
+		tenant := Tenant{}
+		err := json.Unmarshal(msg.Body(), &tenant)
+		if err != nil {
+			logger.Error("failed to retrieve tenant from message body")
+		}
 
-		err := functions.SewagePumpingStation(ctx, msg, cbClient)
+		cbClient := getClientForTenant(tenant.Tenant)
+
+		err = functions.SewagePumpingStation(ctx, msg, cbClient)
 		if err != nil {
 			logger.Error("transform failed", "err", err.Error())
 			return
 		}
 	}
+}
+
+type Tenant struct {
+	Tenant string `json:"tenant"`
 }
