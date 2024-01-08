@@ -19,6 +19,7 @@ func New(ctx context.Context, r infra.Router, messenger messaging.MsgContext, cl
 
 	messenger.RegisterTopicMessageHandler("message.accepted", app.NewMeasurementTopicMessageHandler(messenger, clientFactory))
 	messenger.RegisterTopicMessageHandler("function.updated", app.NewFunctionUpdatedTopicMessageHandler(messenger, clientFactory))
+	messenger.RegisterTopicMessageHandlerWithFilter("cip-function.updated", app.NewSewagePumpingStationHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd+diwise.sewagepumpingstation+json"))
 
 	return tfw
 }

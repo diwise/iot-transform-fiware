@@ -91,3 +91,32 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 		}
 	}
 }
+
+func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
+		logger = logger.With(
+			slog.String("function_type", "sewagepumpingstation"),
+		)
+		ctx = logging.NewContextWithLogger(ctx, logger)
+
+		logger.Debug("handling message")
+
+		tenant := Tenant{}
+		err := json.Unmarshal(msg.Body(), &tenant)
+		if err != nil {
+			logger.Error("failed to retrieve tenant from message body")
+		}
+
+		cbClient := getClientForTenant(tenant.Tenant)
+
+		err = functions.SewagePumpingStation(ctx, msg, cbClient)
+		if err != nil {
+			logger.Error("transform failed", "err", err.Error())
+			return
+		}
+	}
+}
+
+type Tenant struct {
+	Tenant string `json:"tenant"`
+}
