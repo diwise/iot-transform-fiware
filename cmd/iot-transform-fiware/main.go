@@ -29,6 +29,8 @@ func main() {
 
 	contextBrokerUrl := env.GetVariableOrDie(ctx, "NGSI_CB_URL", "URL to ngsi-ld context broker")
 	messenger := createMessagingContextOrDie(ctx)
+	defer messenger.Close()
+
 	r := createRouterAndRegisterHealthEndpoint()
 
 	factory := newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion)
@@ -50,6 +52,8 @@ func createMessagingContextOrDie(ctx context.Context) messaging.MsgContext {
 	if err != nil {
 		fatal(ctx, "failed to init messaging", err)
 	}
+
+	messenger.Start()
 
 	return messenger
 }
