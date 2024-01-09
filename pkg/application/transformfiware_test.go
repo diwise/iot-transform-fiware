@@ -45,6 +45,9 @@ func testSetup(t *testing.T, body string) (context.Context, *is.I, *messaging.Ms
 		RegisterTopicMessageHandlerFunc: func(routingKey string, handler messaging.TopicMessageHandler) error {
 			return nil
 		},
+		RegisterTopicMessageHandlerWithFilterFunc: func(routingKey string, handler messaging.TopicMessageHandler, filter messaging.MessageFilter) error {
+			return nil
+		},
 	}
 
 	incMsg := &messaging.IncomingTopicMessageMock{
