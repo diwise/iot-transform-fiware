@@ -6,11 +6,10 @@ toolchain go1.21.1
 
 require (
 	github.com/diwise/context-broker v0.0.0-20231006083224-817bb2b70b70
-	github.com/diwise/messaging-golang v0.0.0-20231207102455-d8b33c52acec
+	github.com/diwise/messaging-golang v0.0.0-20240126121333-1e56bea211f9
 	github.com/diwise/service-chassis v0.0.0-20231209115716-62bdf2a78c57
 	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/go-chi/chi/v5 v5.0.10
-	github.com/rabbitmq/amqp091-go v1.8.1
 	github.com/rs/cors v1.10.0
 )
 
@@ -23,6 +22,7 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.8.1 // indirect
 	go.opentelemetry.io/otel v1.21.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v0.44.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.21.0 // indirect
