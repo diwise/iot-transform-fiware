@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.1
 
 require (
-	github.com/diwise/context-broker v0.0.0-20240129120532-6cea9067b336
+	github.com/diwise/context-broker v0.0.0-20240130082207-898bbeafc913
 	github.com/diwise/messaging-golang v0.0.0-20240126121333-1e56bea211f9
 	github.com/diwise/service-chassis v0.0.0-20231209115716-62bdf2a78c57
 	github.com/farshidtz/senml/v2 v2.0.0
