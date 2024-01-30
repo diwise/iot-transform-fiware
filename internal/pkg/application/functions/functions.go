@@ -10,6 +10,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
+	prop "github.com/diwise/context-broker/pkg/ngsild/types/properties"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
@@ -78,8 +79,18 @@ func SewagePumpingStation(ctx context.Context, incMsg messaging.IncomingTopicMes
 
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
+	timestamp := ""
+
+	if sps.Timestamp.IsZero() {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+		properties = append(properties, decorators.DateObserved(timestamp))
+	} else {
+		timestamp = sps.Timestamp.Format(time.RFC3339)
+		properties = append(properties, decorators.DateObserved(timestamp))
+	}
+
 	properties = append(properties,
-		decorators.Status(statusValue[sps.State]),
+		decorators.Status(statusValue[sps.State], prop.TxtObservedAt(timestamp)),
 	)
 
 	if !sps.StartTime.IsZero() {
@@ -88,12 +99,6 @@ func SewagePumpingStation(ctx context.Context, incMsg messaging.IncomingTopicMes
 
 	if sps.EndTime != nil && !sps.EndTime.IsZero() {
 		properties = append(properties, decorators.DateTime("endTime", sps.StartTime.Format(time.RFC3339)))
-	}
-
-	if sps.Timestamp.IsZero() {
-		properties = append(properties, decorators.DateObserved(time.Now().UTC().Format(time.RFC3339)))
-	} else {
-		properties = append(properties, decorators.DateObserved(sps.Timestamp.Format(time.RFC3339)))
 	}
 
 	if sps.Location != nil {

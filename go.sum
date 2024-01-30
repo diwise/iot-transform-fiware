@@ -9,6 +9,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/diwise/context-broker v0.0.0-20231006083224-817bb2b70b70 h1:RwjcxUJ6qj1+05TFGjRGYYl4TreMElJn4ImqnAELiO8=
 github.com/diwise/context-broker v0.0.0-20231006083224-817bb2b70b70/go.mod h1:cKgx0AchZqHfCA4UyFWuyA/JsNNGlVxjs5adtQec+qM=
+github.com/diwise/context-broker v0.0.0-20240129120532-6cea9067b336 h1:1ZJ+A9mlVKszwnSpqCQRn3/IPMdpE05+RVDWzc/WZzE=
+github.com/diwise/context-broker v0.0.0-20240129120532-6cea9067b336/go.mod h1:vQMVx41DxZ+CXfoqE7jpP8/M9IXxhAPhT75xaAgSitM=
+github.com/diwise/context-broker v0.0.0-20240130082207-898bbeafc913 h1:vw619ia3Hzlh4bKmKJFenTXemwNZIdVCP08fGVh0Pvc=
+github.com/diwise/context-broker v0.0.0-20240130082207-898bbeafc913/go.mod h1:vQMVx41DxZ+CXfoqE7jpP8/M9IXxhAPhT75xaAgSitM=
 github.com/diwise/iot-core v0.0.0-20230127160246-4ab63458d3f5 h1:+jxllwWTp8E18yFTsQUHZTQIAyEhQo46UxqT+xaJjy4=
 github.com/diwise/iot-core v0.0.0-20230127160246-4ab63458d3f5/go.mod h1:ULFwbXju/Gxb67IywYTMqJEd4FJwN630vMn1MNl055M=
 github.com/diwise/messaging-golang v0.0.0-20240126121333-1e56bea211f9 h1:jCJR16Z890FF4Ge82L/yxhsxuoxO9uCN8AM+NnPLgcs=
