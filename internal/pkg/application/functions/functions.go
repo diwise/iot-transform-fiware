@@ -37,13 +37,11 @@ type presence struct {
 }
 
 type sewagepumpingstation struct {
-	ID        string     `json:"id"`
-	State     bool       `json:"state"`
-	StartTime time.Time  `json:"startTime"`
-	EndTime   *time.Time `json:"endTime,omitempty"`
-	Timestamp time.Time  `json:"timestamp"`
-	Location  *location  `json:"location,omitempty"`
-	Tenant    string     `json:"tenant"`
+	ID        string    `json:"id"`
+	State     bool      `json:"state"`
+	Timestamp time.Time `json:"timestamp"`
+	Location  *location `json:"location,omitempty"`
+	Tenant    string    `json:"tenant"`
 }
 
 type location struct {
@@ -92,14 +90,6 @@ func SewagePumpingStation(ctx context.Context, incMsg messaging.IncomingTopicMes
 	properties = append(properties,
 		decorators.Status(statusValue[sps.State], prop.TxtObservedAt(timestamp)),
 	)
-
-	if !sps.StartTime.IsZero() {
-		properties = append(properties, decorators.DateTime("startTime", sps.StartTime.Format(time.RFC3339)))
-	}
-
-	if sps.EndTime != nil && !sps.EndTime.IsZero() {
-		properties = append(properties, decorators.DateTime("endTime", sps.StartTime.Format(time.RFC3339)))
-	}
 
 	if sps.Location != nil {
 		properties = append(properties, decorators.Location(sps.Location.Latitude, sps.Location.Longitude))
