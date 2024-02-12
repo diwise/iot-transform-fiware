@@ -73,7 +73,7 @@ func TestSewagePumpingStationBody(t *testing.T) {
 	is, incMsg, cbClientMock := testSetup(t, sps)
 	is.True(strings.Contains(string(incMsg.Body()), "spsID"))
 
-	expectation := `{"id":"spsID","state":false,"startTime":"0001-01-01T00:00:00Z","timestamp":"2023-12-19T14:02:41.147069Z","tenant":"default"}`
+	expectation := `{"id":"spsID","state":false,"timestamp":"2023-12-19T14:02:41.147069Z","tenant":"default"}`
 	is.Equal(string(incMsg.Body()), expectation)
 
 	err := SewagePumpingStation(context.Background(), incMsg, cbClientMock)
