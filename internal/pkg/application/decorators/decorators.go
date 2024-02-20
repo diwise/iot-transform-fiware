@@ -57,3 +57,8 @@ func NO(no float64, observedAt time.Time) entities.EntityDecoratorFunc {
 	ts := observedAt.UTC().Format(time.RFC3339Nano)
 	return decorators.Number("no", no, properties.ObservedAt(ts))
 }
+
+func FillingLevel(v float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	ts := observedAt.UTC().Format(time.RFC3339Nano)
+	return decorators.Number("fillingLevel", v, properties.ObservedAt(ts))
+}

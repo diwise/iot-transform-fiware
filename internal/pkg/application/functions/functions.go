@@ -121,3 +121,18 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
 }
+
+func WasteContainer(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0)
+
+	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", fn.ID)
+
+	//TODO: check values and location
+
+	properties = append(properties,
+		FillingLevel(*fn.Level.Percent, fn.Timestamp),
+		decorators.Location(fn.Location.Latitude, fn.Location.Longitude),
+	)
+
+	return cip.MergeOrCreate(ctx, cbClient, id, "WasteContainer", properties)
+}
