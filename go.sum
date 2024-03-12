@@ -9,8 +9,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/diwise/context-broker v0.0.0-20240213115013-2709faefc2ce h1:jNZXCWSVEagmtdnm4a333KnrL9mgMdUj3qvJpP0KWao=
 github.com/diwise/context-broker v0.0.0-20240213115013-2709faefc2ce/go.mod h1:g4tQEkNtSBGQHQ4zlAMxZ6uqvHv3VeVNbZGrEmbK1BM=
-github.com/diwise/iot-core v0.0.0-20240312131602-cca68f668d35 h1:IEp474Pxgm0pOn5+QPHtqVSMlfOKqXHDR2nQVbyFmfA=
-github.com/diwise/iot-core v0.0.0-20240312131602-cca68f668d35/go.mod h1:aqHmN/3Crvo9v+oeybELkhV7AXJanAhqzfbw95R1EK0=
 github.com/diwise/iot-core v0.0.0-20240312132050-539b36128ea8 h1:kkGFip7jjqY/UzxRpgv+SYVkKJvg0xT14bBOgIs2VR8=
 github.com/diwise/iot-core v0.0.0-20240312132050-539b36128ea8/go.mod h1:aqHmN/3Crvo9v+oeybELkhV7AXJanAhqzfbw95R1EK0=
 github.com/diwise/messaging-golang v0.0.0-20240126121333-1e56bea211f9 h1:jCJR16Z890FF4Ge82L/yxhsxuoxO9uCN8AM+NnPLgcs=
@@ -19,12 +17,8 @@ github.com/diwise/senml v0.0.0-20240312095754-96c1d2ee070d h1:QzcNjOKcI1eacdRVJ4
 github.com/diwise/senml v0.0.0-20240312095754-96c1d2ee070d/go.mod h1:ufA3dosHOpdrV7y/Cx5hOPNiWM4hD82YHNlsN3T4dLQ=
 github.com/diwise/service-chassis v0.0.0-20240208114035-ce4e0da5ec05 h1:DruUsJMGFDQd0Oju99lLtrp2l04u8rjdIepkEMhstI8=
 github.com/diwise/service-chassis v0.0.0-20240208114035-ce4e0da5ec05/go.mod h1:kTODcZIDZYW1trSmgGPRQxyNz55GQ5KhRBEV7Qh6gpk=
-github.com/farshidtz/senml/v2 v2.0.0 h1:Hk5dyfya2E1KToAzf9NH9jQazvKIbRc14acv/onQ3RE=
-github.com/farshidtz/senml/v2 v2.0.0/go.mod h1:MMhV93NbrFzyU1agBEoHRmhrhV/0nxbkMG0wMjyen8E=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/fxamacker/cbor/v2 v2.2.0 h1:6eXqdDDe588rSYAi1HfZKbx6YYQO4mxQ9eC6xYpU/JQ=
-github.com/fxamacker/cbor/v2 v2.2.0/go.mod h1:TA1xS00nchWmaBnEIxPSE5oHLuJBAVvqrtAnWBwBCVo=
 github.com/go-chi/chi/v5 v5.0.12 h1:9euLV5sTrTNTRUU9POmDUvfxyj6LAABLUcEWO+JJb4s=
 github.com/go-chi/chi/v5 v5.0.12/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
@@ -63,8 +57,6 @@ github.com/stretchr/testify v1.7.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
-github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
-github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 h1:jq9TW8u3so/bN+JPT166wjOI6/vQPF6Xe7nMNIltagk=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0/go.mod h1:p8pYQP+m5XfbZm9fxtSKAbM6oIllS7s2AfxrChvc7iw=
 go.opentelemetry.io/otel v1.24.0 h1:0LAOdjNmQeSTzGBzduGe/rU4tZhMwL5rWgtp9Ku5Jfo=

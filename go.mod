@@ -5,8 +5,8 @@ go 1.22.0
 require (
 	github.com/diwise/context-broker v0.0.0-20240213115013-2709faefc2ce
 	github.com/diwise/messaging-golang v0.0.0-20240126121333-1e56bea211f9
+	github.com/diwise/senml v0.0.0-20240312095754-96c1d2ee070d
 	github.com/diwise/service-chassis v0.0.0-20240208114035-ce4e0da5ec05
-	github.com/farshidtz/senml/v2 v2.0.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/rs/cors v1.10.1
 )
@@ -14,7 +14,6 @@ require (
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/diwise/senml v0.0.0-20240312095754-96c1d2ee070d // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/prometheus/client_golang v1.19.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
