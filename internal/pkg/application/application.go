@@ -33,7 +33,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 
 		logger = logger.With(
 			slog.String("measurement_type", measurementType),
-			slog.String("device_id", messageAccepted.Sensor),
+			slog.String("device_id", messageAccepted.DeviceID()),
 		)
 		ctx = logging.NewContextWithLogger(ctx, logger)
 

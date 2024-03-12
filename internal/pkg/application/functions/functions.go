@@ -14,6 +14,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type waterquality struct {
@@ -125,6 +126,8 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 func WasteContainer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0)
 
+	log := logging.GetFromContext(ctx)
+
 	wc := struct {
 		ID           string    `json:"id"`
 		Type         string    `json:"type"`
@@ -140,6 +143,8 @@ func WasteContainer(ctx context.Context, incMsg messaging.IncomingTopicMessage, 
 	}
 
 	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", wc.ID)
+
+	log.Debug(fmt.Sprintf("create or merge wastecontainer %s", id))
 
 	//TODO: check values and location
 
