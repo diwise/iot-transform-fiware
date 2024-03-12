@@ -122,17 +122,35 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
 }
 
-func WasteContainer(ctx context.Context, fn Func, cbClient client.ContextBrokerClient) error {
+func WasteContainer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0)
 
-	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", fn.ID)
+	wc := struct {
+		ID           string    `json:"id"`
+		Type         string    `json:"type"`
+		Level        float64   `json:"level"`
+		Temperature  float64   `json:"temperature"`
+		DateObserved time.Time `json:"dateObserved"`
+		Tenant       string    `json:"tenant"`
+	}{}
+
+	err := json.Unmarshal(incMsg.Body(), &wc)
+	if err != nil {
+		return err
+	}
+
+	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", wc.ID)
 
 	//TODO: check values and location
 
-	properties = append(properties,
-		FillingLevel(*fn.Level.Percent, fn.Timestamp),
-		decorators.Location(fn.Location.Latitude, fn.Location.Longitude),
-	)
+	//temperature
+	//status - ok, lidOpen = "tilt"
+	//serialNumber
+	//dateLastEmptying - senaste tömningen
+	//binCapacity - volym
+	//fillingLevel
+
+	properties = append(properties, FillingLevel(wc.Level, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved), decorators.Location(0.0, 0.0))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, "WasteContainer", properties)
 }

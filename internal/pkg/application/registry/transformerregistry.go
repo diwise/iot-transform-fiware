@@ -72,8 +72,6 @@ func (tr *transformerRegistry) GetTransformerForFunction(ctx context.Context, fu
 	switch functionType {
 	case WaterQualityFunction:
 		return functions.WaterQualityObserved
-	case LevelFunction:
-		return functions.WasteContainer
 	default:
 		return nil
 	}
