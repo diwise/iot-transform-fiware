@@ -14,7 +14,6 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
-	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type waterquality struct {
@@ -126,15 +125,19 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 func WasteContainer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0)
 
-	log := logging.GetFromContext(ctx)
-
 	wc := struct {
-		ID           string    `json:"id"`
-		Type         string    `json:"type"`
-		Level        float64   `json:"level"`
-		Temperature  float64   `json:"temperature"`
-		DateObserved time.Time `json:"dateObserved"`
-		Tenant       string    `json:"tenant"`
+		ID             string    `json:"id"`
+		Level          float64   `json:"level"`
+		Percent        float64   `json:"percent"`
+		Temperature    float64   `json:"temperature"`
+		DateObserved   time.Time `json:"dateObserved"`
+		Tenant         string    `json:"tenant"`
+		WasteContainer *struct {
+			Location struct {
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+			} `json:"location"`
+		} `json:"wastecontainer,omitempty"`
 	}{}
 
 	err := json.Unmarshal(incMsg.Body(), &wc)
@@ -144,18 +147,14 @@ func WasteContainer(ctx context.Context, incMsg messaging.IncomingTopicMessage, 
 
 	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", wc.ID)
 
-	log.Debug(fmt.Sprintf("create or merge wastecontainer %s", id))
-
-	//TODO: check values and location
-
-	//temperature
 	//status - ok, lidOpen = "tilt"
-	//serialNumber
 	//dateLastEmptying - senaste tömningen
 	//binCapacity - volym
-	//fillingLevel
 
-	properties = append(properties, FillingLevel(wc.Level, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved), decorators.Location(0.0, 0.0))
+	properties = append(properties, FillingLevel(wc.Percent, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved))
+	if wc.WasteContainer != nil {
+		properties = append(properties, decorators.Location(wc.WasteContainer.Location.Latitude, wc.WasteContainer.Location.Longitude))
+	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, "WasteContainer", properties)
 }
