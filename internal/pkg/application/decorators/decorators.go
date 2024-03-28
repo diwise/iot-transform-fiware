@@ -9,51 +9,49 @@ import (
 )
 
 func Temperature(temp float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("temperature", temp, properties.ObservedAt(ts))
+	return decorators.Number("temperature", temp, properties.ObservedAt(formatTime(observedAt)))
 }
 
-func Humidity(humidity float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("humidity", humidity, properties.ObservedAt(ts))
+func Humidity(humidity float64, observedAt time.Time) entities.EntityDecoratorFunc {	
+	return decorators.Number("humidity", humidity, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func Illuminance(illuminance float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("illuminance", illuminance, properties.ObservedAt(ts))
+	return decorators.Number("illuminance", illuminance, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func PeopleCount(peopleCount float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("peopleCount", peopleCount, properties.ObservedAt(ts))
+	return decorators.Number("peopleCount", peopleCount, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func CO2(co2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("co2", co2, properties.ObservedAt(ts))
+	return decorators.Number("co2", co2, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func PM10(pm10 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("pm10", pm10, properties.ObservedAt(ts))
+	return decorators.Number("pm10", pm10, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func PM25(pm25 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("pm25", pm25, properties.ObservedAt(ts))
+	return decorators.Number("pm25", pm25, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func PM1(pm1 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("pm1", pm1, properties.ObservedAt(ts))
+	return decorators.Number("pm1", pm1, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func NO2(no2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("no2", no2, properties.ObservedAt(ts))
+	return decorators.Number("no2", no2, properties.ObservedAt(formatTime(observedAt)))
 }
 
 func NO(no float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	ts := observedAt.UTC().Format(time.RFC3339Nano)
-	return decorators.Number("no", no, properties.ObservedAt(ts))
+	return decorators.Number("no", no, properties.ObservedAt(formatTime(observedAt)))
+}
+
+func FillingLevel(v float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	return decorators.Number("fillingLevel", v, properties.ObservedAt(formatTime(observedAt)))
+}
+
+func formatTime(ts time.Time) string {
+	return ts.UTC().Format(time.RFC3339)
 }

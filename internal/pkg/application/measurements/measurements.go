@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
+	"github.com/diwise/senml"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -35,23 +37,53 @@ const (
 var statusValue = map[bool]string{true: "on", false: "off"}
 
 func GetMeasurementType(m iotCore.MessageAccepted) string {
-	typeOfMeasurement := m.BaseName()
-
-	for _, m := range m.Pack {
-		if strings.EqualFold(m.Name, "env") && m.StringValue != "" {
-			return typeOfMeasurement + "/" + m.StringValue
-		}
+	urn, ok := m.Pack.GetStringValue(senml.FindByName("0"))
+	if !ok {
+		return ""
 	}
 
-	return typeOfMeasurement
+	env, ok := m.Pack.GetStringValue(senml.FindByName("env"))
+	if ok {
+		urn = fmt.Sprintf("%s/%s", urn, env)
+	}
+
+	return urn
+}
+
+func finder(p iotCore.MessageAccepted, objectURN string, n int) senml.RecordFinder {
+	falseFn := func(r senml.Record) bool {
+		return false
+	}
+
+	//TODO: refactor code not to use this logic. Use messaging with filters instead?
+
+	urn, ok := p.Pack.GetStringValue(senml.FindByName("0"))
+	if !ok {
+		return falseFn
+	}
+
+	if !strings.EqualFold(urn, objectURN) {
+		return falseFn
+	}
+
+	return senml.FindByName(strconv.Itoa(n))
+}
+
+func timestamp(msg iotCore.MessageAccepted) time.Time {
+
+	//TODO: get time from the actual record instead
+
+	ts, ok := msg.Pack.GetTime(senml.FindByName("0"))
+	if !ok {
+		return time.Now().UTC()
+	}
+	return ts
 }
 
 func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	properties = append(properties,
-		decorators.DateObserved(msg.Timestamp),
-	)
+	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
 
 	const (
 		SensorValue         int = 5700
@@ -63,50 +95,50 @@ func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClie
 		NitrogenMonoxide    int = 19
 	)
 
-	temp, tempOk := iotCore.Get[float64](msg, TemperatureURN, SensorValue)
+	temp, tempOk := msg.Pack.GetValue(finder(msg,TemperatureURN, SensorValue))
 	if tempOk {
-		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, Temperature(temp, timestamp(msg)))
 	}
 
-	co2, co2Ok := iotCore.Get[float64](msg, AirQualityURN, CarbonDioxide)
+	co2, co2Ok := msg.Pack.GetValue(finder(msg,AirQualityURN, CarbonDioxide))
 	if co2Ok {
-		properties = append(properties, CO2(co2, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, CO2(co2, timestamp(msg)))
 	}
 
-	pm10, pm10Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter10)
+	pm10, pm10Ok := msg.Pack.GetValue(finder(msg,AirQualityURN, ParticulateMatter10))
 	if pm10Ok {
-		properties = append(properties, PM10(pm10, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, PM10(pm10, timestamp(msg)))
 	}
 
-	pm1, pm1Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter1)
+	pm1, pm1Ok := msg.Pack.GetValue(finder(msg,AirQualityURN, ParticulateMatter1))
 	if pm1Ok {
-		properties = append(properties, PM1(pm1, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, PM1(pm1, timestamp(msg)))
 	}
 
-	pm25, pm25Ok := iotCore.Get[float64](msg, AirQualityURN, ParticulateMatter25)
+	pm25, pm25Ok := msg.Pack.GetValue(finder(msg,AirQualityURN, ParticulateMatter25))
 	if pm25Ok {
-		properties = append(properties, PM25(pm25, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, PM25(pm25, timestamp(msg)))
 	}
 
-	no2, no2Ok := iotCore.Get[float64](msg, AirQualityURN, NitrogenDioxide)
+	no2, no2Ok := msg.Pack.GetValue(finder(msg,AirQualityURN, NitrogenDioxide))
 	if no2Ok {
-		properties = append(properties, NO2(no2, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, NO2(no2, timestamp(msg)))
 	}
 
-	no, noOk := iotCore.Get[float64](msg, AirQualityURN, NitrogenMonoxide)
+	no, noOk := msg.Pack.GetValue(finder(msg,AirQualityURN, NitrogenMonoxide))
 	if noOk {
-		properties = append(properties, NO(no, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, NO(no, timestamp(msg)))
 	}
 
 	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
 	}
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
 	}
 
-	id := fiware.AirQualityObservedIDPrefix + msg.Sensor
+	id := fiware.AirQualityObservedIDPrefix + msg.DeviceID()
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
@@ -115,22 +147,22 @@ func Device(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.Co
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties,
-		decorators.DateLastValueReported(msg.Timestamp),
+		decorators.DateLastValueReported(msg.Timestamp.Format(time.RFC3339)),
 	)
 
 	const DigitalInputState int = 5500
-	v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState)
+	v, ok := msg.Pack.GetBoolValue(finder(msg,PresenceURN, DigitalInputState))
 	if !ok {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
 	}
 
-	id := fiware.DeviceIDPrefix + msg.Sensor
+	id := fiware.DeviceIDPrefix + msg.DeviceID()
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }
@@ -138,23 +170,23 @@ func Device(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.Co
 func GreenspaceRecord(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	properties = append(properties, decorators.DateObserved(msg.Timestamp))
+	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
 
-	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.Sensor)
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.DeviceID())
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
 
 	const SensorValue int = 5700
-	if pr, ok := iotCore.Get[float64](msg, PressureURN, SensorValue); ok {
+	if pr, ok := msg.Pack.GetValue(finder(msg,PressureURN, SensorValue)); ok {
 		kPa := pr / 1000.0
-		properties = append(properties, decorators.Number("soilMoisturePressure", kPa, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+		properties = append(properties, decorators.Number("soilMoisturePressure", kPa, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
 	}
 
-	if co, ok := iotCore.Get[float64](msg, ConductivityURN, SensorValue); ok {
-		properties = append(properties, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp), p.ObservedBy(observedBy)))
+	if co, ok := msg.Pack.GetValue(finder(msg,ConductivityURN, SensorValue)); ok {
+		properties = append(properties, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
 	}
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
@@ -163,41 +195,42 @@ func GreenspaceRecord(ctx context.Context, msg iotCore.MessageAccepted, cbClient
 func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
-	properties = append(properties,
-		decorators.Location(msg.Latitude(), msg.Longitude()),
-		decorators.DateObserved(msg.Timestamp),
-	)
+	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
+
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
+	}
 
 	const (
 		ActualNumberOfPersons int = 1
 		SensorValue           int = 5700
 	)
 
-	temp, tempOk := iotCore.Get[float64](msg, TemperatureURN, SensorValue)
+	temp, tempOk := msg.Pack.GetValue(finder(msg,TemperatureURN, SensorValue))
 	if tempOk {
-		properties = append(properties, Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, Temperature(temp, timestamp(msg)))
 	}
 
-	humidity, humidityOk := iotCore.Get[float64](msg, HumidityURN, SensorValue)
+	humidity, humidityOk := msg.Pack.GetValue(finder(msg,HumidityURN, SensorValue))
 	if humidityOk {
-		properties = append(properties, Humidity(humidity, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, Humidity(humidity, timestamp(msg)))
 	}
 
-	illuminance, illuminanceOk := iotCore.Get[float64](msg, IlluminanceURN, SensorValue)
+	illuminance, illuminanceOk := msg.Pack.GetValue(finder(msg,IlluminanceURN, SensorValue))
 	if illuminanceOk {
-		properties = append(properties, Illuminance(illuminance, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, Illuminance(illuminance, timestamp(msg)))
 	}
 
-	peopleCount, peopleCountOk := iotCore.Get[float64](msg, PeopleCountURN, ActualNumberOfPersons)
+	peopleCount, peopleCountOk := msg.Pack.GetValue(finder(msg,PeopleCountURN, ActualNumberOfPersons))
 	if peopleCountOk {
-		properties = append(properties, PeopleCount(peopleCount, time.Unix(int64(msg.BaseTime()), 0)))
+		properties = append(properties, PeopleCount(peopleCount, timestamp(msg)))
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.Sensor)
+		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
 	}
 
-	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.Sensor
+	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.DeviceID()
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
@@ -205,22 +238,22 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted,
 func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp))
+	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp.Format(time.RFC3339)))
 
 	const DigitalInputState int = 5500
-	v, ok := iotCore.Get[bool](msg, PresenceURN, DigitalInputState)
+	v, ok := msg.Pack.GetBoolValue(finder(msg,PresenceURN, DigitalInputState))
 	if !ok {
-		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.Sensor)
+		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.DeviceID())
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
 	}
 
 	typeName := "Lifebuoy"
-	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, msg.Sensor)
+	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, msg.DeviceID())
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
@@ -235,27 +268,29 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 		BackFlowDetected     int    = 11
 	)
 
-	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.Sensor)
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.Sensor)
+	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.DeviceID())
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
 
-	properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
+	}
 
 	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := iotCore.Get[bool](msg, WatermeterURN, LeakDetected); ok && leak {
+	if leak, ok := msg.Pack.GetBoolValue(finder(msg,WatermeterURN, LeakDetected)); ok && leak {
 		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(1)))
 	} else {
 		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(0)))
 	}
 
 	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := iotCore.Get[bool](msg, WatermeterURN, BackFlowDetected); ok && backflow {
+	if backflow, ok := msg.Pack.GetBoolValue(finder(msg,WatermeterURN, BackFlowDetected)); ok && backflow {
 		properties = append(properties, decorators.Number("alarmWaterQuality", float64(1)))
 	} else {
 		properties = append(properties, decorators.Number("alarmWaterQuality", float64(0)))
 	}
 
 	// An alternative name for this item
-	if t, ok := iotCore.Get[string](msg, WatermeterURN, TypeOfMeter); ok {
+	if t, ok := msg.Pack.GetStringValue(finder(msg,WatermeterURN, TypeOfMeter)); ok {
 		properties = append(properties, decorators.Text("alternateName", t))
 	}
 
@@ -290,25 +325,25 @@ func WeatherObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient 
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	const SensorValue int = 5700
-	temp, ok := iotCore.Get[float64](msg, TemperatureURN, SensorValue)
+	temp, ok := msg.Pack.GetValue(finder(msg,TemperatureURN, SensorValue))
 	if !ok {
-		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.Sensor)
+		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.DeviceID())
 	}
 
 	properties = append(properties,
-		decorators.DateObserved(msg.Timestamp),
-		Temperature(temp, time.Unix(int64(msg.BaseTime()), 0)),
+		decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)),
+		Temperature(temp, timestamp(msg)),
 	)
 
-	if src, ok := msg.GetString("source"); ok {
+	if src, ok := msg.Pack.GetStringValue(senml.FindByName("source")); ok {
 		properties = append(properties, decorators.Source(src))
 	}
 
-	if msg.HasLocation() {
-		properties = append(properties, decorators.Location(msg.Latitude(), msg.Longitude()))
+	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
 	}
 
-	id := fiware.WeatherObservedIDPrefix + msg.Sensor
+	id := fiware.WeatherObservedIDPrefix + msg.DeviceID()
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
 }
