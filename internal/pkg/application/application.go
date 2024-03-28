@@ -39,11 +39,9 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 
 		transformer := transformerRegistry.GetTransformerForMeasurement(ctx, measurementType)
 		if transformer == nil {
-			logger.Error("transformer not found")
+			logger.Debug("transformer not found", "device_id", messageAccepted.DeviceID(), "measurement_type", measurementType)
 			return
 		}
-
-		logger.Debug("handling message")
 
 		cbClient := getClientForTenant(messageAccepted.Tenant())
 		err = transformer(ctx, messageAccepted, cbClient)
@@ -66,22 +64,19 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 			return
 		}
 
-		logger = logger.With(
-			slog.String("function_type", fmt.Sprintf("%s:%s", fn.Type, fn.SubType)),
-			slog.String("function_id", fn.ID),
-		)
+		logger = logger.With(slog.String("function_type", fmt.Sprintf("%s:%s", fn.Type, fn.SubType)), slog.String("function_id", fn.ID))
+
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
-		//TODO: should this come from the json body?
-		fn.Timestamp = time.Now().UTC()
+		if fn.Timestamp.IsZero() {
+			fn.Timestamp = time.Now().UTC()
+		}
 
 		transformer := transformerRegistry.GetTransformerForFunction(ctx, fn.Type)
 		if transformer == nil {
-			logger.Error("transformer not found")
+			logger.Debug("transformer not found")
 			return
 		}
-
-		logger.Debug("handling message")
 
 		cbClient := getClientForTenant(fn.Tenant)
 		err = transformer(ctx, fn, cbClient)
@@ -101,7 +96,9 @@ func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientFor
 
 		logger.Debug("handling message")
 
-		tenant := Tenant{}
+		tenant := struct {
+			Tenant string `json:"tenant"`
+		}{}
 		err := json.Unmarshal(msg.Body(), &tenant)
 		if err != nil {
 			logger.Error("failed to retrieve tenant from message body")
@@ -119,12 +116,13 @@ func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientFor
 
 func NewWasteContainerHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
-		logger = logger.With(
-			slog.String("function_type", "wastecontainer"),
-		)
+		logger = logger.With(slog.String("function_type", "wastecontainer"))
 		ctx = logging.NewContextWithLogger(ctx, logger)
 
-		tenant := Tenant{}
+		tenant := struct {
+			Tenant string `json:"tenant"`
+		}{}
+		
 		err := json.Unmarshal(msg.Body(), &tenant)
 		if err != nil {
 			logger.Error("failed to retrieve tenant from message body")
@@ -138,8 +136,4 @@ func NewWasteContainerHandler(messenger messaging.MsgContext, getClientForTenant
 			return
 		}
 	}
-}
-
-type Tenant struct {
-	Tenant string `json:"tenant"`
 }
