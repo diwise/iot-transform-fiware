@@ -5,7 +5,7 @@ go 1.22.0
 require (
 	github.com/diwise/context-broker v0.0.0-20240213115013-2709faefc2ce
 	github.com/diwise/messaging-golang v0.0.0-20240328100115-197aa8e3a58d
-	github.com/diwise/senml v0.0.0-20240320103927-03207b97394b
+	github.com/diwise/senml v0.0.0-20240402140901-e4008e065e05
 	github.com/diwise/service-chassis v0.0.0-20240322150318-bfd966f97527
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/rs/cors v1.10.1
@@ -33,7 +33,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/diwise/iot-core v0.0.0-20240402110744-2094bbe16ee1
+	github.com/diwise/iot-core v0.0.0-20240402124906-fe49e123586e
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
