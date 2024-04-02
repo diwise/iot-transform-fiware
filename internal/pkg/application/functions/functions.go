@@ -156,10 +156,6 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 
 	log.Debug(string(msg.Body()))
 
-	//status - ok, lidOpen = "tilt"
-	//dateLastEmptying - senaste tömningen
-	//binCapacity - volym
-
 	properties = append(properties, FillingLevel(wc.Percent, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved))
 	
 	if wc.WasteContainer != nil {
