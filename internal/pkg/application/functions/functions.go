@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
@@ -14,6 +15,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type waterquality struct {
@@ -120,4 +122,45 @@ func WaterQualityObserved(ctx context.Context, fn Func, cbClient client.ContextB
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WaterQualityObservedTypeName, properties)
+}
+
+func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
+	properties := make([]entities.EntityDecoratorFunc, 0)
+
+	log := logging.GetFromContext(ctx)
+
+	wc := struct {
+		ID             string    `json:"id"`
+		Level          float64   `json:"level"`
+		Percent        float64   `json:"percent"`
+		Temperature    float64   `json:"temperature"`
+		DateObserved   time.Time `json:"dateObserved"`
+		Tenant         string    `json:"tenant"`
+		WasteContainer *struct {
+			Location struct {
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+			} `json:"location"`
+		} `json:"wastecontainer,omitempty"`
+	}{}
+
+	err := json.Unmarshal(msg.Body(), &wc)
+	if err != nil {
+		return err
+	}
+
+	id := fmt.Sprintf("%s:%s", "urn:ngsi-ld:WasteContainer", wc.ID)
+
+	log = log.With(slog.String("entity_id", id))
+	ctx = logging.NewContextWithLogger(ctx, log)
+
+	log.Debug(string(msg.Body()))
+
+	properties = append(properties, FillingLevel(wc.Percent, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved))
+	
+	if wc.WasteContainer != nil {
+		properties = append(properties, decorators.Location(wc.WasteContainer.Location.Latitude, wc.WasteContainer.Location.Longitude))
+	}
+
+	return cip.MergeOrCreate(ctx, cbClient, id, "WasteContainer", properties)
 }
