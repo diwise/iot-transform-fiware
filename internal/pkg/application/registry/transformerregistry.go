@@ -24,7 +24,7 @@ const (
 
 const (
 	WaterQualityFunction string = "waterquality"
-	LevelFunction string = "level"
+	LevelFunction        string = "level"
 )
 
 type MeasurementTransformerFunc func(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error

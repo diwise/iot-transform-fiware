@@ -122,7 +122,7 @@ func NewWasteContainerHandler(messenger messaging.MsgContext, getClientForTenant
 		tenant := struct {
 			Tenant string `json:"tenant"`
 		}{}
-		
+
 		err := json.Unmarshal(msg.Body(), &tenant)
 		if err != nil {
 			logger.Error("failed to retrieve tenant from message body")

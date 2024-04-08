@@ -131,9 +131,9 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 
 	wc := struct {
 		ID             string    `json:"id"`
-		Level          float64   `json:"level"`
-		Percent        float64   `json:"percent"`
-		Temperature    float64   `json:"temperature"`
+		Level          *float64  `json:"level,omitempty"`
+		Percent        *float64  `json:"percent,omitempty"`
+		Temperature    *float64  `json:"temperature,omitempty"`
 		DateObserved   time.Time `json:"dateObserved"`
 		Tenant         string    `json:"tenant"`
 		WasteContainer *struct {
@@ -154,10 +154,14 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 	log = log.With(slog.String("entity_id", id))
 	ctx = logging.NewContextWithLogger(ctx, log)
 
-	log.Debug(string(msg.Body()))
+	if wc.Percent != nil {
+		properties = append(properties, FillingLevel(*wc.Percent, wc.DateObserved))
+	}
 
-	properties = append(properties, FillingLevel(wc.Percent, wc.DateObserved), Temperature(wc.Temperature, wc.DateObserved))
-	
+	if wc.Temperature != nil {
+		properties = append(properties, Temperature(*wc.Temperature, wc.DateObserved))
+	}
+
 	if wc.WasteContainer != nil {
 		properties = append(properties, decorators.Location(wc.WasteContainer.Location.Latitude, wc.WasteContainer.Location.Longitude))
 	}
