@@ -12,7 +12,7 @@ func Temperature(temp float64, observedAt time.Time) entities.EntityDecoratorFun
 	return decorators.Number("temperature", temp, properties.ObservedAt(formatTime(observedAt)))
 }
 
-func Humidity(humidity float64, observedAt time.Time) entities.EntityDecoratorFunc {	
+func Humidity(humidity float64, observedAt time.Time) entities.EntityDecoratorFunc {
 	return decorators.Number("humidity", humidity, properties.ObservedAt(formatTime(observedAt)))
 }
 

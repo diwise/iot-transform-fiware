@@ -16,3 +16,5 @@
 
 .vscode
 tempo-data
+
+*.test.*
