@@ -82,6 +82,27 @@ func TestSewagePumpingStationBody(t *testing.T) {
 	is.Equal(len(cbClientMock.MergeEntityCalls()), 1)
 }
 
+func TestSewerBody(t *testing.T) {
+	timestamp, _ := time.Parse(time.RFC3339, "2023-12-19T14:02:41.147069Z")
+	sewer := sewer{
+		ID:        "sewID",
+		Timestamp: timestamp,
+		Distance:  33,
+		Tenant:    "default",
+	}
+
+	is, incMsg, cbClientMock := testSetup(t, sewer)
+	is.True(strings.Contains(string(incMsg.Body()), "sewID"))
+
+	expectation := `{"id":"sewID","distance":33,"timestamp":"2023-12-19T14:02:41.147069Z","tenant":"default"}`
+	is.Equal(string(incMsg.Body()), expectation)
+
+	err := Sewer(context.Background(), incMsg, cbClientMock)
+	is.NoErr(err)
+
+	is.Equal(len(cbClientMock.MergeEntityCalls()), 1)
+}
+
 func testSetup(t *testing.T, object any) (*is.I, *messaging.IncomingTopicMessageMock, *client.ContextBrokerClientMock) {
 	is := is.New(t)
 

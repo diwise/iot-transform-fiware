@@ -46,6 +46,14 @@ type sewagepumpingstation struct {
 	Tenant    string    `json:"tenant"`
 }
 
+type sewer struct {
+	ID        string    `json:"id"`
+	Distance  float64   `json:"distance"`
+	Timestamp time.Time `json:"timestamp"`
+	Location  *location `json:"location,omitempty"`
+	Tenant    string    `json:"tenant"`
+}
+
 type location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
@@ -167,4 +175,38 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, "WasteContainer", properties)
+}
+
+func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
+	sewer := sewer{}
+
+	err := json.Unmarshal(incMsg.Body(), &sewer)
+	if err != nil {
+		return err
+	}
+
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+
+	timestamp := ""
+
+	if sewer.Timestamp.IsZero() {
+		timestamp = time.Now().UTC().Format(time.RFC3339)
+		properties = append(properties, decorators.DateObserved(timestamp))
+	} else {
+		timestamp = sewer.Timestamp.Format(time.RFC3339)
+		properties = append(properties, decorators.DateObserved(timestamp))
+	}
+
+	properties = append(properties,
+		decorators.Number("distance", sewer.Distance),
+	)
+
+	if sewer.Location != nil {
+		properties = append(properties, decorators.Location(sewer.Location.Latitude, sewer.Location.Longitude))
+	}
+
+	typeName := "Sewer"
+	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, sewer.ID)
+
+	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
