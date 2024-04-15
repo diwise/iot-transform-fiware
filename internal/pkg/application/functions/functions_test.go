@@ -87,7 +87,7 @@ func TestSewerBody(t *testing.T) {
 	sewer := sewer{
 		ID:        "sewID",
 		Timestamp: timestamp,
-		Distance:  105,
+		Distance:  33,
 		Tenant:    "default",
 	}
 
