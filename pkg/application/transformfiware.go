@@ -9,6 +9,12 @@ import (
 	infra "github.com/diwise/service-chassis/pkg/infrastructure/router"
 )
 
+const (
+	FunctionUpdatedTopic    string = "function.updated"
+	CipFunctionUpdatedTopic string = "cip-function.updated"
+	MessageAcceptedTopic    string = "message.accepted"
+)
+
 type Application interface {
 	Start()
 }
@@ -17,11 +23,12 @@ func New(ctx context.Context, r infra.Router, messenger messaging.MsgContext, cl
 
 	tfw := &impl{}
 
-	messenger.RegisterTopicMessageHandler("message.accepted", app.NewMeasurementTopicMessageHandler(messenger, clientFactory))
-	messenger.RegisterTopicMessageHandler("function.updated", app.NewFunctionUpdatedTopicMessageHandler(messenger, clientFactory))
-	messenger.RegisterTopicMessageHandlerWithFilter("cip-function.updated", app.NewSewagePumpingStationHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.sewagepumpingstation+json"))
-	messenger.RegisterTopicMessageHandlerWithFilter("cip-function.updated", app.NewWasteContainerHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.wastecontainer+json"))
-	messenger.RegisterTopicMessageHandlerWithFilter("cip-function.updated", app.NewSewerHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.sewer+json"))
+	messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, app.NewMeasurementTopicMessageHandler(messenger, clientFactory))
+	messenger.RegisterTopicMessageHandler(FunctionUpdatedTopic, app.NewFunctionUpdatedTopicMessageHandler(messenger, clientFactory))
+	messenger.RegisterTopicMessageHandlerWithFilter(CipFunctionUpdatedTopic, app.NewSewagePumpingStationHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.sewagepumpingstation+json"))
+	messenger.RegisterTopicMessageHandlerWithFilter(CipFunctionUpdatedTopic, app.NewWasteContainerHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.wastecontainer+json"))
+	messenger.RegisterTopicMessageHandlerWithFilter(CipFunctionUpdatedTopic, app.NewSewerHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.sewer+json"))
+	messenger.RegisterTopicMessageHandlerWithFilter(CipFunctionUpdatedTopic, app.NewCombinedSewageOverflowHandler(messenger, clientFactory), messaging.MatchContentType("application/vnd.diwise.combinedsewageoverflow+json"))
 
 	return tfw
 }
