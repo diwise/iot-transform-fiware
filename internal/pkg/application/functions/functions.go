@@ -210,3 +210,40 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
+
+func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
+	cso := struct {
+		ID                     string        `json:"id"`
+		Type                   string        `json:"type"`
+		CumulativeTime         time.Duration `json:"cumulativeTime"`
+		DateObserved           time.Time     `json:"dateObserved"`
+		State                  bool          `json:"state"`
+		Tenant                 string        `json:"tenant"`
+		CombinedSewageOverflow *struct {
+			Location struct {
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+			} `json:"location"`
+		} `json:"combinedsewageoverflow,omitempty"`
+	}{}
+
+	properties := make([]entities.EntityDecoratorFunc, 0, 4)
+
+	err := json.Unmarshal(incMsg.Body(), &cso)
+	if err != nil {
+		return err
+	}
+
+	typeName := "CombinedSewageOverflow"
+	entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, cso.ID)
+	observedAt := cso.DateObserved.UTC().Format(time.RFC3339)
+
+	properties = append(properties, decorators.DateObserved(observedAt))
+	properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State), prop.TxtObservedAt(observedAt)))
+
+	if cso.CombinedSewageOverflow != nil {
+		properties = append(properties, decorators.Location(cso.CombinedSewageOverflow.Location.Latitude, cso.CombinedSewageOverflow.Location.Longitude))
+	}
+
+	return cip.MergeOrCreate(ctx, cbClient, entityID, typeName, properties)
+}
