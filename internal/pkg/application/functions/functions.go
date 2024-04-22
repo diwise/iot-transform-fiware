@@ -198,12 +198,8 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	}
 
 	properties = append(properties,
-		decorators.Number("distance", sewer.Distance),
+		decorators.Number("distance", sewer.Distance, prop.ObservedAt(timestamp)),
 	)
-
-	if sewer.Location != nil {
-		properties = append(properties, decorators.Location(sewer.Location.Latitude, sewer.Location.Longitude))
-	}
 
 	typeName := "Sewer"
 	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, sewer.ID)
