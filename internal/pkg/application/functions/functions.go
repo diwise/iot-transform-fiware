@@ -46,14 +46,6 @@ type sewagepumpingstation struct {
 	Tenant    string    `json:"tenant"`
 }
 
-type sewer struct {
-	ID        string    `json:"id"`
-	Distance  float64   `json:"distance"`
-	Timestamp time.Time `json:"timestamp"`
-	Location  *location `json:"location,omitempty"`
-	Tenant    string    `json:"tenant"`
-}
-
 type location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
@@ -178,7 +170,20 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 }
 
 func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
-	sewer := sewer{}
+	sewer := struct {
+		ID        string    `json:"id"`
+		Distance  float64   `json:"distance"`
+		Timestamp time.Time `json:"timestamp"`
+		Location  *location `json:"location,omitempty"`
+		Tenant    string    `json:"tenant"`
+		Sewer     *struct {
+			Description *string `json:"description,omitempty"`
+			Location    struct {
+				Latitude  float64 `json:"latitude"`
+				Longitude float64 `json:"longitude"`
+			} `json:"location"`
+		} `json:"sewer,omitempty"`
+	}{}
 
 	err := json.Unmarshal(incMsg.Body(), &sewer)
 	if err != nil {
@@ -195,6 +200,13 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	} else {
 		timestamp = sewer.Timestamp.Format(time.RFC3339)
 		properties = append(properties, decorators.DateObserved(timestamp))
+	}
+
+	if sewer.Sewer != nil {
+		if sewer.Sewer.Description != nil {
+			properties = append(properties, Description(*sewer.Sewer.Description))
+		}
+		properties = append(properties, decorators.Location(sewer.Sewer.Location.Latitude, sewer.Sewer.Location.Longitude))
 	}
 
 	properties = append(properties,
