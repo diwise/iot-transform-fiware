@@ -84,7 +84,13 @@ func TestSewagePumpingStationBody(t *testing.T) {
 
 func TestSewerBody(t *testing.T) {
 	timestamp, _ := time.Parse(time.RFC3339, "2023-12-19T14:02:41.147069Z")
-	sewer := sewer{
+	sewer := struct {
+		ID        string    `json:"id"`
+		Distance  float64   `json:"distance"`
+		Timestamp time.Time `json:"timestamp"`
+		Location  *location `json:"location,omitempty"`
+		Tenant    string    `json:"tenant"`
+	}{
 		ID:        "sewID",
 		Timestamp: timestamp,
 		Distance:  33,
