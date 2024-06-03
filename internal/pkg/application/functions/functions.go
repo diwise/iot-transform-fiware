@@ -173,15 +173,16 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	sewer := struct {
 		ID        string    `json:"id"`
 		Distance  float64   `json:"distance"`
+		Level     float64   `json:"level"`
 		Timestamp time.Time `json:"timestamp"`
 		Location  *location `json:"location,omitempty"`
 		Tenant    string    `json:"tenant"`
 		Sewer     *struct {
-			Description *string `json:"description,omitempty"`
-			Location    struct {
+			Location struct {
 				Latitude  float64 `json:"latitude"`
 				Longitude float64 `json:"longitude"`
 			} `json:"location"`
+			Properties map[string]any `json:"properties,omitempty"`
 		} `json:"sewer,omitempty"`
 	}{}
 
@@ -190,8 +191,12 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 		return err
 	}
 
-	properties := make([]entities.EntityDecoratorFunc, 0, 5)
+	typeName := "Sewer"
+	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, sewer.ID)
 
+	log := logging.GetFromContext(ctx).With(slog.String("entity_id", id))
+
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 	timestamp := ""
 
 	if sewer.Timestamp.IsZero() {
@@ -203,8 +208,13 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	}
 
 	if sewer.Sewer != nil {
-		if sewer.Sewer.Description != nil {
-			properties = append(properties, Description(*sewer.Sewer.Description))
+		if len(sewer.Sewer.Properties) > 0 {
+			if prop, ok := sewer.Sewer.Properties["description"]; ok {
+				if desc, ok := prop.(string); ok {
+					log.Debug("add sewer information (description)")
+					properties = append(properties, Description(desc))
+				}
+			}
 		}
 		properties = append(properties, decorators.Location(sewer.Sewer.Location.Latitude, sewer.Sewer.Location.Longitude))
 	}
@@ -213,8 +223,11 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 		decorators.Number("distance", sewer.Distance, prop.ObservedAt(timestamp)),
 	)
 
-	typeName := "Sewer"
-	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, sewer.ID)
+	properties = append(properties,
+		decorators.Number("level", sewer.Level, prop.ObservedAt(timestamp)),
+	)
+
+	log.Debug("sewer entity handled", slog.Float64("distance", sewer.Distance), slog.Float64("level", sewer.Level))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }

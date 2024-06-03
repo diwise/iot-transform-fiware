@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
@@ -87,6 +88,30 @@ func NewFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getCl
 	}
 }
 
+func NewCipFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := logging.GetFromContext(ctx)
+		var handler messaging.TopicMessageHandler
+
+		contentType := strings.ToLower(itm.ContentType())
+
+		switch contentType {
+		case "application/vnd.diwise.sewagepumpingstation+json":
+			handler = NewSewagePumpingStationHandler(messenger, getClientForTenant)
+		case "application/vnd.diwise.wastecontainer+json":
+			handler = NewWasteContainerHandler(messenger, getClientForTenant)
+		case "application/vnd.diwise.sewer+json":
+			handler = NewSewerHandler(messenger, getClientForTenant)
+		case "application/vnd.diwise.combinedsewageoverflow+json":
+			handler = NewCombinedSewageOverflowHandler(messenger, getClientForTenant)
+		default:
+			log.Debug(fmt.Sprintf("no handler found for %s", contentType))
+			return
+		}
+
+		handler(ctx, itm, l)
+	}
+}
 func NewSewagePumpingStationHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
 		logger = logger.With(
