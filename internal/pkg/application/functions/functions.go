@@ -172,7 +172,7 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
 	sewer := struct {
 		ID        string    `json:"id"`
-		Distance  float64   `json:"distance"`
+		Percent   *float64  `json:"percent,omitempty"`
 		Level     float64   `json:"level"`
 		Timestamp time.Time `json:"timestamp"`
 		Location  *location `json:"location,omitempty"`
@@ -220,14 +220,14 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	}
 
 	properties = append(properties,
-		decorators.Number("distance", sewer.Distance, prop.ObservedAt(timestamp)),
-	)
-
-	properties = append(properties,
 		decorators.Number("level", sewer.Level, prop.ObservedAt(timestamp)),
 	)
 
-	log.Debug("sewer entity handled", slog.Float64("distance", sewer.Distance), slog.Float64("level", sewer.Level))
+	if sewer.Percent != nil {
+		properties = append(properties,
+			decorators.Number("percent", *sewer.Percent, prop.ObservedAt(timestamp)),
+		)
+	}
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
