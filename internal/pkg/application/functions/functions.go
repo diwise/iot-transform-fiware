@@ -226,6 +226,7 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 		CumulativeTime         time.Duration `json:"cumulativeTime"`
 		DateObserved           time.Time     `json:"dateObserved"`
 		State                  bool          `json:"state"`
+		StateChanged           bool          `json:"stateChanged"`
 		Tenant                 string        `json:"tenant"`
 		CombinedSewageOverflow *struct {
 			Location struct {
@@ -242,12 +243,19 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 		return err
 	}
 
+	log := logging.GetFromContext(ctx)
+	ctx = logging.NewContextWithLogger(ctx, log, slog.String("type", "CombinedSewageOverflow"))
+
 	typeName := "CombinedSewageOverflow"
 	entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, cso.ID)
 	observedAt := cso.DateObserved.UTC().Format(time.RFC3339)
 
 	properties = append(properties, decorators.DateObserved(observedAt))
-	properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State), prop.TxtObservedAt(observedAt)))
+	
+	if cso.StateChanged {
+		log.Debug("state changed for CombinedSewageOverflow")
+		properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State), prop.TxtObservedAt(observedAt)))
+	}
 
 	if cso.CombinedSewageOverflow != nil {
 		properties = append(properties, decorators.Location(cso.CombinedSewageOverflow.Location.Latitude, cso.CombinedSewageOverflow.Location.Longitude))
