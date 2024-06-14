@@ -257,7 +257,6 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 	}
 
 	log := logging.GetFromContext(ctx)
-	ctx = logging.NewContextWithLogger(ctx, log, slog.String("type", "CombinedSewageOverflow"))
 
 	typeName := "CombinedSewageOverflow"
 	entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, cso.ID)
@@ -268,6 +267,9 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 	if cso.StateChanged {
 		log.Debug("state changed for CombinedSewageOverflow")
 		properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State), prop.TxtObservedAt(observedAt)))
+	} else {
+		log.Debug("state has not changed")
+		properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State)))
 	}
 
 	if cso.CombinedSewageOverflow != nil {
