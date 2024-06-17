@@ -172,6 +172,7 @@ func WasteContainer(ctx context.Context, msg messaging.IncomingTopicMessage, cbC
 func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient client.ContextBrokerClient) error {
 	sewer := struct {
 		ID        string    `json:"id"`
+		DeviceID  *string   `json:"deviceID,omitempty"`
 		Percent   *float64  `json:"percent,omitempty"`
 		Level     float64   `json:"level"`
 		Timestamp time.Time `json:"timestamp"`
@@ -197,15 +198,14 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 	log := logging.GetFromContext(ctx).With(slog.String("entity_id", id))
 
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
-	timestamp := ""
+	timestamp := sewer.Timestamp.Format(time.RFC3339)
 
 	if sewer.Timestamp.IsZero() {
+		log.Debug("timestamp was zero, set to Now()")
 		timestamp = time.Now().UTC().Format(time.RFC3339)
-		properties = append(properties, decorators.DateObserved(timestamp))
-	} else {
-		timestamp = sewer.Timestamp.Format(time.RFC3339)
-		properties = append(properties, decorators.DateObserved(timestamp))
 	}
+
+	properties = append(properties, decorators.DateObserved(timestamp))
 
 	if sewer.Sewer != nil {
 		if len(sewer.Sewer.Properties) > 0 {
@@ -219,15 +219,17 @@ func Sewer(ctx context.Context, incMsg messaging.IncomingTopicMessage, cbClient 
 		properties = append(properties, decorators.Location(sewer.Sewer.Location.Latitude, sewer.Sewer.Location.Longitude))
 	}
 
-	properties = append(properties,
-		decorators.Number("level", sewer.Level, prop.ObservedAt(timestamp)),
-	)
-
 	if sewer.Percent != nil {
-		properties = append(properties,
-			decorators.Number("percent", *sewer.Percent, prop.ObservedAt(timestamp)),
-		)
+		properties = append(properties, decorators.Number("percent", *sewer.Percent, prop.ObservedAt(timestamp)))
 	}
+
+	if sewer.DeviceID != nil {
+		deviceID := fmt.Sprintf("urn:ngsi-ld:%s:%s", "Device", *sewer.DeviceID)
+		properties = append(properties, decorators.RefDevice(deviceID))
+		properties = append(properties, decorators.Source(*sewer.DeviceID))
+	}
+
+	properties = append(properties, decorators.Number("level", sewer.Level, prop.ObservedAt(timestamp)))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
@@ -263,7 +265,7 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 	observedAt := cso.DateObserved.UTC().Format(time.RFC3339)
 
 	properties = append(properties, decorators.DateObserved(observedAt))
-	
+
 	if cso.StateChanged {
 		log.Debug("state changed for CombinedSewageOverflow")
 		properties = append(properties, decorators.Status(fmt.Sprintf("%t", cso.State), prop.TxtObservedAt(observedAt)))
