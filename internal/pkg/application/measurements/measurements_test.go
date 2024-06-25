@@ -184,10 +184,10 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	v := 1.009
 	is := is.New(t)
 
-	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05.869475538Z")
+	ct, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z")
 
 	msg := iotcore.NewMessageAccepted(senml.Pack{},
-		base("urn:oma:lwm2m:ext:3424", "watermeter-01", time.Now().UTC()),
+		base("urn:oma:lwm2m:ext:3424", "watermeter-01", time.Unix(0, 0)),
 		iotcore.Lat(62.362829),
 		iotcore.Lon(17.509804),
 		iotcore.Rec("1", "", &v, nil, float64(ct.Unix()), &v))
@@ -221,7 +221,7 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	ct, _ := time.Parse(time.RFC3339Nano, "2006-01-02T15:04:05.869475538Z")
 
 	msg := iotcore.NewMessageAccepted(senml.Pack{},
-		base("urn:oma:lwm2m:ext:3424", "watermeter-01", time.Now().UTC()),
+		base("urn:oma:lwm2m:ext:3424", "watermeter-01", time.Unix(0, 0)),
 		iotcore.Lat(62.362829),
 		iotcore.Lon(17.509804),
 		iotcore.Rec("1", "", &v, nil, float64(ct.Unix()), &v))

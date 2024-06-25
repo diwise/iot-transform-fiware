@@ -299,23 +299,28 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 		return math.Floor((m3 + 0.0005) * 1000)
 	}
 
-	toDateStr := func(t float64) string {
-		return time.Unix(int64(t), 0).UTC().Format(time.RFC3339Nano)
-	}
-
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With(slog.String("entityID", entityID))
 
-	for _, rec := range msg.Pack {
-		if rec.Name == CumulatedWaterVolume {
-			w := decorators.Number("waterConsumption", toLtr(*rec.Sum), p.UnitCode("LTR"), p.ObservedAt(toDateStr(rec.Time)), p.ObservedBy(observedBy))
-			propsForEachReading := append(properties, w)
+	r, ok := msg.Pack.GetRecord(senml.FindByName(CumulatedWaterVolume))
 
-			err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
-			if err != nil {
-				logger.Error("failed to merge or create waterConsumption", "err", err.Error())
-			}
-		}
+	if !ok {
+		return fmt.Errorf("unable to get record for CumulatedWaterVolume")
+	}
+
+	vol, volOk := r.GetValue()
+	ts, timeOk := r.GetTime()
+
+	if !(volOk && timeOk) {
+		return fmt.Errorf("unable to get value (%t) or time (%t)", volOk, timeOk)
+	}
+
+	w := decorators.Number("waterConsumption", toLtr(vol), p.UnitCode("LTR"), p.ObservedAt(ts.Format(time.RFC3339)), p.ObservedBy(observedBy))
+	propsForEachReading := append(properties, w)
+
+	err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
+	if err != nil {
+		logger.Error("failed to merge or create waterConsumption", "err", err.Error())
 	}
 
 	return nil
