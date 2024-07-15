@@ -94,6 +94,7 @@ func NewCipFunctionUpdatedTopicMessageHandler(messenger messaging.MsgContext, ge
 		var handler messaging.TopicMessageHandler
 
 		contentType := strings.ToLower(itm.ContentType())
+		log.Debug(fmt.Sprintf("cip-function.updated handler for contentType %s", contentType))
 
 		switch contentType {
 		case "application/vnd.diwise.sewagepumpingstation+json":
@@ -199,6 +200,11 @@ func NewCombinedSewageOverflowHandler(messenger messaging.MsgContext, getClientF
 		err := json.Unmarshal(msg.Body(), &tenant)
 		if err != nil {
 			logger.Error("failed to retrieve tenant from message body")
+		}
+
+		if tenant.Tenant == "" {
+			logger.Error("no tenant information found on incoming message")
+			return
 		}
 
 		cbClient := getClientForTenant(tenant.Tenant)

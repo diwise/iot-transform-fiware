@@ -3,6 +3,7 @@ package cip
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -20,6 +21,8 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	log := logging.GetFromContext(ctx)
+
+	log.Debug(fmt.Sprintf("try to merge or create entity %s of type %s", id, typeName))
 
 	fragment, err := entities.NewFragment(properties...)
 	if err != nil {

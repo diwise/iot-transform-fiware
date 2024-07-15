@@ -264,6 +264,8 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 	entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, cso.ID)
 	observedAt := cso.DateObserved.UTC().Format(time.RFC3339)
 
+	log.Debug(fmt.Sprintf("handle %s", entityID))
+
 	properties = append(properties, decorators.DateObserved(observedAt))
 
 	if cso.StateChanged {
@@ -275,6 +277,7 @@ func CombinedSewageOverflow(ctx context.Context, incMsg messaging.IncomingTopicM
 	}
 
 	if cso.CombinedSewageOverflow != nil {
+		log.Debug("appned location to CombinedSewageOverflow")
 		properties = append(properties, decorators.Location(cso.CombinedSewageOverflow.Location.Latitude, cso.CombinedSewageOverflow.Location.Longitude))
 	}
 
