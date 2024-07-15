@@ -205,6 +205,8 @@ func NewCombinedSewageOverflowHandler(messenger messaging.MsgContext, getClientF
 		if tenant.Tenant == "" {
 			logger.Error("no tenant information found on incoming message")
 			return
+		} else {
+			logger.Debug(fmt.Sprintf("using tenant %s for %s", tenant.Tenant, msg.ContentType()))
 		}
 
 		cbClient := getClientForTenant(tenant.Tenant)
