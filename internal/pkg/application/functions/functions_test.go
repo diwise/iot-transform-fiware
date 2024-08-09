@@ -109,6 +109,35 @@ func TestSewerBody(t *testing.T) {
 	is.Equal(len(cbClientMock.MergeEntityCalls()), 1)
 }
 
+func TestCombinedSewageOverflow(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	cbClientMock := &client.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, nil
+		},
+	}
+
+	msg := func(body string) *messaging.IncomingTopicMessageMock {
+		return &messaging.IncomingTopicMessageMock{
+			BodyFunc: func() []byte {
+				var a any
+				json.Unmarshal([]byte(body), &a)
+				b, _ := json.Marshal(a)
+				return b
+			},
+			ContentTypeFunc: func() string { return "contentType" },
+			TopicNameFunc:   func() string { return "msg.Name" },
+		}
+	}
+
+	for _, m := range cip_function_updated_cso {
+		err := CombinedSewageOverflow(ctx, msg(m), cbClientMock)
+		is.NoErr(err)
+	}
+}
+
 func testSetup(t *testing.T, object any) (*is.I, *messaging.IncomingTopicMessageMock, *client.ContextBrokerClientMock) {
 	is := is.New(t)
 
@@ -134,4 +163,11 @@ func testSetup(t *testing.T, object any) (*is.I, *messaging.IncomingTopicMessage
 	}
 
 	return is, incMsg, cbClientMock
+}
+
+var cip_function_updated_cso = [4]string{
+	`{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","cumulativeTime":0,"dateObserved":"2024-08-08T11:53:40.904363057Z","overflow":null,"overflowDetected":false,"state":false,"stateChanged":false,"tenant":"tenant","combinedsewageoverflow":{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","location":{"latitude":0,"longitude":0},"tenant":"tenant"}}`,
+	`{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","cumulativeTime":0,"dateObserved":"2024-08-08T11:53:40.907904309Z","overflow":null,"overflowDetected":false,"state":false,"stateChanged":false,"tenant":"tenant","combinedsewageoverflow":{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","location":{"latitude":0,"longitude":0},"tenant":"tenant"}}`,
+	`{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","cumulativeTime":7200000000000,"dateObserved":"2024-08-08T09:21:25Z","overflow":[{"id":"65336531-3935-3061-3931-373663613638","state":true,"startTime":"2024-08-08T09:21:25Z","stopTime":null,"duration":7200000000000}],"overflowDetected":true,"overflowObserved":"2024-08-08T09:21:25Z","state":true,"stateChanged":true,"tenant":"tenant","combinedsewageoverflow":{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","location":{"latitude":0,"longitude":0},"tenant":"tenant"}}`,
+	`{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","cumulativeTime":7200000000000,"dateObserved":"2024-08-08T11:21:25Z","overflow":[{"id":"65336531-3935-3061-3931-373663613638","state":false,"startTime":"2024-08-08T09:21:25Z","stopTime":"2024-08-08T11:21:25Z","duration":7200000000000}],"overflowDetected":true,"overflowObserved":"2024-08-08T11:21:25Z","state":false,"stateChanged":true,"tenant":"tenant","combinedsewageoverflow":{"id":"72fb1b1c-d574-4946-befe-0ad1ba57bcf4","type":"CombinedSewageOverflow","location":{"latitude":0,"longitude":0},"tenant":"tenant"}}`,
 }
