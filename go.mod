@@ -4,7 +4,7 @@ go 1.22.0
 
 require (
 	github.com/diwise/context-broker v0.0.0-20240524085509-7cde1939552a
-	github.com/diwise/messaging-golang v0.0.0-20240506092815-fc973e9e4a4f
+	github.com/diwise/messaging-golang v0.0.0-20241021090331-143508a441a2
 	github.com/diwise/senml v0.0.0-20240402140901-e4008e065e05
 	github.com/diwise/service-chassis v0.0.0-20240426080527-94892f253835
 	github.com/go-chi/chi/v5 v5.0.12
