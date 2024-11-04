@@ -101,12 +101,12 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 }
 
 func GetMeasurementType(m events.MessageAccepted) string {
-	urn, ok := m.Pack.GetStringValue(senml.FindByName("0"))
+	urn, ok := m.Pack().GetStringValue(senml.FindByName("0"))
 	if !ok {
 		return ""
-	}
+	}	
 
-	env, ok := m.Pack.GetStringValue(senml.FindByName("env"))
+	env, ok := m.Pack().GetStringValue(senml.FindByName("env"))
 	if ok {
 		urn = fmt.Sprintf("%s/%s", urn, env)
 	}
@@ -121,7 +121,7 @@ func finder(p events.MessageAccepted, objectURN string, n int) senml.RecordFinde
 
 	//TODO: refactor code not to use this logic. Use messaging with filters instead?
 
-	urn, ok := p.Pack.GetStringValue(senml.FindByName("0"))
+	urn, ok := p.Pack().GetStringValue(senml.FindByName("0"))
 	if !ok {
 		return falseFn
 	}
@@ -137,7 +137,7 @@ func timestamp(msg events.MessageAccepted) time.Time {
 
 	//TODO: get time from the actual record instead
 
-	ts, ok := msg.Pack.GetTime(senml.FindByName("0"))
+	ts, ok := msg.Pack().GetTime(senml.FindByName("0"))
 	if !ok {
 		return time.Now().UTC()
 	}
@@ -159,37 +159,37 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 		NitrogenMonoxide    int = 19
 	)
 
-	temp, tempOk := msg.Pack.GetValue(finder(msg, TemperatureURN, SensorValue))
+	temp, tempOk := msg.Pack().GetValue(finder(msg, TemperatureURN, SensorValue))
 	if tempOk {
 		properties = append(properties, Temperature(temp, timestamp(msg)))
 	}
 
-	co2, co2Ok := msg.Pack.GetValue(finder(msg, AirQualityURN, CarbonDioxide))
+	co2, co2Ok := msg.Pack().GetValue(finder(msg, AirQualityURN, CarbonDioxide))
 	if co2Ok {
 		properties = append(properties, CO2(co2, timestamp(msg)))
 	}
 
-	pm10, pm10Ok := msg.Pack.GetValue(finder(msg, AirQualityURN, ParticulateMatter10))
+	pm10, pm10Ok := msg.Pack().GetValue(finder(msg, AirQualityURN, ParticulateMatter10))
 	if pm10Ok {
 		properties = append(properties, PM10(pm10, timestamp(msg)))
 	}
 
-	pm1, pm1Ok := msg.Pack.GetValue(finder(msg, AirQualityURN, ParticulateMatter1))
+	pm1, pm1Ok := msg.Pack().GetValue(finder(msg, AirQualityURN, ParticulateMatter1))
 	if pm1Ok {
 		properties = append(properties, PM1(pm1, timestamp(msg)))
 	}
 
-	pm25, pm25Ok := msg.Pack.GetValue(finder(msg, AirQualityURN, ParticulateMatter25))
+	pm25, pm25Ok := msg.Pack().GetValue(finder(msg, AirQualityURN, ParticulateMatter25))
 	if pm25Ok {
 		properties = append(properties, PM25(pm25, timestamp(msg)))
 	}
 
-	no2, no2Ok := msg.Pack.GetValue(finder(msg, AirQualityURN, NitrogenDioxide))
+	no2, no2Ok := msg.Pack().GetValue(finder(msg, AirQualityURN, NitrogenDioxide))
 	if no2Ok {
 		properties = append(properties, NO2(no2, timestamp(msg)))
 	}
 
-	no, noOk := msg.Pack.GetValue(finder(msg, AirQualityURN, NitrogenMonoxide))
+	no, noOk := msg.Pack().GetValue(finder(msg, AirQualityURN, NitrogenMonoxide))
 	if noOk {
 		properties = append(properties, NO(no, timestamp(msg)))
 	}
@@ -198,7 +198,7 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
 	}
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
@@ -215,14 +215,14 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 	)
 
 	const DigitalInputState int = 5500
-	v, ok := msg.Pack.GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
+	v, ok := msg.Pack().GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
 	if !ok {
 		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
@@ -240,16 +240,16 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
 
 	const SensorValue int = 5700
-	if pr, ok := msg.Pack.GetValue(finder(msg, PressureURN, SensorValue)); ok {
+	if pr, ok := msg.Pack().GetValue(finder(msg, PressureURN, SensorValue)); ok {
 		kPa := pr / 1000.0
 		properties = append(properties, decorators.Number("soilMoisturePressure", kPa, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
 	}
 
-	if co, ok := msg.Pack.GetValue(finder(msg, ConductivityURN, SensorValue)); ok {
+	if co, ok := msg.Pack().GetValue(finder(msg, ConductivityURN, SensorValue)); ok {
 		properties = append(properties, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
 	}
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
@@ -261,7 +261,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 
 	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
@@ -270,22 +270,22 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 		SensorValue           int = 5700
 	)
 
-	temp, tempOk := msg.Pack.GetValue(finder(msg, TemperatureURN, SensorValue))
+	temp, tempOk := msg.Pack().GetValue(finder(msg, TemperatureURN, SensorValue))
 	if tempOk {
 		properties = append(properties, Temperature(temp, timestamp(msg)))
 	}
 
-	humidity, humidityOk := msg.Pack.GetValue(finder(msg, HumidityURN, SensorValue))
+	humidity, humidityOk := msg.Pack().GetValue(finder(msg, HumidityURN, SensorValue))
 	if humidityOk {
 		properties = append(properties, Humidity(humidity, timestamp(msg)))
 	}
 
-	illuminance, illuminanceOk := msg.Pack.GetValue(finder(msg, IlluminanceURN, SensorValue))
+	illuminance, illuminanceOk := msg.Pack().GetValue(finder(msg, IlluminanceURN, SensorValue))
 	if illuminanceOk {
 		properties = append(properties, Illuminance(illuminance, timestamp(msg)))
 	}
 
-	peopleCount, peopleCountOk := msg.Pack.GetValue(finder(msg, PeopleCountURN, ActualNumberOfPersons))
+	peopleCount, peopleCountOk := msg.Pack().GetValue(finder(msg, PeopleCountURN, ActualNumberOfPersons))
 	if peopleCountOk {
 		properties = append(properties, PeopleCount(peopleCount, timestamp(msg)))
 	}
@@ -305,14 +305,14 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp.Format(time.RFC3339)))
 
 	const DigitalInputState int = 5500
-	v, ok := msg.Pack.GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
+	v, ok := msg.Pack().GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
 	if !ok {
 		return fmt.Errorf("unable to update lifebuoy because presence is missing in pack from %s", msg.DeviceID())
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
@@ -335,26 +335,26 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.DeviceID())
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
 	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := msg.Pack.GetBoolValue(finder(msg, WatermeterURN, LeakDetected)); ok && leak {
+	if leak, ok := msg.Pack().GetBoolValue(finder(msg, WatermeterURN, LeakDetected)); ok && leak {
 		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(1)))
 	} else {
 		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(0)))
 	}
 
 	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := msg.Pack.GetBoolValue(finder(msg, WatermeterURN, BackFlowDetected)); ok && backflow {
+	if backflow, ok := msg.Pack().GetBoolValue(finder(msg, WatermeterURN, BackFlowDetected)); ok && backflow {
 		properties = append(properties, decorators.Number("alarmWaterQuality", float64(1)))
 	} else {
 		properties = append(properties, decorators.Number("alarmWaterQuality", float64(0)))
 	}
 
 	// An alternative name for this item
-	if t, ok := msg.Pack.GetStringValue(finder(msg, WatermeterURN, TypeOfMeter)); ok {
+	if t, ok := msg.Pack().GetStringValue(finder(msg, WatermeterURN, TypeOfMeter)); ok {
 		properties = append(properties, decorators.Text("alternateName", t))
 	}
 
@@ -366,7 +366,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	logger := logging.GetFromContext(ctx)
 	logger = logger.With(slog.String("entityID", entityID))
 
-	r, ok := msg.Pack.GetRecord(senml.FindByName(CumulatedWaterVolume))
+	r, ok := msg.Pack().GetRecord(senml.FindByName(CumulatedWaterVolume))
 
 	if !ok {
 		return fmt.Errorf("unable to get record for CumulatedWaterVolume")
@@ -394,7 +394,7 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	const SensorValue int = 5700
-	temp, ok := msg.Pack.GetValue(finder(msg, TemperatureURN, SensorValue))
+	temp, ok := msg.Pack().GetValue(finder(msg, TemperatureURN, SensorValue))
 	if !ok {
 		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.DeviceID())
 	}
@@ -404,11 +404,11 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 		Temperature(temp, timestamp(msg)),
 	)
 
-	if src, ok := msg.Pack.GetStringValue(senml.FindByName("source")); ok {
+	if src, ok := msg.Pack().GetStringValue(senml.FindByName("source")); ok {
 		properties = append(properties, decorators.Source(src))
 	}
 
-	if lat, lon, ok := msg.Pack.GetLatLon(); ok {
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
 
