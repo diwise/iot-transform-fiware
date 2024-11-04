@@ -86,21 +86,21 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		), onstarting(func(ctx context.Context, svcCfg *AppConfig) (err error) {
 			return nil
 		}),
-		onstarting(func(ctx context.Context, ac *AppConfig) error {
-			cfg.messenger.Start()
+		onstarting(func(ctx context.Context, svcCfg *AppConfig) error {
+			svcCfg.messenger.Start()
 
 			// things
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewBuildingTopicMessageHandler(cfg.messenger, cfg.cbClientFn), building)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewContainerTopicMessageHandler(cfg.messenger, cfg.cbClientFn), container)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewLifebuoyTopicMessageHandler(cfg.messenger, cfg.cbClientFn), lifebuoy)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPassageTopicMessageHandler(cfg.messenger, cfg.cbClientFn), passage)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPointOfInterestTopicMessageHandler(cfg.messenger, cfg.cbClientFn), pointofinterest)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPumpingstationTopicMessageHandler(cfg.messenger, cfg.cbClientFn), pumpingstation)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewRoomTopicMessageHandler(cfg.messenger, cfg.cbClientFn), room)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewSewerTopicMessageHandler(cfg.messenger, cfg.cbClientFn), sewer)
-			cfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewWaterMeterTopicMessageHandler(cfg.messenger, cfg.cbClientFn), watermeter)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewBuildingTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), building)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewContainerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), container)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewLifebuoyTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), lifebuoy)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPassageTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), passage)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPointOfInterestTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pointofinterest)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPumpingstationTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pumpingstation)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewRoomTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), room)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewSewerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), sewer)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewWaterMeterTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), watermeter)
 			// measurements
-			cfg.messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(cfg.messenger, cfg.cbClientFn))
+			svcCfg.messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn))
 
 			return nil
 		}),
