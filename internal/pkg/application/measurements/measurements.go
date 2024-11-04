@@ -2,6 +2,7 @@ package measurements
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"math"
@@ -13,13 +14,17 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
+
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
+	//lint:ignore ST1001 "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators" is a valid import path
 	. "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
+
+	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/senml"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
 	p "github.com/diwise/context-broker/pkg/ngsild/types/properties"
-	iotCore "github.com/diwise/iot-core/pkg/messaging/events"
+	"github.com/diwise/iot-core/pkg/messaging/events"
 )
 
 const (
@@ -34,9 +39,68 @@ const (
 	WatermeterURN   string = "urn:oma:lwm2m:ext:3424"
 )
 
-var statusValue = map[bool]string{true: "on", false: "off"}
+type MeasurementTransformerFunc func(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error
 
-func GetMeasurementType(m iotCore.MessageAccepted) string {
+var (
+	statusValue = map[bool]string{true: "on", false: "off"}
+
+	transformers = map[string]MeasurementTransformerFunc{
+		AirQualityURN:               AirQualityObserved,
+		AirQualityURN + "/indoors":  IndoorEnvironmentObserved,
+		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
+		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
+		PeopleCountURN + "/indoors": IndoorEnvironmentObserved,
+		ConductivityURN + "/soil":   GreenspaceRecord,
+		PressureURN + "/soil":       GreenspaceRecord,
+		PresenceURN:                 Device,
+		PresenceURN + "/lifebuoy":   Lifebuoy,
+		TemperatureURN + "/air":     WeatherObserved,
+		WatermeterURN:               WaterConsumptionObserved,
+	}
+)
+
+func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+
+	getTransformer := func(m string) MeasurementTransformerFunc {
+		if mt, ok := transformers[m]; ok {
+			return mt
+		}
+		return nil
+	}
+
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
+		messageAccepted := events.MessageAccepted{}
+
+		err := json.Unmarshal(msg.Body(), &messageAccepted)
+		if err != nil {
+			logger.Error("unable to unmarshal incoming message", "err", err.Error())
+			return
+		}
+
+		measurementType := GetMeasurementType(messageAccepted)
+
+		logger = logger.With(
+			slog.String("measurement_type", measurementType),
+			slog.String("device_id", messageAccepted.DeviceID()),
+		)
+		ctx = logging.NewContextWithLogger(ctx, logger)
+
+		transformer := getTransformer(measurementType)
+		if transformer == nil {
+			logger.Debug("transformer not found", "device_id", messageAccepted.DeviceID(), "measurement_type", measurementType)
+			return
+		}
+
+		cbClient := getClientForTenant(messageAccepted.Tenant())
+		err = transformer(ctx, messageAccepted, cbClient)
+		if err != nil {
+			logger.Error("transform failed", "err", err.Error())
+			return
+		}
+	}
+}
+
+func GetMeasurementType(m events.MessageAccepted) string {
 	urn, ok := m.Pack.GetStringValue(senml.FindByName("0"))
 	if !ok {
 		return ""
@@ -50,7 +114,7 @@ func GetMeasurementType(m iotCore.MessageAccepted) string {
 	return urn
 }
 
-func finder(p iotCore.MessageAccepted, objectURN string, n int) senml.RecordFinder {
+func finder(p events.MessageAccepted, objectURN string, n int) senml.RecordFinder {
 	falseFn := func(r senml.Record) bool {
 		return false
 	}
@@ -69,7 +133,7 @@ func finder(p iotCore.MessageAccepted, objectURN string, n int) senml.RecordFind
 	return senml.FindByName(strconv.Itoa(n))
 }
 
-func timestamp(msg iotCore.MessageAccepted) time.Time {
+func timestamp(msg events.MessageAccepted) time.Time {
 
 	//TODO: get time from the actual record instead
 
@@ -80,7 +144,7 @@ func timestamp(msg iotCore.MessageAccepted) time.Time {
 	return ts
 }
 
-func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
@@ -143,7 +207,7 @@ func AirQualityObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClie
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
 
-func Device(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties,
@@ -167,7 +231,7 @@ func Device(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.Co
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }
 
-func GreenspaceRecord(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
@@ -192,7 +256,7 @@ func GreenspaceRecord(ctx context.Context, msg iotCore.MessageAccepted, cbClient
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
 }
 
-func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
 	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
@@ -235,7 +299,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg iotCore.MessageAccepted,
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
-func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp.Format(time.RFC3339)))
@@ -258,7 +322,7 @@ func Lifebuoy(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
 
-func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
 	const (
@@ -326,7 +390,7 @@ func WaterConsumptionObserved(ctx context.Context, msg iotCore.MessageAccepted, 
 	return nil
 }
 
-func WeatherObserved(ctx context.Context, msg iotCore.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	const SensorValue int = 5700
