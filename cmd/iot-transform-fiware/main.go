@@ -2,76 +2,137 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
-	"net/http"
+	"log/slog"
 	"os"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/infrastructure/router"
-	transformfiware "github.com/diwise/iot-transform-fiware/pkg/application"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/pkg/application/things"
 
 	"github.com/diwise/messaging-golang/pkg/messaging"
 
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
+	k8shandlers "github.com/diwise/service-chassis/pkg/infrastructure/net/http/handlers"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
-	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	infra "github.com/diwise/service-chassis/pkg/infrastructure/router"
+	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
 
 const serviceName string = "iot-transform-fiware"
 
-func main() {
-	serviceVersion := buildinfo.SourceVersion()
+func defaultFlags() FlagMap {
+	return FlagMap{
+		listenAddress:    "0.0.0.0",
+		servicePort:      "8080",
+		controlPort:      "8000",
+		contextbrokerUrl: "http://context-broker",
+	}
+}
 
-	ctx, _, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
+const (
+	ThingUpdatedTopic    string = "thing.updated"
+	FunctionUpdatedTopic string = "function.updated"
+	MessageAcceptedTopic string = "message.accepted"
+)
+
+func main() {
+	ctx, flags := parseExternalConfig(context.Background(), defaultFlags())
+
+	serviceVersion := buildinfo.SourceVersion()
+	ctx, logger, cleanup := o11y.Init(ctx, serviceName, serviceVersion, "json")
 	defer cleanup()
 
-	contextBrokerUrl := env.GetVariableOrDie(ctx, "NGSI_CB_URL", "URL to ngsi-ld context broker")
-	messenger := createMessagingContextOrDie(ctx)
-	defer messenger.Close()
+	messenger, err := messaging.Initialize(
+		ctx, messaging.LoadConfiguration(ctx, serviceName, logger),
+	)
+	exitIf(err, logger, "failed to init messenger")
 
-	r := createRouterAndRegisterHealthEndpoint()
+	factory := newContextBrokerClientFactory(flags[contextbrokerUrl], serviceName, serviceVersion)
 
-	factory := newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion)
-
-	tfw := transformfiware.New(ctx, r, messenger, factory)
-	tfw.Start()
-
-	servicePort := env.GetVariableOrDefault(ctx, "SERVICE_PORT", "8080")
-	err := http.ListenAndServe(":"+servicePort, r.Router())
-	if err != nil {
-		fatal(ctx, "failed to start request router", err)
-	}
-}
-
-func createMessagingContextOrDie(ctx context.Context) messaging.MsgContext {
-	logger := logging.GetFromContext(ctx)
-	config := messaging.LoadConfiguration(ctx, serviceName, logger)
-	messenger, err := messaging.Initialize(ctx, config)
-	if err != nil {
-		fatal(ctx, "failed to init messaging", err)
+	cfg := &AppConfig{
+		messenger:  messenger,
+		cbClientFn: factory,
 	}
 
-	messenger.Start()
+	runner, _ := initialize(ctx, flags, cfg)
 
-	return messenger
+	err = runner.Run(ctx)
+	exitIf(err, logger, "failed to start service runner")
 }
 
-func createRouterAndRegisterHealthEndpoint() infra.Router {
-	r := router.New(serviceName)
+func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunner.Runner[AppConfig], error) {
 
-	r.Router().Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	var (
+		building        = messaging.MatchContentType("application/vnd.diwise.building+json")
+		container       = messaging.MatchContentType("application/vnd.diwise.container+json")
+		lifebuoy        = messaging.MatchContentType("application/vnd.diwise.lifebuoy+json")
+		passage         = messaging.MatchContentType("application/vnd.diwise.passage+json")
+		pointofinterest = messaging.MatchContentType("application/vnd.diwise.pointofinterest+json")
+		pumpingstation  = messaging.MatchContentType("application/vnd.diwise.pumpingstation+json")
+		room            = messaging.MatchContentType("application/vnd.diwise.room+json")
+		sewer           = messaging.MatchContentType("application/vnd.diwise.sewer+json")
+		watermeter      = messaging.MatchContentType("application/vnd.diwise.watermeter+json")
+	)
 
-	return r
+	probes := map[string]k8shandlers.ServiceProber{
+		"rabbitmq": func(context.Context) (string, error) { return "ok", nil },
+	}
+
+	_, runner := servicerunner.New(ctx, *cfg,
+		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
+			pprof(), liveness(func() error { return nil }), readiness(probes),
+		), onstarting(func(ctx context.Context, svcCfg *AppConfig) (err error) {
+			return nil
+		}),
+		onstarting(func(ctx context.Context, svcCfg *AppConfig) error {
+			svcCfg.messenger.Start()
+
+			// things
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewBuildingTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), building)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewContainerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), container)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewLifebuoyTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), lifebuoy)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPassageTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), passage)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPointOfInterestTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pointofinterest)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPumpingstationTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pumpingstation)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewRoomTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), room)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewSewerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), sewer)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewWaterMeterTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), watermeter)
+			// measurements
+			svcCfg.messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn))
+
+			return nil
+		}),
+		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
+			svcCfg.messenger.Close()
+			return nil
+		}))
+
+	return runner, nil
+}
+
+func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, FlagMap) {
+	// Allow environment variables to override certain defaults
+	envOrDef := env.GetVariableOrDefault
+	flags[servicePort] = envOrDef(ctx, "SERVICE_PORT", flags[servicePort])
+	flags[contextbrokerUrl] = envOrDef(ctx, "NGSI_CB_URL", flags[contextbrokerUrl])
+
+	flag.Parse()
+
+	return ctx, flags
+}
+
+func exitIf(err error, logger *slog.Logger, msg string, args ...any) {
+	if err != nil {
+		logger.With(args...).Error(msg, "err", err.Error())
+		os.Exit(1)
+	}
 }
 
 type ContextBrokerClientFactoryFunc func(string) client.ContextBrokerClient
 
 func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion string) ContextBrokerClientFactoryFunc {
-
 	type request struct {
 		tenant string
 		result chan client.ContextBrokerClient
@@ -103,10 +164,4 @@ func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion
 		requestQueue <- r
 		return <-r.result
 	}
-}
-
-func fatal(ctx context.Context, msg string, err error) {
-	logger := logging.GetFromContext(ctx)
-	logger.Error(msg, "err", err.Error())
-	os.Exit(1)
 }

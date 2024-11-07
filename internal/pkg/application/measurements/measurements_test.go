@@ -18,9 +18,9 @@ import (
 )
 
 func base(objectURN, deviceID string, baseTime time.Time) iotcore.EventDecoratorFunc {
-	return func(m *iotcore.MessageAccepted) {
+	return func(m iotcore.Message) {
 		d := deviceID + "/"
-		m.Pack = append(m.Pack, senml.Record{
+		m.Append(senml.Record{
 			BaseName:    d,
 			BaseTime:    float64(baseTime.Unix()),
 			Name:        "0",

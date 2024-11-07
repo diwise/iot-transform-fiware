@@ -3,8 +3,6 @@ package cip
 import (
 	"context"
 	"errors"
-	"fmt"
-	"sync"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
@@ -12,17 +10,10 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
-var mu sync.Mutex
-
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	mu.Lock()
-	defer mu.Unlock()
-
 	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
 
 	log := logging.GetFromContext(ctx)
-
-	log.Debug(fmt.Sprintf("try to merge or create entity %s of type %s", id, typeName))
 
 	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
@@ -31,12 +22,11 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 
 	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
 	if err == nil {
-		log.Debug("entity merged")
 		return nil
 	}
 
 	if !errors.Is(err, ngsierrors.ErrNotFound) {
-		log.Error("failed to merge entity")
+		log.Error("error merging entity", "err", err.Error())
 		return err
 	}
 
@@ -44,16 +34,15 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 
 	entity, err := entities.New(id, typeName, properties...)
 	if err != nil {
+		log.Error("error creating new entity", "err", err.Error())
 		return err
 	}
 
 	_, err = cbClient.CreateEntity(ctx, entity, headers)
 	if err != nil {
-		log.Error("failed to create entity")
+		log.Error("error creating entity", "err", err.Error())
 		return err
 	}
-
-	log.Debug("entity created")
 
 	return nil
 }
