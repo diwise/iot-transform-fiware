@@ -38,6 +38,7 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 
 		props = append(props, helpers.FillingLevel(c.Percent, c.ObservedAt))
 		props = append(props, decorators.Location(c.Location.Latitude, c.Location.Longitude))
+		props = append(props, decorators.DateObserved(c.ObservedAt.UTC().Format(time.RFC3339)))
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(c.Tenant), c.EntityID(), c.TypeName(), props)
 		if err != nil {
@@ -64,7 +65,7 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 		props = append(props, decorators.Location(lb.Location.Latitude, lb.Location.Longitude))
 
 		typeName := "Lifebuoy"
-		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, lb.NameOrID())
+		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, lb.AlternativeNameOrNameOrID())
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(lb.Tenant), entityID, typeName, props)
 		if err != nil {
@@ -100,7 +101,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			typeName = fiware.WeatherObservedTypeName
 		}
 
-		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.NameOrID())
+		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
 
 		props = append(props,
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
@@ -139,7 +140,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		props = append(props, decorators.Location(p.Location.Latitude, p.Location.Longitude))
 
 		typeName := "SewagePumpingStation"
-		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.NameOrID())
+		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.AlternativeNameOrNameOrID())
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
 		if err != nil {
@@ -160,7 +161,7 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		var entityID string
 		props := make([]entities.EntityDecoratorFunc, 0)
 
-		entityID = fmt.Sprintf("%s%s:%s", fiware.IndoorEnvironmentObservedIDPrefix, r.TypeName(), r.NameOrID())
+		entityID = fmt.Sprintf("%s%s:%s", fiware.IndoorEnvironmentObservedIDPrefix, r.TypeName(), r.AlternativeNameOrNameOrID())
 
 		props = append(props, decorators.Location(r.Location.Latitude, r.Location.Longitude))
 
@@ -249,7 +250,7 @@ func NewWaterMeterTopicMessageHandler(messenger messaging.MsgContext, cbClientFn
 
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
 
-		entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, w.NameOrID())
+		entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, w.AlternativeNameOrNameOrID())
 
 		props = append(props, decorators.Location(w.Location.Latitude, w.Location.Longitude))
 		props = append(props, decorators.DateObserved(w.ObservedAt.UTC().Format(time.RFC3339)))

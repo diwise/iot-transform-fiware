@@ -2,30 +2,41 @@ package things
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 type thing struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	SubType     *string   `json:"subType,omitempty"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	Location    location  `json:"location"`
-	RefDevices  []device  `json:"refDevices,omitempty"`
-	ObservedAt  time.Time `json:"observedAt"`
-	Tenant      string    `json:"tenant"`
+	ID              string    `json:"id"`
+	Type            string    `json:"type"`
+	SubType         *string   `json:"subType,omitempty"`
+	Name            string    `json:"name"`
+	AlternativeName string    `json:"alternativeName,omitempty"`
+	Description     *string   `json:"description"`
+	Location        location  `json:"location"`
+	RefDevices      []device  `json:"refDevices,omitempty"`
+	ObservedAt      time.Time `json:"observedAt"`
+	Tenant          string    `json:"tenant"`
 }
 
 func (t thing) EntityID() string {
-	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.NameOrID())
+	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.AlternativeNameOrNameOrID())
 }
 
-func (t thing) NameOrID() string {
-	if t.Name != "" {
-		return t.Name
+func (t thing) AlternativeNameOrNameOrID() string {
+	n := t.ID
+
+	if t.AlternativeName != "" {
+		n = strings.ReplaceAll(t.AlternativeName, " ", "-")
+		return n
 	}
-	return t.ID
+
+	if t.Name != "" {
+		n = strings.ReplaceAll(t.Name, " ", "-")
+		return n
+	}
+
+	return n
 }
 
 func (t thing) TypeName() string {
