@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -57,6 +58,8 @@ var (
 		TemperatureURN + "/air":     WeatherObserved,
 		WatermeterURN:               WaterConsumptionObserved,
 	}
+
+	ErrNoRelevantProperties = errors.New("no relevant properties were found in message")
 )
 
 func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
@@ -87,13 +90,16 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 
 		transformer := getTransformer(measurementType)
 		if transformer == nil {
-			logger.Debug("transformer not found", "device_id", messageAccepted.DeviceID(), "measurement_type", measurementType)
 			return
 		}
 
 		cbClient := getClientForTenant(messageAccepted.Tenant())
 		err = transformer(ctx, messageAccepted, cbClient)
 		if err != nil {
+			if errors.Is(err, ErrNoRelevantProperties) {
+				return
+			}
+
 			logger.Error("transform failed", "err", err.Error())
 			return
 		}
@@ -104,7 +110,7 @@ func GetMeasurementType(m events.MessageAccepted) string {
 	urn, ok := m.Pack().GetStringValue(senml.FindByName("0"))
 	if !ok {
 		return ""
-	}	
+	}
 
 	env, ok := m.Pack().GetStringValue(senml.FindByName("env"))
 	if ok {
@@ -195,7 +201,7 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 	}
 
 	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
@@ -217,7 +223,7 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 	const DigitalInputState int = 5500
 	v, ok := msg.Pack().GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
 	if !ok {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
@@ -291,7 +297,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.DeviceID()
