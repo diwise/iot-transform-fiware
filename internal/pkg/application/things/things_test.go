@@ -34,7 +34,7 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 
 	handler(ctx, itm, slog.Default())
 
-	is.Equal(e, "urn:ngsi-ld:WasteContainer:Soptunnor.XY")
+	is.Equal(e, "urn:ngsi-ld:WasteContainer:Soptunnor:XY")
 }
 
 const wastecontainerJson = `

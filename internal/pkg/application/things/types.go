@@ -2,7 +2,7 @@ package things
 
 import (
 	"fmt"
-	"strings"
+	"regexp"
 	"time"
 )
 
@@ -19,6 +19,8 @@ type thing struct {
 	Tenant          string    `json:"tenant"`
 }
 
+var nonSafeUriRegExp = regexp.MustCompile(`[^\w\-~:/?#\[\]@!$&'()*+,;=%]+`)
+
 func (t thing) EntityID() string {
 	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.AlternativeNameOrNameOrID())
 }
@@ -26,24 +28,29 @@ func (t thing) EntityID() string {
 func (t thing) AlternativeNameOrNameOrID() string {
 	n := t.ID
 
-	if t.AlternativeName != "" {
-		n = strings.ReplaceAll(t.AlternativeName, " ", "-")
-		return n
+	if t.Name != "" {
+		n = t.Name
 	}
 
-	if t.Name != "" {
-		n = strings.ReplaceAll(t.Name, " ", "-")
-		return n
+	if t.AlternativeName != "" {
+		n = t.AlternativeName
 	}
+
+	n = nonSafeUriRegExp.ReplaceAllString(n, ":")
 
 	return n
 }
 
 func (t thing) TypeName() string {
+	typeName := t.Type
+
 	if t.SubType != nil && *t.SubType != "" {
-		return *t.SubType
+		typeName = *t.SubType
 	}
-	return t.Type
+
+	typeName = nonSafeUriRegExp.ReplaceAllString(typeName, ":")
+
+	return typeName
 }
 
 type location struct {
