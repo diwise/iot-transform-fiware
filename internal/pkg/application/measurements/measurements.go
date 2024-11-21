@@ -50,12 +50,12 @@ var (
 		AirQualityURN + "/indoors":  IndoorEnvironmentObserved,
 		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
 		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
+		TemperatureURN + "/air":     WeatherObserved,
 		PeopleCountURN + "/indoors": IndoorEnvironmentObserved,
 		ConductivityURN + "/soil":   GreenspaceRecord,
 		PressureURN + "/soil":       GreenspaceRecord,
 		PresenceURN:                 Device,
-		PresenceURN + "/lifebuoy":   Lifebuoy,
-		TemperatureURN + "/air":     WeatherObserved,
+		//PresenceURN + "/lifebuoy":   Lifebuoy,
 		WatermeterURN:               WaterConsumptionObserved,
 	}
 
@@ -313,6 +313,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
+/*
 func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
@@ -335,6 +336,7 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
+*/
 
 func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"strings"
 	"time"
 
@@ -104,7 +103,7 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		props = append(props, decorators.DateLastValueReported(desk.ObservedAt.UTC().Format(time.RFC3339)))
 		props = append(props, decorators.Status(statusValue[desk.Presence], TxtObservedAt(desk.ObservedAt.UTC().Format(time.RFC3339))))
 		props = append(props, decorators.Location(desk.Location.Latitude, desk.Location.Longitude))
-		
+
 		entityID := fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
@@ -283,6 +282,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 	}
 }
 
+/*
 func NewWaterMeterTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		m := msg[watermeter]{}
@@ -324,3 +324,4 @@ func NewWaterMeterTopicMessageHandler(messenger messaging.MsgContext, cbClientFn
 		}
 	}
 }
+*/
