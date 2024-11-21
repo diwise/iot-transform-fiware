@@ -74,6 +74,7 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		room            = messaging.MatchContentType("application/vnd.diwise.room+json")
 		sewer           = messaging.MatchContentType("application/vnd.diwise.sewer+json")
 		watermeter      = messaging.MatchContentType("application/vnd.diwise.watermeter+json")
+		desk            = messaging.MatchContentType("application/vnd.diwise.desk+json")
 	)
 
 	probes := map[string]k8shandlers.ServiceProber{
@@ -99,6 +100,7 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewRoomTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), room)
 			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewSewerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), sewer)
 			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewWaterMeterTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), watermeter)
+			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewDeskTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), desk)
 			// measurements
 			svcCfg.messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn))
 

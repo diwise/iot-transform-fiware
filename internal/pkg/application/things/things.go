@@ -87,6 +87,34 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 	}
 }
 
+func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		m := msg[desk]{}
+		err := json.Unmarshal(itm.Body(), &m)
+		if err != nil {
+			l.Error("failed to unmarshal message body", "err", err.Error())
+			return
+		}
+
+		desk := m.Thing
+
+		statusValue := map[bool]string{true: "on", false: "off"}
+		props := make([]entities.EntityDecoratorFunc, 0, 5)
+
+		props = append(props, decorators.DateLastValueReported(desk.ObservedAt.UTC().Format(time.RFC3339)))
+		props = append(props, decorators.Status(statusValue[desk.Presence], TxtObservedAt(desk.ObservedAt.UTC().Format(time.RFC3339))))
+		props = append(props, decorators.Location(desk.Location.Latitude, desk.Location.Longitude))
+		
+		entityID := fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
+
+		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
+		if err != nil {
+			l.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
+			return
+		}
+	}
+}
+
 func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 	}

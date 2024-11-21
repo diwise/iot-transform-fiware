@@ -73,6 +73,11 @@ type lifebuoy struct {
 	Presence bool `json:"presence"`
 }
 
+type desk struct {
+	thing
+	Presence bool `json:"presence"`
+}
+
 type sewer struct {
 	thing
 	CurrentLevel   float64        `json:"currentLevel"`
