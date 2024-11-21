@@ -2,37 +2,55 @@ package things
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
 type thing struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	SubType     *string   `json:"subType,omitempty"`
-	Name        string    `json:"name"`
-	Description *string   `json:"description"`
-	Location    location  `json:"location"`
-	RefDevices  []device  `json:"refDevices,omitempty"`
-	ObservedAt  time.Time `json:"observedAt"`
-	Tenant      string    `json:"tenant"`
+	ID              string    `json:"id"`
+	Type            string    `json:"type"`
+	SubType         *string   `json:"subType,omitempty"`
+	Name            string    `json:"name"`
+	AlternativeName string    `json:"alternativeName,omitempty"`
+	Description     *string   `json:"description"`
+	Location        location  `json:"location"`
+	RefDevices      []device  `json:"refDevices,omitempty"`
+	ObservedAt      time.Time `json:"observedAt"`
+	Tenant          string    `json:"tenant"`
 }
+
+var nonSafeUriRegExp = regexp.MustCompile(`[^\w\-~:/?#\[\]@!$&'()*+,;=%]+`)
 
 func (t thing) EntityID() string {
-	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.NameOrID())
+	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.AlternativeNameOrNameOrID())
 }
 
-func (t thing) NameOrID() string {
+func (t thing) AlternativeNameOrNameOrID() string {
+	n := t.ID
+
 	if t.Name != "" {
-		return t.Name
+		n = t.Name
 	}
-	return t.ID
+
+	if t.AlternativeName != "" {
+		n = t.AlternativeName
+	}
+
+	n = nonSafeUriRegExp.ReplaceAllString(n, ":")
+
+	return n
 }
 
 func (t thing) TypeName() string {
+	typeName := t.Type
+
 	if t.SubType != nil && *t.SubType != "" {
-		return *t.SubType
+		typeName = *t.SubType
 	}
-	return t.Type
+
+	typeName = nonSafeUriRegExp.ReplaceAllString(typeName, ":")
+
+	return typeName
 }
 
 type location struct {
@@ -51,6 +69,11 @@ type container struct {
 }
 
 type lifebuoy struct {
+	thing
+	Presence bool `json:"presence"`
+}
+
+type desk struct {
 	thing
 	Presence bool `json:"presence"`
 }

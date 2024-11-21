@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -49,14 +50,16 @@ var (
 		AirQualityURN + "/indoors":  IndoorEnvironmentObserved,
 		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
 		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
+		TemperatureURN + "/air":     WeatherObserved,
 		PeopleCountURN + "/indoors": IndoorEnvironmentObserved,
 		ConductivityURN + "/soil":   GreenspaceRecord,
 		PressureURN + "/soil":       GreenspaceRecord,
 		PresenceURN:                 Device,
-		PresenceURN + "/lifebuoy":   Lifebuoy,
-		TemperatureURN + "/air":     WeatherObserved,
+		//PresenceURN + "/lifebuoy":   Lifebuoy,
 		WatermeterURN:               WaterConsumptionObserved,
 	}
+
+	ErrNoRelevantProperties = errors.New("no relevant properties were found in message")
 )
 
 func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClientForTenant func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
@@ -77,34 +80,40 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 			return
 		}
 
-		measurementType := GetMeasurementType(messageAccepted)
-
-		logger = logger.With(
-			slog.String("measurement_type", measurementType),
-			slog.String("device_id", messageAccepted.DeviceID()),
-		)
-		ctx = logging.NewContextWithLogger(ctx, logger)
+		measurementType := getMeasurementType(messageAccepted)
 
 		transformer := getTransformer(measurementType)
 		if transformer == nil {
-			logger.Debug("transformer not found", "device_id", messageAccepted.DeviceID(), "measurement_type", measurementType)
 			return
 		}
 
-		cbClient := getClientForTenant(messageAccepted.Tenant())
-		err = transformer(ctx, messageAccepted, cbClient)
+		deviceID := messageAccepted.DeviceID()
+		tenant := messageAccepted.Tenant()
+
+		logger = logger.With(
+			slog.String("measurement_type", measurementType),
+			slog.String("device_id", deviceID),
+			slog.String("tenant", tenant),
+		)
+		ctx = logging.NewContextWithLogger(ctx, logger)
+
+		err = transformer(ctx, messageAccepted, getClientForTenant(tenant))
 		if err != nil {
+			if errors.Is(err, ErrNoRelevantProperties) {
+				return
+			}
+
 			logger.Error("transform failed", "err", err.Error())
 			return
 		}
 	}
 }
 
-func GetMeasurementType(m events.MessageAccepted) string {
+func getMeasurementType(m events.MessageAccepted) string {
 	urn, ok := m.Pack().GetStringValue(senml.FindByName("0"))
 	if !ok {
 		return ""
-	}	
+	}
 
 	env, ok := m.Pack().GetStringValue(senml.FindByName("env"))
 	if ok {
@@ -145,10 +154,6 @@ func timestamp(msg events.MessageAccepted) time.Time {
 }
 
 func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	properties := make([]entities.EntityDecoratorFunc, 0, 5)
-
-	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
-
 	const (
 		SensorValue         int = 5700
 		CarbonDioxide       int = 17
@@ -158,6 +163,8 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 		NitrogenDioxide     int = 15
 		NitrogenMonoxide    int = 19
 	)
+
+	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	temp, tempOk := msg.Pack().GetValue(finder(msg, TemperatureURN, SensorValue))
 	if tempOk {
@@ -195,12 +202,14 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 	}
 
 	if !tempOk && !co2Ok && !pm10Ok && !pm1Ok && !pm25Ok && !no2Ok && !noOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
+
+	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
 
 	id := fiware.AirQualityObservedIDPrefix + msg.DeviceID()
 
@@ -217,7 +226,7 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 	const DigitalInputState int = 5500
 	v, ok := msg.Pack().GetBoolValue(finder(msg, PresenceURN, DigitalInputState))
 	if !ok {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	properties = append(properties, decorators.Status(statusValue[v]))
@@ -232,14 +241,11 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 }
 
 func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	const SensorValue int = 5700
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
-	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
-
-	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.DeviceID())
 	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
 
-	const SensorValue int = 5700
 	if pr, ok := msg.Pack().GetValue(finder(msg, PressureURN, SensorValue)); ok {
 		kPa := pr / 1000.0
 		properties = append(properties, decorators.Number("soilMoisturePressure", kPa, p.UnitCode("KPA"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
@@ -248,6 +254,14 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 	if co, ok := msg.Pack().GetValue(finder(msg, ConductivityURN, SensorValue)); ok {
 		properties = append(properties, decorators.Number("soilMoistureEc", co, p.UnitCode("MHO"), p.ObservedAt(msg.Timestamp.Format(time.RFC3339)), p.ObservedBy(observedBy)))
 	}
+
+	if len(properties) == 0 {
+		return ErrNoRelevantProperties
+	}
+
+	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
+
+	id := fmt.Sprintf("%s%s", fiware.GreenspaceRecordIDPrefix, msg.DeviceID())
 
 	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
@@ -291,7 +305,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 	}
 
 	if !tempOk && !humidityOk && !illuminanceOk && !peopleCountOk {
-		return fmt.Errorf("no relevant properties were found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.DeviceID()
@@ -299,6 +313,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
+/*
 func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
@@ -321,6 +336,7 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 
 	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
+*/
 
 func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
@@ -363,9 +379,6 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 		return math.Floor((m3 + 0.0005) * 1000)
 	}
 
-	logger := logging.GetFromContext(ctx)
-	logger = logger.With(slog.String("entityID", entityID))
-
 	r, ok := msg.Pack().GetRecord(senml.FindByName(CumulatedWaterVolume))
 
 	if !ok {
@@ -382,12 +395,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	w := decorators.Number("waterConsumption", toLtr(vol), p.UnitCode("LTR"), p.ObservedAt(ts.Format(time.RFC3339)), p.ObservedBy(observedBy))
 	propsForEachReading := append(properties, w)
 
-	err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
-	if err != nil {
-		logger.Error("failed to merge or create waterConsumption", "err", err.Error())
-	}
-
-	return nil
+	return cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
 }
 
 func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
