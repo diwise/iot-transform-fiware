@@ -257,8 +257,9 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
 			props = append(props, decorators.DateObserved(observedAt))
 			props = append(props, decorators.Status(fmt.Sprintf("%t", s.Observed), TxtObservedAt(observedAt)))
-			props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
 		}
+
+		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
 
 		if s.Description != nil && *s.Description != "" {
 			props = append(props, decorators.Description(*s.Description))
