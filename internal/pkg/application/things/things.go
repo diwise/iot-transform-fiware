@@ -14,6 +14,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
 	helpers "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -237,14 +238,27 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			return
 		}
 
+		l.Debug("processing message", slog.Any("thing", m))
+
 		s := m.Thing
 
+		entityID := s.EntityID()
+		typeName := s.TypeName()
+
+		log := l.With("entity_id", entityID, "type_name", typeName)
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
+		observedAt := time.Now().UTC().Format(time.RFC3339)
 
-		observedAt := s.ObservedAt.UTC().Format(time.RFC3339)
+		if s.ObservedAt == nil {
+			props = append(props, decorators.DateObserved(observedAt))
+		} else {
+			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
+			props = append(props, decorators.DateObserved(observedAt))
+			props = append(props, decorators.Status(fmt.Sprintf("%t", s.Observed), TxtObservedAt(observedAt)))
+		}
 
-		props = append(props, decorators.DateObserved(observedAt))
-		props = append(props, decorators.Status(fmt.Sprintf("%t", s.Observed), TxtObservedAt(observedAt)))
 		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
 
 		if s.Description != nil && *s.Description != "" {
@@ -266,17 +280,24 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			}
 
 			if len(devices) == 1 {
-				props = append(props, decorators.RefDevice(devices[0]))
-				props = append(props, decorators.Source(devices[0]))
+				urn := fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, devices[0])
+
+				props = append(props, decorators.RefDevice(urn))
+				props = append(props, decorators.Source(urn))
 			} else {
-				props = append(props, helpers.RefDevices(devices))
-				props = append(props, decorators.Source(devices[0]))
+				urn := []string{}
+				for _, d := range devices {
+					urn = append(urn, fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, d))
+				}
+
+				props = append(props, helpers.RefDevices(urn))
+				props = append(props, decorators.Source(urn[0]))
 			}
 		}
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(s.Tenant), s.EntityID(), s.TypeName(), props)
+		err = cip.MergeOrCreate(ctx, cbClientFn(s.Tenant), entityID, typeName, props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", s.TypeName()), "err", err.Error())
+			log.Error("failed to merge or create entity", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
 	}

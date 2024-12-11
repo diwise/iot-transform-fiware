@@ -37,8 +37,53 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 	is.Equal(e, "urn:ngsi-ld:WasteContainer:Soptunnor:XY")
 }
 
-const wastecontainerJson = `
-{
+func TestSewerMessage(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+
+	e := ""
+	cb := &testClient.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			e = entityID
+			return &ngsild.MergeEntityResult{}, nil
+		},
+	}
+	msgCtx := &messaging.MsgContextMock{}
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
+
+	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+		return cb
+	})
+
+	handler(ctx, itm, slog.Default())
+
+	is.Equal(e, "urn:ngsi-ld:CombinedSewerOverflow:05")
+}
+
+/*
+func TestSewerMessageIntegration(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+
+	e := ""
+	cb := client.NewContextBrokerClient("http://localhost:1026", client.Tenant("default"), client.Debug("true"))
+
+	msgCtx := &messaging.MsgContextMock{}
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
+
+	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+		return cb
+	})
+
+	handler(ctx, itm, slog.Default())
+
+	is.Equal(e, "urn:ngsi-ld:CombinedSewerOverflow:05")
+}
+*/
+
+const wastecontainerJson = `{
 	"id": "2bf440f4",
 	"type": "Container",
 	"thing": {
@@ -72,5 +117,37 @@ const wastecontainerJson = `
 	},
 	"tenant": "default",
 	"timestamp": "2024-11-19T10:49:59.748823813Z"
+}`
+
+const sewerJson = `
+{
+  "id": "25ba0559-3d49-4853-a537-3bbf7d2ae777",
+  "type": "Sewer",
+  "thing": {
+    "id": "25ba0559-3d49-4853-a537-3bbf7d2ae777",
+    "type": "Sewer",
+    "subType": "CombinedSewerOverflow",
+    "name": "05",
+    "description": null,
+    "location": {
+      "latitude": 62.395275,
+      "longitude": 17.462769
+    },
+    "refDevices": [
+      {
+        "deviceID": "eef259d2-0cf9-5fa3-82e6-e8f95159e931"
+      }
+    ],
+    "observedAt": "2024-11-27T06:12:58Z",
+    "tenant": "default",
+    "currentLevel": 0,
+    "percent": 0,
+    "overflowObserved": false,
+    "overflowObservedAt": null,
+    "overflowDuration": null,
+    "overflowCumulativeTime": 0
+  },
+  "tenant": "default",
+  "timestamp": "2024-12-09T09:48:39.31863409Z"
 }
 `
