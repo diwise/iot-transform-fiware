@@ -19,7 +19,7 @@ type thing struct {
 	Tenant          string    `json:"tenant"`
 }
 
-var nonSafeUriRegExp = regexp.MustCompile(`[^\w\-~:/?#\[\]@!$&'()*+,;=%]+`)
+var nonSafeUriRegExp = regexp.MustCompile(`[^\w\-~:/?#\[\]@!$&'()*+,;=%.]+`)
 
 func (t thing) EntityID() string {
 	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.AlternativeNameOrNameOrID())
