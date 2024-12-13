@@ -209,8 +209,6 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 
 		entityID = fmt.Sprintf("%s%s:%s", fiware.IndoorEnvironmentObservedIDPrefix, r.TypeName(), r.AlternativeNameOrNameOrID())
 
-		props = append(props, decorators.Location(r.Location.Latitude, r.Location.Longitude))
-
 		ts := r.ObservedAt
 
 		if ts.IsZero() {
@@ -218,8 +216,18 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			ts = time.Now()
 		}
 
+		props = append(props, decorators.Location(r.Location.Latitude, r.Location.Longitude))
 		props = append(props, decorators.DateObserved(helpers.FormatTime(ts)))
 		props = append(props, helpers.Temperature(r.Temperature, ts))
+		props = append(props, helpers.Humidity(r.Humidity, ts))
+		props = append(props, helpers.Illuminance(r.Illuminance, ts))
+		props = append(props, helpers.CO2(r.CO2, ts))
+		if len(r.Name) > 0 {
+			props = append(props, helpers.Name(r.Name))
+		}
+		if len(r.AlternativeName) > 0 {
+			props = append(props, helpers.AlternativeName(r.AlternativeName))
+		}
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(r.Tenant), entityID, fiware.IndoorEnvironmentObservedTypeName, props)
 		if err != nil {
