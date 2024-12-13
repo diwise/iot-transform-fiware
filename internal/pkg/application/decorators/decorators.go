@@ -53,6 +53,14 @@ func FillingLevel(v float64, observedAt time.Time) entities.EntityDecoratorFunc 
 	return decorators.Number("fillingLevel", v, properties.ObservedAt(FormatTime(observedAt)))
 }
 
+func Name(s string) entities.EntityDecoratorFunc {
+	return decorators.Text("name", s)
+}
+
+func AlternativeName(s string) entities.EntityDecoratorFunc {
+	return decorators.Text("alternativeName", s)
+}
+
 func Description(s string) entities.EntityDecoratorFunc {
 	return decorators.Text("description", s)
 }

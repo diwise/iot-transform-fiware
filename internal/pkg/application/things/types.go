@@ -96,6 +96,10 @@ type pointOfInterest struct {
 type room struct {
 	thing
 	Temperature float64 `json:"temperature"`
+	Humidity    float64 `json:"humidity"`
+	Illuminance float64 `json:"illuminance"`
+	CO2         float64 `json:"co2"`
+	Presence    bool    `json:"presence"`
 }
 
 type pumpingStation struct {
@@ -104,13 +108,4 @@ type pumpingStation struct {
 	ObservedAt     *time.Time     `json:"pumpingObservedAt"`
 	Duration       *time.Duration `json:"pumpingDuration"`
 	CumulativeTime time.Duration  `json:"pumpingCumulativeTime"`
-}
-
-type watermeter struct {
-	thing
-	CumulativeVolume float64 `json:"cumulativeVolume"`
-	Leakage          bool    `json:"leakage"`
-	Burst            bool    `json:"burst"`
-	Backflow         bool    `json:"backflow"`
-	Fraud            bool    `json:"fraud"`
 }
