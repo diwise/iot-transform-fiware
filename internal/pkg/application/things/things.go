@@ -105,7 +105,7 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		props = append(props, decorators.Status(statusValue[desk.Presence], TxtObservedAt(desk.ObservedAt.UTC().Format(time.RFC3339))))
 		props = append(props, decorators.Location(desk.Location.Latitude, desk.Location.Longitude))
 
-		entityID := fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
+		entityID := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
 		if err != nil {
@@ -288,14 +288,14 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			}
 
 			if len(devices) == 1 {
-				urn := fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, devices[0])
+				urn := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, devices[0])
 
 				props = append(props, decorators.RefDevice(urn))
 				props = append(props, decorators.Source(urn))
 			} else {
 				urn := []string{}
 				for _, d := range devices {
-					urn = append(urn, fmt.Sprintf("%s:%s", fiware.DeviceIDPrefix, d))
+					urn = append(urn, fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, d))
 				}
 
 				props = append(props, helpers.RefDevices(urn))
