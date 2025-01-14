@@ -170,17 +170,27 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 			l.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
+		
 		props := make([]entities.EntityDecoratorFunc, 0, 5)
 
 		p := m.Thing
 
-		if p.ObservedAt.IsZero() {
-			return
+		observedAt := time.Now().UTC().Format(time.RFC3339)
+		if !p.ObservedAt.IsZero() {
+			observedAt = p.ObservedAt.UTC().Format(time.RFC3339)
 		}
 
-		timestamp := p.ObservedAt.UTC().Format(time.RFC3339)
-		props = append(props, decorators.DateObserved(timestamp))
-		props = append(props, decorators.Status(statusValue[p.Observed], TxtObservedAt(timestamp)))
+		if p.PumpingAt == nil {
+			props = append(props, decorators.DateObserved(observedAt))
+		} else {
+			props = append(props, decorators.DateObserved(observedAt))
+			pumpingAt := p.PumpingAt.UTC().Format(time.RFC3339)
+			props = append(props, decorators.Status(statusValue[p.Pumping], TxtObservedAt(pumpingAt)))
+		}
+
+		//timestamp := p.PumpingAt.UTC().Format(time.RFC3339)
+		//props = append(props, decorators.DateObserved(timestamp))
+		//props = append(props, decorators.Status(statusValue[p.Pumping], TxtObservedAt(timestamp)))
 		props = append(props, decorators.Location(p.Location.Latitude, p.Location.Longitude))
 
 		typeName := "SewagePumpingStation"
@@ -257,14 +267,18 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
-		observedAt := time.Now().UTC().Format(time.RFC3339)
 
-		if s.ObservedAt == nil {
+		observedAt := time.Now().UTC().Format(time.RFC3339)
+		if !s.ObservedAt.IsZero() {
+			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
+		}
+
+		if s.OverflowAt == nil {
 			props = append(props, decorators.DateObserved(observedAt))
 		} else {
-			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
 			props = append(props, decorators.DateObserved(observedAt))
-			props = append(props, decorators.Status(fmt.Sprintf("%t", s.Observed), TxtObservedAt(observedAt)))
+			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
+			props = append(props, decorators.Status(fmt.Sprintf("%t", s.Overflow), TxtObservedAt(overflowAt)))
 		}
 
 		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))

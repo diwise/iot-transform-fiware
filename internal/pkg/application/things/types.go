@@ -82,8 +82,8 @@ type sewer struct {
 	thing
 	CurrentLevel   float64        `json:"currentLevel"`
 	Percent        float64        `json:"percent"`
-	Observed       bool           `json:"overflowObserved"`
-	ObservedAt     *time.Time     `json:"overflowObservedAt"`
+	Overflow       bool           `json:"overflowObserved"`
+	OverflowAt     *time.Time     `json:"overflowObservedAt"`
 	Duration       *time.Duration `json:"overflowDuration"`
 	CumulativeTime time.Duration  `json:"overflowCumulativeTime"`
 }
@@ -104,8 +104,8 @@ type room struct {
 
 type pumpingStation struct {
 	thing
-	Observed       bool           `json:"pumpingObserved"`
-	ObservedAt     *time.Time     `json:"pumpingObservedAt"`
+	Pumping        bool           `json:"pumpingObserved"`
+	PumpingAt      *time.Time     `json:"pumpingObservedAt"`
 	Duration       *time.Duration `json:"pumpingDuration"`
 	CumulativeTime time.Duration  `json:"pumpingCumulativeTime"`
 }
