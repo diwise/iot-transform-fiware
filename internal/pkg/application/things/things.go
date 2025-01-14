@@ -290,16 +290,29 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			if len(devices) == 1 {
 				urn := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, devices[0])
 
+				//TODO: find :: and remove it in the right place...
+				if strings.Contains(urn, "::") {
+					log.Debug("replacing :: with : in URN (1)", slog.String("urn", urn))
+					urn = strings.ReplaceAll(urn, "::", ":")
+				}
+
 				props = append(props, decorators.RefDevice(urn))
 				props = append(props, decorators.Source(urn))
 			} else {
-				urn := []string{}
+				urns := []string{}
 				for _, d := range devices {
-					urn = append(urn, fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, d))
+					urn := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, d)
+
+					if strings.Contains(urn, "::") {
+						log.Debug("replacing :: with : in URN (2)", slog.String("urn", urn))
+						urn = strings.ReplaceAll(urn, "::", ":")
+					}
+
+					urns = append(urns, urn)
 				}
 
-				props = append(props, helpers.RefDevices(urn))
-				props = append(props, decorators.Source(urn[0]))
+				props = append(props, helpers.RefDevices(urns))
+				props = append(props, decorators.Source(urns[0]))
 			}
 		}
 
