@@ -14,7 +14,6 @@ flowchart LR
     end 
 ```
 
-
 ## Dependencies  
  - [iot-device-mgmt](https://github.com/diwise/iot-device-mgmt)
  - [RabbitMQ](https://www.rabbitmq.com/)
