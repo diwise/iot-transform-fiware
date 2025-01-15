@@ -56,7 +56,7 @@ var (
 		PressureURN + "/soil":       GreenspaceRecord,
 		PresenceURN:                 Device,
 		//PresenceURN + "/lifebuoy":   Lifebuoy,
-		WatermeterURN:               WaterConsumptionObserved,
+		WatermeterURN: WaterConsumptionObserved,
 	}
 
 	ErrNoRelevantProperties = errors.New("no relevant properties were found in message")
@@ -79,6 +79,8 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 			logger.Error("unable to unmarshal incoming message", "err", err.Error())
 			return
 		}
+
+		logger.Debug("received message", "message", messageAccepted, "body", string(msg.Body()))
 
 		measurementType := getMeasurementType(messageAccepted)
 
@@ -395,7 +397,12 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	w := decorators.Number("waterConsumption", toLtr(vol), p.UnitCode("LTR"), p.ObservedAt(ts.Format(time.RFC3339)), p.ObservedBy(observedBy))
 	propsForEachReading := append(properties, w)
 
-	return cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
+	err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
+	if err != nil {
+		return fmt.Errorf("unable to merge or create WaterConsumptionObserved: %w", err)
+	}
+
+	return nil
 }
 
 func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {

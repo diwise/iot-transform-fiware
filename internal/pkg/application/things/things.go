@@ -170,7 +170,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 			l.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
-		
+
 		props := make([]entities.EntityDecoratorFunc, 0, 5)
 
 		p := m.Thing
@@ -198,7 +198,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
+			l.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
 			return
 		}
 	}
@@ -332,7 +332,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(s.Tenant), entityID, typeName, props)
 		if err != nil {
-			log.Error("failed to merge or create entity", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
+			log.Error("failed to merge or create Sewer", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
 	}

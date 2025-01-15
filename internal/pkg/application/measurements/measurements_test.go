@@ -166,19 +166,20 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
 }
+
 /*
-func TestThatLifebuoyCanBeCreated(t *testing.T) {
-	p := true
-	is, cbClient := testSetup(t)
-	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
+	func TestThatLifebuoyCanBeCreated(t *testing.T) {
+		p := true
+		is, cbClient := testSetup(t)
+		msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
-	err := Lifebuoy(context.Background(), *msg, cbClient)
-	is.NoErr(err)
-	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+		err := Lifebuoy(context.Background(), *msg, cbClient)
+		is.NoErr(err)
+		is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
-	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
-	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
-}
+		b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
+		is.True(strings.Contains(string(b), statusPropertyWithOnValue))
+	}
 */
 func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	v := 1.009
@@ -246,6 +247,20 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	is.Equal(string(b), expectedCreateBody)
 }
 
+/*
+func TestThatWaterConsumptionIntegration(t *testing.T) {
+	is := is.New(t)
+
+	msg := iotcore.MessageAccepted{}
+	json.Unmarshal([]byte(waterConsumptionJson), &msg)
+
+	cb := c.NewContextBrokerClient("http://localhost:64519", c.Debug("true"), c.Tenant("msva"))
+
+	err := WaterConsumptionObserved(context.Background(), msg, cb)
+	is.NoErr(err)
+}
+*/
+
 func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 	temp := 22.2
 	is, cbClient := testSetup(t)
@@ -264,3 +279,18 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 }
 
 const statusPropertyWithOnValue string = `"status":{"type":"Property","value":"on"}`
+
+/*
+const waterConsumptionJson string = `
+{
+	"pack":[
+		{"bn":"watermeter:00000000/3424/","bt":1736859600,"n":"0","vs":"urn:oma:lwm2m:ext:3424"},
+		{"n":"1","u":"m3","v":11.899000000000001},
+		{"n":"3","vs":"w1h"},
+		{"u":"lat","v":0},
+		{"u":"lon","v":0},
+		{"n":"tenant","vs":"msva"}
+	],
+	"timestamp":"2025-01-15T08:29:52.83583502Z"
+}`
+*/

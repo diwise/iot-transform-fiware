@@ -2,10 +2,9 @@ package cip
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 )
 
@@ -14,7 +13,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 
 	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create entity fragment: %w", err)
 	}
 
 	_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
@@ -22,20 +21,16 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return nil
 	}
 
-	if !errors.Is(err, ngsierrors.ErrNotFound) {
-		return err
-	}
-
 	properties = append(properties, entities.DefaultContext())
 
 	entity, err := entities.New(id, typeName, properties...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create new entity: %w", err)
 	}
 
 	_, err = cbClient.CreateEntity(ctx, entity, headers)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create entity: %w", err)
 	}
 
 	return nil

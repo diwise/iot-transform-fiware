@@ -61,6 +61,50 @@ func TestSewerMessage(t *testing.T) {
 	is.Equal(e, "urn:ngsi-ld:CombinedSewerOverflow:05")
 }
 
+func TestPumpingStationMessage(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+
+	e := ""
+	cb := &testClient.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			e = entityID
+			return &ngsild.MergeEntityResult{}, nil
+		},
+	}
+	msgCtx := &messaging.MsgContextMock{}
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
+
+	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+		return cb
+	})
+
+	handler(ctx, itm, slog.Default())
+
+	is.Equal(e, "urn:ngsi-ld:SewagePumpingStation:pump-001")
+}
+/*
+func TestPumpingStationMessageIntegration(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+
+	e := ""
+	cb := client.NewContextBrokerClient("http://localhost:63471", client.Debug("true"), client.Tenant("default"))
+
+	msgCtx := &messaging.MsgContextMock{}
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
+
+	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+		return cb
+	})
+
+	handler(ctx, itm, slog.Default())
+
+	is.Equal(e, "urn:ngsi-ld:SewagePumpingStation:pump-001")
+}
+*/
 /*
 func TestSewerMessageIntegration(t *testing.T) {
 	is := is.New(t)
@@ -151,3 +195,5 @@ const sewerJson = `
   "timestamp": "2024-12-09T09:48:39.31863409Z"
 }
 `
+
+const pumpingStationJson = `{"id":"pump-001","type":"PumpingStation","thing":{"id":"pump-001","location":{"latitude":0,"longitude":0},"name":"","observedAt":"2025-01-15T07:47:38Z","pumpingCumulativeTime":0,"pumpingDuration":null,"pumpingObserved":false,"pumpingObservedAt":null,"refDevices":[{"deviceID":"ce3acc09ab62"}],"tenant":"default","type":"PumpingStation","validURN":["urn:oma:lwm2m:ext:3200"]},"tenant":"default","timestamp":"2025-01-15T07:47:40.360378603Z"}`
