@@ -84,8 +84,10 @@ type sewer struct {
 	Percent        float64        `json:"percent"`
 	Overflow       bool           `json:"overflowObserved"`
 	OverflowAt     *time.Time     `json:"overflowObservedAt"`
+	OverflowEndAt  *time.Time     `json:"overflowEndedAt"`
 	Duration       *time.Duration `json:"overflowDuration"`
 	CumulativeTime time.Duration  `json:"overflowCumulativeTime"`
+	LastAction     string         `json:"lastAction"`
 }
 
 type pointOfInterest struct {
