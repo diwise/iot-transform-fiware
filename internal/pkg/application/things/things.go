@@ -256,42 +256,72 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			return
 		}
 
-		l.Debug("processing message", slog.Any("thing", m))
+		l.Debug("processing message", slog.Any("sewer", m))
 
 		s := m.Thing
 
 		entityID := s.EntityID()
 		typeName := s.TypeName()
 
-		log := l.With("entity_id", entityID, "type_name", typeName)
+		log := l.With("entity_id", entityID, "type_name", typeName, "action", s.LastAction)
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
+		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
 
-		observedAt := time.Now().UTC().Format(time.RFC3339)
-		if !s.ObservedAt.IsZero() {
+		var observedAt string
+
+		if s.ObservedAt.IsZero() {
+			log.Debug("observedAt is zero, use Now()")
+			observedAt = time.Now().UTC().Format(time.RFC3339)
+		} else {
 			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
 		}
 
-		if s.OverflowAt == nil {
+		const (
+			OverflowStarted string = "overflow started"
+			OverflowStopped string = "overflow stopped"
+			OverflowUpdated string = "overflow updated"
+			OverflowUnknown string = "overflow unknown"
+		)
+
+		if s.LastAction == OverflowUnknown {
 			props = append(props, decorators.DateObserved(observedAt))
-		} else {
-			props = append(props, decorators.DateObserved(observedAt))
-			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
-			props = append(props, decorators.Status(fmt.Sprintf("%t", s.Overflow), TxtObservedAt(overflowAt)))
 		}
 
-		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
+		if s.LastAction == OverflowStarted || s.LastAction == OverflowUpdated {
+			props = append(props, decorators.DateObserved(observedAt))
+			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
+
+			overflow := fmt.Sprintf("%t", s.Overflow)
+			props = append(props, decorators.Status(overflow, TxtObservedAt(overflowAt)))
+
+			log.Debug("overflow started", slog.String("overflow", overflow), slog.String("observedAt", observedAt), slog.String("overflowAt", overflowAt))
+		}
+
+		if s.LastAction == OverflowStopped {
+			endAt := s.OverflowEndAt.UTC().Format(time.RFC3339)
+			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
+			overflow := fmt.Sprintf("%t", s.Overflow)
+
+			props = append(props, decorators.DateObserved(observedAt))
+			props = append(props, decorators.Status(overflow, TxtObservedAt(endAt)))
+
+			log.Debug("overflow ended", slog.String("overflow", overflow), slog.String("observedAt", observedAt), slog.String("overflowAt", overflowAt), slog.String("endAt", endAt))
+		}
 
 		if s.Description != nil && *s.Description != "" {
+			log.Debug("adding description", slog.String("description", *s.Description))
 			props = append(props, decorators.Description(*s.Description))
 		}
 
 		if s.CurrentLevel != 0 {
+			log.Debug("adding current level", slog.Float64("current_level", s.CurrentLevel))
 			props = append(props, decorators.Number("level", s.CurrentLevel, ObservedAt(observedAt)))
 		}
 
 		if s.Percent != 0 {
+			log.Debug("adding percent", slog.Float64("percent", s.Percent))
 			props = append(props, decorators.Number("percent", s.Percent, ObservedAt(observedAt)))
 		}
 
@@ -335,6 +365,8 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			log.Error("failed to merge or create Sewer", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
+
+		l.Debug("done processing message")
 	}
 }
 
