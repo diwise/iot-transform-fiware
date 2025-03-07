@@ -26,27 +26,27 @@ func PeopleCount(peopleCount float64, observedAt time.Time) entities.EntityDecor
 }
 
 func CO2(co2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("co2", co2, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("CO2", co2, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func PM10(pm10 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("pm10", pm10, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("PM10", pm10, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func PM25(pm25 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("pm25", pm25, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("PM25", pm25, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func PM1(pm1 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("pm1", pm1, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("PM1", pm1, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func NO2(no2 float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("no2", no2, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("NO2", no2, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func NO(no float64, observedAt time.Time) entities.EntityDecoratorFunc {
-	return decorators.Number("no", no, properties.ObservedAt(FormatTime(observedAt)))
+	return decorators.Number("NO", no, properties.ObservedAt(FormatTime(observedAt)))
 }
 
 func FillingLevel(v float64, observedAt time.Time) entities.EntityDecoratorFunc {
