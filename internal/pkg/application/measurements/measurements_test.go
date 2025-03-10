@@ -56,7 +56,7 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	is.True(strings.Contains(string(b), `"co2":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"}`))
+	is.True(strings.Contains(string(b), `"CO2":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"}`))
 }
 
 func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
