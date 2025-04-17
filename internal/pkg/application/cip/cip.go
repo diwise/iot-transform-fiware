@@ -17,8 +17,6 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	mu.Lock()
 	defer mu.Unlock()
 
-	headers := map[string][]string{"Content-Type": {"application/ld+json"}}
-
 	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
 		return fmt.Errorf("failed to create entity fragment: %w", err)
@@ -31,7 +29,10 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	if _, ok := known[id]; ok {
 		merge = true
 	} else {
-		_, err = cbClient.RetrieveEntity(ctx, id, headers)
+		_, err = cbClient.RetrieveEntity(ctx, id, map[string][]string{
+			"Accept": {"application/ld+json"},
+			"Link":   {entities.LinkHeader},
+		})
 		if err == nil {
 			merge = true
 			known[id] = true
@@ -41,7 +42,9 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	}
 
 	if merge {
-		_, err = cbClient.MergeEntity(ctx, id, fragment, headers)
+		_, err = cbClient.MergeEntity(ctx, id, fragment, map[string][]string{
+			"Content-Type": {"application/ld+json"},
+		})
 		if err != nil {
 			log.Error("failed to merge entity", "error", err)
 			return err
@@ -58,7 +61,9 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return fmt.Errorf("failed to create new entity: %w", err)
 	}
 
-	_, err = cbClient.CreateEntity(ctx, entity, headers)
+	_, err = cbClient.CreateEntity(ctx, entity, map[string][]string{
+		"Content-Type": {"application/ld+json"},
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create entity: %w", err)
 	}
