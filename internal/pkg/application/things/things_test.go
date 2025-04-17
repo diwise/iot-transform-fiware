@@ -24,6 +24,9 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 			e = entityID
 			return &ngsild.MergeEntityResult{}, nil
 		},
+		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
+			return nil, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(wastecontainerJson) }}
@@ -47,6 +50,9 @@ func TestSewerMessage(t *testing.T) {
 		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
 			e = entityID
 			return &ngsild.MergeEntityResult{}, nil
+		},
+		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
+			return nil, nil
 		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
@@ -72,6 +78,9 @@ func TestPumpingStationMessage(t *testing.T) {
 			e = entityID
 			return &ngsild.MergeEntityResult{}, nil
 		},
+		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
+			return nil, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
@@ -84,6 +93,7 @@ func TestPumpingStationMessage(t *testing.T) {
 
 	is.Equal(e, "urn:ngsi-ld:SewagePumpingStation:pump-001")
 }
+
 /*
 func TestPumpingStationMessageIntegration(t *testing.T) {
 	is := is.New(t)
