@@ -9,18 +9,18 @@ require (
 	github.com/diwise/messaging-golang v0.0.0-20241021090331-143508a441a2
 	github.com/diwise/senml v0.0.0-20240402140901-e4008e065e05
 	github.com/diwise/service-chassis v0.0.0-20250404132715-b25a13b9e56a
+	github.com/google/uuid v1.6.0
 )
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
-	github.com/prometheus/procfs v0.16.0 // indirect
+	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelslog v0.10.0 // indirect
@@ -34,8 +34,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.35.0 // indirect
 	go.opentelemetry.io/otel/sdk/log v0.11.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.35.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250414145226-207652e42e2e // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250505200425-f936aa4a68b2 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250505200425-f936aa4a68b2 // indirect
 )
 
 require (
@@ -47,10 +47,10 @@ require (
 	github.com/matryer/is v1.4.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
-	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/grpc v1.71.1 // indirect
+	go.opentelemetry.io/proto/otlp v1.6.0 // indirect
+	golang.org/x/net v0.40.0 // indirect
+	golang.org/x/sys v0.33.0 // indirect
+	golang.org/x/text v0.25.0 // indirect
+	google.golang.org/grpc v1.72.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )

@@ -15,6 +15,7 @@ import (
 	helpers "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/google/uuid"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -122,10 +123,12 @@ func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn fu
 
 func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType(), "body", string(itm.Body()))
+
 		m := msg[pointOfInterest]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
 
@@ -145,6 +148,10 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
 
+		log = log.With("entity_id", entityID, "type_name", typeName)
+
+		log.Debug("processing PointOfInterest message...")
+
 		props = append(props,
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
@@ -155,9 +162,11 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(poi.Tenant), entityID, typeName, props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
+			log.Error("failed to merge or create entity", "err", err.Error())
 			return
 		}
+
+		log.Debug("done processing PointOfInterest message")
 	}
 }
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
