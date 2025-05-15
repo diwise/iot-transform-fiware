@@ -24,7 +24,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return fmt.Errorf("failed to create entity fragment: %w", err)
 	}
 
-	log := logging.GetFromContext(ctx).With("entity_id", id, "entity_type", typeName)
+	log := logging.GetFromContext(ctx)
 
 	var merge bool
 
@@ -36,6 +36,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 			"Link":   {entities.LinkHeader},
 		})
 		if err != nil {
+			log.Debug("could not retrieve entity", "err", err.Error())
 			merge = false
 			delete(known, id)
 		}
@@ -48,8 +49,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		time.Sleep(100*time.Millisecond) // give the context-broker a break...
 	}
 
-	if merge {
-		log.Debug("merging entity...")
+	if merge {		
 		_, err = cbClient.MergeEntity(ctx, id, fragment, map[string][]string{
 			"Content-Type": {"application/ld+json"},
 		})
@@ -61,9 +61,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		log.Debug("entity merged successfully")
 		return nil
 	}
-
-	log.Debug("entity not found in context-broker, will create a new one...")
-
+	
 	properties = append(properties, entities.DefaultContext())
 
 	entity, err := entities.New(id, typeName, properties...)

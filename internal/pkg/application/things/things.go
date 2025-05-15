@@ -123,7 +123,7 @@ func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn fu
 
 func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType(), "body", string(itm.Body()))
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
 
 		m := msg[pointOfInterest]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -147,11 +147,9 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		}
 
 		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
-
-		log = log.With("entity_id", entityID, "type_name", typeName)
-
-		log.Debug("processing PointOfInterest message...")
-
+		
+		ctx = logging.NewContextWithLogger(ctx, log, slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		
 		props = append(props,
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
@@ -164,9 +162,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		if err != nil {
 			log.Error("failed to merge or create entity", "err", err.Error())
 			return
-		}
-
-		log.Debug("done processing PointOfInterest message")
+		}	
 	}
 }
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
