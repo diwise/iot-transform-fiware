@@ -35,7 +35,7 @@ func NewBuildingTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 
 func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("container received")
 
 		m := msg[container]{}
@@ -62,13 +62,13 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 			return
 		}
 
-		log.Debug("container successfully")
+		log.Debug("container handled successfully")
 	}
 }
 
 func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("lifebuoy received")
 
 		m := msg[lifebuoy]{}
@@ -99,13 +99,13 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 			return
 		}
 
-		log.Debug("lifebuoy successfully")
+		log.Debug("lifebuoy handled successfully")
 	}
 }
 
 func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("desk received")
 
 		m := msg[desk]{}
@@ -135,7 +135,7 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			return
 		}
 
-		log.Debug("desk successfully")
+		log.Debug("desk handled successfully")
 	}
 }
 
@@ -146,7 +146,7 @@ func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn fu
 
 func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("point of interest received")
 
 		m := msg[pointOfInterest]{}
@@ -189,12 +189,12 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			return
 		}
 
-		log.Debug("point of interest successfully")
+		log.Debug("point of interest handled successfully")
 	}
 }
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("pumpingstation received")
 
 		var statusValue = map[bool]string{true: "on", false: "off"}
@@ -240,12 +240,12 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 			return
 		}
 
-		log.Debug("pumpingstation handled successfully")
+		log.Debug("pumpingstation handled handled successfully")
 	}
 }
 func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("room received")
 
 		m := msg[room]{}
@@ -290,13 +290,13 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			return
 		}
 
-		log.Debug("room handled successfully")
+		log.Debug("room handled handled successfully")
 	}
 }
 
 func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("content_type", itm.ContentType())
 		log.Debug("sewer received")
 
 		m := msg[sewer]{}
@@ -410,7 +410,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			return
 		}
 
-		log.Debug("sewer handled successfully")
+		log.Debug("sewer handled handled successfully")
 	}
 }
 

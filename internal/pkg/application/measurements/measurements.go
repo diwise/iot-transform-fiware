@@ -74,11 +74,12 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) {
 		messageAccepted := events.MessageAccepted{}
 
-		log.Debug("measurement received", "topic", msg.TopicName(), "content_type", msg.ContentType())
+		log = log.With(slog.String("content_type", msg.ContentType()))
+		log.Debug("measurement received")
 
 		err := json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
-			log.Error("unable to unmarshal incoming message", "topic", msg.TopicName(), "content_type", msg.ContentType(), "err", err.Error())
+			log.Error("unable to unmarshal incoming message", "err", err.Error())
 			return
 		}
 
@@ -98,6 +99,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 			slog.String("device_id", deviceID),
 			slog.String("tenant", tenant),
 		)
+		
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = transformer(ctx, messageAccepted, getClientForTenant(tenant))
