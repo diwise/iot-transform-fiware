@@ -53,7 +53,7 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 		props = append(props, decorators.Location(c.Location.Latitude, c.Location.Longitude))
 		props = append(props, decorators.DateObserved(c.ObservedAt.UTC().Format(time.RFC3339)))
 
-		log = log.With(slog.String("entity_id", c.EntityID()), slog.String("type_name", c.TypeName()))
+		log = log.With(slog.String("entity_id", c.EntityID()), slog.String("type_name", c.TypeName()), slog.String("tenant", c.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(c.Tenant), c.EntityID(), c.TypeName(), props)
@@ -87,7 +87,7 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 		typeName := "Lifebuoy"
 		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, lb.AlternativeNameOrNameOrID())
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", lb.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(lb.Tenant), entityID, typeName, props)
@@ -120,7 +120,7 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 
 		entityID := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.DeviceTypeName))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.DeviceTypeName), slog.String("tenant", desk.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
@@ -163,7 +163,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", poi.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		props = append(props,
@@ -219,7 +219,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		typeName := "SewagePumpingStation"
 		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.AlternativeNameOrNameOrID())
 
-		log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", p.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
@@ -266,7 +266,7 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			props = append(props, helpers.AlternativeName(r.AlternativeName))
 		}
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName), slog.String("tenant", r.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(r.Tenant), entityID, fiware.IndoorEnvironmentObservedTypeName, props)
@@ -293,7 +293,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 		entityID := s.EntityID()
 		typeName := s.TypeName()
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("action", s.LastAction))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", s.Tenant), slog.String("action", s.LastAction))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
@@ -388,7 +388,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(s.Tenant), entityID, typeName, props)
 		if err != nil {
-			log.Error("failed to merge or create Sewer", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
+			log.Error("failed to merge or create Sewer", "err", err.Error())
 			return
 		}
 	}
