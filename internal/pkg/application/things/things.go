@@ -15,7 +15,6 @@ import (
 	helpers "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	"github.com/google/uuid"
 
 	"github.com/diwise/context-broker/pkg/datamodels/fiware"
 	. "github.com/diwise/context-broker/pkg/ngsild/types/properties"
@@ -36,7 +35,8 @@ func NewBuildingTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 
 func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("container received")
 
 		m := msg[container]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -61,12 +61,15 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 			log.Error("failed to merge or create entity", slog.String("type_name", c.TypeName()), "err", err.Error())
 			return
 		}
+
+		log.Debug("container successfully")
 	}
 }
 
 func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("lifebuoy received")
 
 		m := msg[lifebuoy]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -95,12 +98,15 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 			log.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
+
+		log.Debug("lifebuoy successfully")
 	}
 }
 
 func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("desk received")
 
 		m := msg[desk]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -128,6 +134,8 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			log.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
 			return
 		}
+
+		log.Debug("desk successfully")
 	}
 }
 
@@ -138,7 +146,8 @@ func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn fu
 
 func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("point of interest received")
 
 		m := msg[pointOfInterest]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -179,11 +188,14 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			log.Error("failed to merge or create entity", "err", err.Error())
 			return
 		}
+
+		log.Debug("point of interest successfully")
 	}
 }
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("pumpingstation received")
 
 		var statusValue = map[bool]string{true: "on", false: "off"}
 
@@ -227,11 +239,14 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 			log.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
 			return
 		}
+
+		log.Debug("pumpingstation handled successfully")
 	}
 }
 func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("room received")
 
 		m := msg[room]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -274,12 +289,15 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			log.Error("failed to merge or create entity", "err", err.Error())
 			return
 		}
+
+		log.Debug("room handled successfully")
 	}
 }
 
 func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+		log := l.With("topic", itm.TopicName(), "content_type", itm.ContentType())
+		log.Debug("sewer received")
 
 		m := msg[sewer]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -391,6 +409,8 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			log.Error("failed to merge or create Sewer", "err", err.Error())
 			return
 		}
+
+		log.Debug("sewer handled successfully")
 	}
 }
 

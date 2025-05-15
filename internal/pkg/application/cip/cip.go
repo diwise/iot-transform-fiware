@@ -58,7 +58,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 			return err
 		}
 
-		log.Debug("entity merged successfully")
+		log.Info("entity merged successfully")
 		return nil
 	}
 	
@@ -78,7 +78,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return err
 	}
 
-	log.Debug("entity created successfully")
+	log.Info("entity created successfully")
 
 	known[id] = true
 

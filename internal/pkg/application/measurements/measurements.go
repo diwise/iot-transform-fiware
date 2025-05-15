@@ -74,9 +74,11 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) {
 		messageAccepted := events.MessageAccepted{}
 
+		log.Debug("measurement received", "topic", msg.TopicName(), "content_type", msg.ContentType())
+
 		err := json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
-			log.Error("unable to unmarshal incoming message", "err", err.Error())
+			log.Error("unable to unmarshal incoming message", "topic", msg.TopicName(), "content_type", msg.ContentType(), "err", err.Error())
 			return
 		}
 
@@ -84,6 +86,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 
 		transformer := getTransformer(measurementType)
 		if transformer == nil {
+			log.Debug("no transformer found", "message_type", measurementType)
 			return
 		}
 
@@ -100,12 +103,15 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 		err = transformer(ctx, messageAccepted, getClientForTenant(tenant))
 		if err != nil {
 			if errors.Is(err, ErrNoRelevantProperties) {
+				log.Debug("message did not contain any relevant properties")
 				return
 			}
 
 			log.Error("transform failed", "err", err.Error())
 			return
 		}
+
+		log.Debug("measurement handled successfully")
 	}
 }
 
