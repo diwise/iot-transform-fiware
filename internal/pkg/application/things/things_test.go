@@ -27,6 +27,10 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(wastecontainerJson) }}
@@ -54,6 +58,10 @@ func TestSewerMessage(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
@@ -80,6 +88,10 @@ func TestPumpingStationMessage(t *testing.T) {
 		},
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
+		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
 		},
 	}
 	msgCtx := &messaging.MsgContextMock{}

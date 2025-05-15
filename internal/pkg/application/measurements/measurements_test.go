@@ -89,9 +89,9 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 
 	Device(context.Background(), *msg, cbClient)
 	//is.NoErr(err)
-	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+	is.Equal(len(cbClient.CreateEntityCalls()), 1)
 
-	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
 	is.True(strings.Contains(string(b), statusPropertyWithOnValue))
 }
 
@@ -218,18 +218,21 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 
 	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
 	is.NoErr(err)
 
-	is.Equal(len(cbClient.MergeEntityCalls()), 1) // update entity attributes should have been called once
+	is.Equal(len(cbClient.CreateEntityCalls()), 1) // update entity attributes should have been called once
 
 	expectedEntityID := "urn:ngsi-ld:WaterConsumptionObserved:watermeter-01"
-	is.Equal(cbClient.MergeEntityCalls()[0].EntityID, expectedEntityID) // the entity id should be ...
+	is.Equal(cbClient.CreateEntityCalls()[0].Entity.ID(), expectedEntityID) // the entity id should be ...
 
-	b, _ := json.Marshal(cbClient.MergeEntityCalls()[0].Fragment)
-	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmStopsLeaks":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmStopsLeaks":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
 	is.Equal(string(b), expectedPatchBody)
 }
 
