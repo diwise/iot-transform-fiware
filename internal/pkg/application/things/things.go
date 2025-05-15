@@ -36,10 +36,12 @@ func NewBuildingTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 
 func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		m := msg[container]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
 
@@ -51,9 +53,12 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 		props = append(props, decorators.Location(c.Location.Latitude, c.Location.Longitude))
 		props = append(props, decorators.DateObserved(c.ObservedAt.UTC().Format(time.RFC3339)))
 
+		log = log.With(slog.String("entity_id", c.EntityID()), slog.String("type_name", c.TypeName()))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		err = cip.MergeOrCreate(ctx, cbClientFn(c.Tenant), c.EntityID(), c.TypeName(), props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", c.TypeName()), "err", err.Error())
+			log.Error("failed to merge or create entity", slog.String("type_name", c.TypeName()), "err", err.Error())
 			return
 		}
 	}
@@ -61,6 +66,8 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 
 func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		m := msg[lifebuoy]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
@@ -80,9 +87,12 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 		typeName := "Lifebuoy"
 		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, lb.AlternativeNameOrNameOrID())
 
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		err = cip.MergeOrCreate(ctx, cbClientFn(lb.Tenant), entityID, typeName, props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
+			log.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
 	}
@@ -90,10 +100,12 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 
 func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		m := msg[desk]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
 
@@ -108,9 +120,12 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 
 		entityID := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
 
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.DeviceTypeName))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
+			log.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
 			return
 		}
 	}
@@ -147,9 +162,10 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		}
 
 		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
-		
-		ctx = logging.NewContextWithLogger(ctx, log, slog.String("entity_id", entityID), slog.String("type_name", typeName))
-		
+
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		props = append(props,
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
@@ -162,17 +178,19 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		if err != nil {
 			log.Error("failed to merge or create entity", "err", err.Error())
 			return
-		}	
+		}
 	}
 }
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		var statusValue = map[bool]string{true: "on", false: "off"}
 
 		m := msg[pumpingStation]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
 
@@ -201,19 +219,24 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		typeName := "SewagePumpingStation"
 		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.AlternativeNameOrNameOrID())
 
+		log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
 		if err != nil {
-			l.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
+			log.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
 			return
 		}
 	}
 }
 func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		m := msg[room]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
 
@@ -227,7 +250,6 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		ts := r.ObservedAt
 
 		if ts.IsZero() {
-			l.Debug("observedAt is zero, use Now()", slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName))
 			ts = time.Now()
 		}
 
@@ -244,9 +266,12 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 			props = append(props, helpers.AlternativeName(r.AlternativeName))
 		}
 
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName))
+		ctx = logging.NewContextWithLogger(ctx, log)
+
 		err = cip.MergeOrCreate(ctx, cbClientFn(r.Tenant), entityID, fiware.IndoorEnvironmentObservedTypeName, props)
 		if err != nil {
-			l.Error("failed to merge or create entity", slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName), "err", err.Error())
+			log.Error("failed to merge or create entity", "err", err.Error())
 			return
 		}
 	}
@@ -254,21 +279,21 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 
 func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
+		log := l.With("uuid", uuid.NewString(), "topic", itm.TopicName(), "content_type", itm.ContentType())
+
 		m := msg[sewer]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
-			l.Error("failed to unmarshal message body", "err", err.Error())
+			log.Error("failed to unmarshal message body", "err", err.Error())
 			return
 		}
-
-		l.Debug("processing message", slog.Any("sewer", m))
 
 		s := m.Thing
 
 		entityID := s.EntityID()
 		typeName := s.TypeName()
 
-		log := l.With("entity_id", entityID, "type_name", typeName, "action", s.LastAction)
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("action", s.LastAction))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
@@ -277,7 +302,6 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 		var observedAt string
 
 		if s.ObservedAt.IsZero() {
-			log.Debug("observedAt is zero, use Now()")
 			observedAt = time.Now().UTC().Format(time.RFC3339)
 		} else {
 			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
@@ -316,17 +340,14 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 		}
 
 		if s.Description != nil && *s.Description != "" {
-			log.Debug("adding description", slog.String("description", *s.Description))
 			props = append(props, decorators.Description(*s.Description))
 		}
 
 		if s.CurrentLevel != 0 {
-			log.Debug("adding current level", slog.Float64("current_level", s.CurrentLevel))
 			props = append(props, decorators.Number("level", s.CurrentLevel, ObservedAt(observedAt)))
 		}
 
 		if s.Percent != 0 {
-			log.Debug("adding percent", slog.Float64("percent", s.Percent))
 			props = append(props, decorators.Number("percent", s.Percent, ObservedAt(observedAt)))
 		}
 
@@ -370,8 +391,6 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			log.Error("failed to merge or create Sewer", slog.String("entity_id", entityID), slog.String("type_name", typeName), "err", err.Error())
 			return
 		}
-
-		l.Debug("done processing message")
 	}
 }
 
