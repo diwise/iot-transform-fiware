@@ -178,10 +178,12 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		props = append(props,
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
-			helpers.Temperature(poi.Temperature, poi.ObservedAt.UTC()),
+			helpers.Temperature(*poi.Temperature.Value, poi.Temperature.Timestamp.UTC()),
 		)
 
-		//TODO: add source property
+		if poi.Temperature.Source != nil {
+			props = append(props, decorators.Source(*poi.Temperature.Source))
+		}
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(poi.Tenant), entityID, typeName, props)
 		if err != nil {

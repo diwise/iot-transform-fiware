@@ -92,7 +92,18 @@ type sewer struct {
 
 type pointOfInterest struct {
 	thing
-	Temperature float64 `json:"temperature"`
+	Temperature measurement `json:"temperature"`
+}
+
+type measurement struct {
+	ID          string    `json:"id,omitzero"`
+	Urn         string    `json:"urn,omitzero"`
+	BoolValue   *bool     `json:"vb,omitempty"`
+	StringValue *string   `json:"vs,omitempty"`
+	Value       *float64  `json:"v,omitempty"`
+	Unit        string    `json:"unit,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	Source      *string   `json:"source,omitzero"`
 }
 
 type room struct {
