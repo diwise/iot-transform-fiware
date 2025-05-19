@@ -108,11 +108,11 @@ type measurement struct {
 
 type room struct {
 	thing
-	Temperature float64 `json:"temperature"`
-	Humidity    float64 `json:"humidity"`
-	Illuminance float64 `json:"illuminance"`
-	CO2         float64 `json:"co2"`
-	Presence    bool    `json:"presence"`
+	Temperature measurement `json:"temperature"`
+	Humidity    float64     `json:"humidity"`
+	Illuminance float64     `json:"illuminance"`
+	CO2         float64     `json:"co2"`
+	Presence    bool        `json:"presence"`
 }
 
 type pumpingStation struct {

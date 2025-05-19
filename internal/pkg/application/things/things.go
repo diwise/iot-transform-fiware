@@ -272,7 +272,9 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 
 		props = append(props, decorators.Location(r.Location.Latitude, r.Location.Longitude))
 		props = append(props, decorators.DateObserved(helpers.FormatTime(ts)))
-		props = append(props, helpers.Temperature(r.Temperature, ts))
+		if r.Temperature.Value != nil {
+			props = append(props, helpers.Temperature(*r.Temperature.Value, ts))
+		}
 		props = append(props, helpers.Humidity(r.Humidity, ts))
 		props = append(props, helpers.Illuminance(r.Illuminance, ts))
 		props = append(props, helpers.CO2(r.CO2, ts))
