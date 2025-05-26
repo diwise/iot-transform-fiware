@@ -93,6 +93,7 @@ type sewer struct {
 type pointOfInterest struct {
 	thing
 	Temperature measurement `json:"temperature"`
+	Current     measurement `json:"current"`
 }
 
 type measurement struct {
