@@ -336,6 +336,25 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			OverflowUnknown string = "overflow unknown"
 		)
 
+		if s.Measured != nil {
+			ob := s.Measured.ObservedAt.UTC().Format(time.RFC3339)
+			props = append(props, decorators.Number("level", s.Measured.Level, ObservedAt(ob)))
+			props = append(props, decorators.Number("percent", s.Measured.Percent, ObservedAt(ob)))
+			props = append(props, decorators.DateObserved(observedAt))
+
+			log.Debug("measured level and percent", "sewer", s, "observedAt", observedAt)
+		}
+
+		/*
+			if s.CurrentLevel != 0 {
+				props = append(props, decorators.Number("level", s.CurrentLevel, ObservedAt(observedAt)))
+			}
+
+			if s.Percent != 0 {
+				props = append(props, decorators.Number("percent", s.Percent, ObservedAt(observedAt)))
+			}
+		*/
+
 		if s.LastAction == OverflowUnknown {
 			props = append(props, decorators.DateObserved(observedAt))
 		}
@@ -363,14 +382,6 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 
 		if s.Description != nil && *s.Description != "" {
 			props = append(props, decorators.Description(*s.Description))
-		}
-
-		if s.CurrentLevel != 0 {
-			props = append(props, decorators.Number("level", s.CurrentLevel, ObservedAt(observedAt)))
-		}
-
-		if s.Percent != 0 {
-			props = append(props, decorators.Number("percent", s.Percent, ObservedAt(observedAt)))
 		}
 
 		if len(s.RefDevices) > 0 {
