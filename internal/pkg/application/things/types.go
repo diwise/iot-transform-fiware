@@ -82,6 +82,7 @@ type sewer struct {
 	thing
 	CurrentLevel   float64        `json:"currentLevel"`
 	Percent        float64        `json:"percent"`
+	Measured       *measured      `json:"measured,omitempty"`
 	Overflow       bool           `json:"overflowObserved"`
 	OverflowAt     *time.Time     `json:"overflowObservedAt"`
 	OverflowEndAt  *time.Time     `json:"overflowEndedAt"`
@@ -90,18 +91,36 @@ type sewer struct {
 	LastAction     string         `json:"lastAction"`
 }
 
+type measured struct {
+	Level      float64   `json:"level"`
+	Percent    float64   `json:"percent"`
+	ObservedAt time.Time `json:"observedAt"`
+}
+
 type pointOfInterest struct {
 	thing
-	Temperature float64 `json:"temperature"`
+	Temperature measurement `json:"temperature"`
+	Current     measurement `json:"current"`
+}
+
+type measurement struct {
+	ID          string    `json:"id,omitzero"`
+	Urn         string    `json:"urn,omitzero"`
+	BoolValue   *bool     `json:"vb,omitempty"`
+	StringValue *string   `json:"vs,omitempty"`
+	Value       *float64  `json:"v,omitempty"`
+	Unit        string    `json:"unit,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
+	Source      *string   `json:"source,omitzero"`
 }
 
 type room struct {
 	thing
-	Temperature float64 `json:"temperature"`
-	Humidity    float64 `json:"humidity"`
-	Illuminance float64 `json:"illuminance"`
-	CO2         float64 `json:"co2"`
-	Presence    bool    `json:"presence"`
+	Temperature measurement `json:"temperature"`
+	Humidity    float64     `json:"humidity"`
+	Illuminance float64     `json:"illuminance"`
+	CO2         float64     `json:"co2"`
+	Presence    bool        `json:"presence"`
 }
 
 type pumpingStation struct {

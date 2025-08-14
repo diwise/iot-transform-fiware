@@ -54,6 +54,12 @@ Water Quality data model is intended to represent water quality parameters at a 
 [Specification](https://github.com/smart-data-models/dataModel.WaterConsumption/blob/master/WaterConsumptionObserved/doc/spec.md) 
 
  The Smart Water Meter model captures water consumption, customer side leak alarms and associated flow rate originating from the smart water meters
+
+## Things
+
+### Sewers
+...
+
 # Build and test
 ## Build
 ```bash

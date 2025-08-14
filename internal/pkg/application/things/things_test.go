@@ -27,9 +27,17 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
-	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(wastecontainerJson) }}
+	itm := &messaging.IncomingTopicMessageMock{
+		BodyFunc: func() []byte { return []byte(wastecontainerJson) },
+		ContentTypeFunc: func() string {return "content-type"},
+		TopicNameFunc: func() string {return "topic"},
+	}
 
 	handler := NewContainerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
 		return cb
@@ -54,9 +62,17 @@ func TestSewerMessage(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
-	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
+	itm := &messaging.IncomingTopicMessageMock{
+		BodyFunc: func() []byte { return []byte(sewerJson) },
+		ContentTypeFunc: func() string {return "content-type"},
+		TopicNameFunc: func() string {return "topic"},
+	}
 
 	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
 		return cb
@@ -81,9 +97,17 @@ func TestPumpingStationMessage(t *testing.T) {
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
 			return nil, nil
 		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			e = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
-	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
+		itm := &messaging.IncomingTopicMessageMock{
+		BodyFunc: func() []byte { return []byte(pumpingStationJson) },
+		ContentTypeFunc: func() string {return "content-type"},
+		TopicNameFunc: func() string {return "topic"},
+	}
 
 	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
 		return cb

@@ -71,43 +71,49 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 		return nil
 	}
 
-	return func(ctx context.Context, msg messaging.IncomingTopicMessage, logger *slog.Logger) {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) {
 		messageAccepted := events.MessageAccepted{}
+
+		log = log.With(slog.String("content_type", msg.ContentType()))
+		log.Debug("measurement received")
 
 		err := json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
-			logger.Error("unable to unmarshal incoming message", "err", err.Error())
+			log.Error("unable to unmarshal incoming message", "err", err.Error())
 			return
 		}
-
-		logger.Debug("received message", "message", messageAccepted, "body", string(msg.Body()))
 
 		measurementType := getMeasurementType(messageAccepted)
 
 		transformer := getTransformer(measurementType)
 		if transformer == nil {
+			log.Debug("no transformer found", "message_type", measurementType)
 			return
 		}
 
 		deviceID := messageAccepted.DeviceID()
 		tenant := messageAccepted.Tenant()
 
-		logger = logger.With(
+		log = log.With(
 			slog.String("measurement_type", measurementType),
 			slog.String("device_id", deviceID),
 			slog.String("tenant", tenant),
 		)
-		ctx = logging.NewContextWithLogger(ctx, logger)
+		
+		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = transformer(ctx, messageAccepted, getClientForTenant(tenant))
 		if err != nil {
 			if errors.Is(err, ErrNoRelevantProperties) {
+				log.Debug("message did not contain any relevant properties")
 				return
 			}
 
-			logger.Error("transform failed", "err", err.Error())
+			log.Error("transform failed", "err", err.Error())
 			return
 		}
+
+		log.Debug("measurement handled successfully")
 	}
 }
 
@@ -215,6 +221,8 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 
 	id := fiware.AirQualityObservedIDPrefix + msg.DeviceID()
 
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
+
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
 
@@ -238,6 +246,8 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 	}
 
 	id := fiware.DeviceIDPrefix + msg.DeviceID()
+
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }
@@ -268,6 +278,8 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
 		properties = append(properties, decorators.Location(lat, lon))
 	}
+
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
 }
@@ -311,6 +323,8 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 	}
 
 	id := fiware.IndoorEnvironmentObservedIDPrefix + msg.DeviceID()
+
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
@@ -397,6 +411,8 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	w := decorators.Number("waterConsumption", toLtr(vol), p.UnitCode("LTR"), p.ObservedAt(ts.Format(time.RFC3339)), p.ObservedBy(observedBy))
 	propsForEachReading := append(properties, w)
 
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", entityID))
+
 	err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
 	if err != nil {
 		return fmt.Errorf("unable to merge or create WaterConsumptionObserved: %w", err)
@@ -428,6 +444,8 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 	}
 
 	id := fiware.WeatherObservedIDPrefix + msg.DeviceID()
+
+	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
 }
