@@ -13,6 +13,11 @@ const (
 	servicePort
 	controlPort
 	contextbrokerUrl
+
+	oauth2ClientId
+	oauth2ClientSecret
+	oauth2TokenUrl
+	oauth2InsecureURL
 )
 
 type AppConfig struct {

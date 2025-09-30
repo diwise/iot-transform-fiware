@@ -99,7 +99,7 @@ func NewMeasurementTopicMessageHandler(messenger messaging.MsgContext, getClient
 			slog.String("device_id", deviceID),
 			slog.String("tenant", tenant),
 		)
-		
+
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = transformer(ctx, messageAccepted, getClientForTenant(tenant))

@@ -3,7 +3,8 @@ A service for handling core functionality in the IoT platform
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://github.com/diwise/iot-agent/blob/main/LICENSE)
 
-# Design
+# Design 
+
 
 ```mermaid
 flowchart LR
