@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/pkg/application/things"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/diwise/messaging-golang/pkg/messaging"
 
@@ -17,6 +22,7 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	k8shandlers "github.com/diwise/service-chassis/pkg/infrastructure/net/http/handlers"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
 
@@ -28,6 +34,11 @@ func defaultFlags() FlagMap {
 		servicePort:      "8080",
 		controlPort:      "8000",
 		contextbrokerUrl: "http://context-broker",
+
+		oauth2ClientId:     "",
+		oauth2ClientSecret: "",
+		oauth2TokenUrl:     "",
+		oauthInsecureURL:   "true",
 	}
 }
 
@@ -49,7 +60,7 @@ func main() {
 	)
 	exitIf(err, logger, "failed to init messenger")
 
-	factory := newContextBrokerClientFactory(flags[contextbrokerUrl], serviceName, serviceVersion)
+	factory := newContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], flags[oauthInsecureURL] == "true")
 
 	cfg := &AppConfig{
 		messenger:  messenger,
@@ -117,8 +128,13 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, FlagMap) {
 	// Allow environment variables to override certain defaults
 	envOrDef := env.GetVariableOrDefault
+
 	flags[servicePort] = envOrDef(ctx, "SERVICE_PORT", flags[servicePort])
 	flags[contextbrokerUrl] = envOrDef(ctx, "NGSI_CB_URL", flags[contextbrokerUrl])
+	flags[oauth2TokenUrl] = envOrDef(ctx, "OAUTH2_TOKEN_URL", flags[oauth2TokenUrl])
+	flags[oauth2ClientId] = envOrDef(ctx, "OAUTH2_CLIENT_ID", flags[oauth2ClientId])
+	flags[oauth2ClientSecret] = envOrDef(ctx, "OAUTH2_CLIENT_SECRET", flags[oauth2ClientSecret])
+	flags[oauthInsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauthInsecureURL])
 
 	flag.Parse()
 
@@ -134,7 +150,9 @@ func exitIf(err error, logger *slog.Logger, msg string, args ...any) {
 
 type ContextBrokerClientFactoryFunc func(string) client.ContextBrokerClient
 
-func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion string) ContextBrokerClientFactoryFunc {
+func newContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, serviceName, serviceVersion, oauth2ClientId, oauth2ClientSecret, oauth2TokenUrl string, oauthInsecureURL bool) ContextBrokerClientFactoryFunc {
+	log := logging.GetFromContext(ctx)
+
 	type request struct {
 		tenant string
 		result chan client.ContextBrokerClient
@@ -142,19 +160,59 @@ func newContextBrokerClientFactory(contextBrokerUrl, serviceName, serviceVersion
 
 	requestQueue := make(chan request)
 
+	var tokenSource oauth2.TokenSource
+
+	if oauth2ClientId != "" && oauth2ClientSecret != "" && oauth2TokenUrl != "" {
+		oauthConfig := &clientcredentials.Config{
+			ClientID:     oauth2ClientId,
+			ClientSecret: oauth2ClientSecret,
+			TokenURL:     oauth2TokenUrl,
+		}
+
+		httpTransport := http.DefaultTransport
+		if oauthInsecureURL {
+			trans, ok := httpTransport.(*http.Transport)
+			if ok {
+				if trans.TLSClientConfig == nil {
+					trans.TLSClientConfig = &tls.Config{}
+				}
+				trans.TLSClientConfig.InsecureSkipVerify = true
+			}
+		}
+
+		httpClient := &http.Client{
+			Transport: otelhttp.NewTransport(httpTransport),
+		}
+
+		ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+
+		tokenSource = oauthConfig.TokenSource(ctx)
+	}
+
 	go func() {
-		clients := map[string]client.ContextBrokerClient{}
-
 		for r := range requestQueue {
-			c, ok := clients[r.tenant]
+			var c client.ContextBrokerClient
 
-			if !ok {
+			if tokenSource != nil {
+				token, err := tokenSource.Token()
+				if err != nil {
+					log.Error("failed to retrieve oauth2 token", "err", err.Error())
+					r.result <- nil
+					continue
+				}
+
+				c = client.NewContextBrokerClient(
+					contextBrokerUrl,
+					client.Tenant(r.tenant),
+					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+					client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
+				)
+			} else {
 				c = client.NewContextBrokerClient(
 					contextBrokerUrl,
 					client.Tenant(r.tenant),
 					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
 				)
-				clients[r.tenant] = c
 			}
 
 			r.result <- c

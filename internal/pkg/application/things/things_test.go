@@ -34,9 +34,9 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
-		BodyFunc: func() []byte { return []byte(wastecontainerJson) },
-		ContentTypeFunc: func() string {return "content-type"},
-		TopicNameFunc: func() string {return "topic"},
+		BodyFunc:        func() []byte { return []byte(wastecontainerJson) },
+		ContentTypeFunc: func() string { return "content-type" },
+		TopicNameFunc:   func() string { return "topic" },
 	}
 
 	handler := NewContainerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
@@ -69,9 +69,9 @@ func TestSewerMessage(t *testing.T) {
 	}
 	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
-		BodyFunc: func() []byte { return []byte(sewerJson) },
-		ContentTypeFunc: func() string {return "content-type"},
-		TopicNameFunc: func() string {return "topic"},
+		BodyFunc:        func() []byte { return []byte(sewerJson) },
+		ContentTypeFunc: func() string { return "content-type" },
+		TopicNameFunc:   func() string { return "topic" },
 	}
 
 	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
@@ -103,10 +103,10 @@ func TestPumpingStationMessage(t *testing.T) {
 		},
 	}
 	msgCtx := &messaging.MsgContextMock{}
-		itm := &messaging.IncomingTopicMessageMock{
-		BodyFunc: func() []byte { return []byte(pumpingStationJson) },
-		ContentTypeFunc: func() string {return "content-type"},
-		TopicNameFunc: func() string {return "topic"},
+	itm := &messaging.IncomingTopicMessageMock{
+		BodyFunc:        func() []byte { return []byte(pumpingStationJson) },
+		ContentTypeFunc: func() string { return "content-type" },
+		TopicNameFunc:   func() string { return "topic" },
 	}
 
 	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
