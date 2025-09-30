@@ -3,6 +3,7 @@ package cip
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -20,7 +21,15 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		metric.WithUnit("1"),
 		metric.WithDescription("Total number of transformed entities"),
 	)
+	if err != nil {
+		log.Error("failed to create otel message counter", "err", err.Error())
+	}
 
+	typeCounter, err := otel.Meter("iot-transform-fiware/transform").Int64Counter(
+		fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName)),
+		metric.WithUnit("1"),
+		metric.WithDescription(fmt.Sprintf("Total number of transformed %s", strings.ToLower(typeName))),
+	)
 	if err != nil {
 		log.Error("failed to create otel message counter", "err", err.Error())
 	}
@@ -38,6 +47,8 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 			}
 
 			messageCounter.Add(ctx, 1)
+			typeCounter.Add(ctx, 1)
+
 			log.Debug(fmt.Sprintf("merged existing %s", typeName))
 
 			return nil
@@ -50,6 +61,8 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		}
 
 		messageCounter.Add(ctx, 1)
+		typeCounter.Add(ctx, 1)
+
 		log.Debug(fmt.Sprintf("created new %s", typeName), "entity_id", id)
 
 		return nil
