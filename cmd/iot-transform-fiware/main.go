@@ -38,7 +38,7 @@ func defaultFlags() FlagMap {
 		oauth2ClientId:     "",
 		oauth2ClientSecret: "",
 		oauth2TokenUrl:     "",
-		oauthInsecureURL:   "true",
+		oauth2InsecureURL:  "true",
 	}
 }
 
@@ -60,7 +60,7 @@ func main() {
 	)
 	exitIf(err, logger, "failed to init messenger")
 
-	factory := newContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], flags[oauthInsecureURL] == "true")
+	factory := newContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], flags[oauth2InsecureURL] == "true")
 
 	cfg := &AppConfig{
 		messenger:  messenger,
@@ -134,7 +134,7 @@ func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, F
 	flags[oauth2TokenUrl] = envOrDef(ctx, "OAUTH2_TOKEN_URL", flags[oauth2TokenUrl])
 	flags[oauth2ClientId] = envOrDef(ctx, "OAUTH2_CLIENT_ID", flags[oauth2ClientId])
 	flags[oauth2ClientSecret] = envOrDef(ctx, "OAUTH2_CLIENT_SECRET", flags[oauth2ClientSecret])
-	flags[oauthInsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauthInsecureURL])
+	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
 
 	flag.Parse()
 

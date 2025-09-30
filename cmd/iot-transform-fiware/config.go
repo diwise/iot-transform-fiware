@@ -17,7 +17,7 @@ const (
 	oauth2ClientId
 	oauth2ClientSecret
 	oauth2TokenUrl
-	oauthInsecureURL
+	oauth2InsecureURL
 )
 
 type AppConfig struct {
