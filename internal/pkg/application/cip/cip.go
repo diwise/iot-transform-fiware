@@ -13,6 +13,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+var mu sync.Mutex
+var known map[string]bool = make(map[string]bool)
+
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
 	log := logging.GetFromContext(ctx)
 
@@ -37,6 +40,9 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	ctx = logging.NewContextWithLogger(ctx, log, "entity_id", id, "type_name", typeName)
 
 	return func() error {
+		mu.Lock()
+		defer mu.Unlock()
+
 		_, shouldMergeExistingEntity := retrieveEntity(ctx, cbClient, id)
 
 		if shouldMergeExistingEntity {
@@ -111,13 +117,7 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 	return nil
 }
 
-var mu sync.Mutex
-var known map[string]bool = make(map[string]bool)
-
 func retrieveEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string) (string, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	log := logging.GetFromContext(ctx)
 
 	if _, ok := known[id]; ok {
