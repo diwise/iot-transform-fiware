@@ -15,64 +15,85 @@ import (
 
 var mu sync.Mutex
 var known map[string]bool = make(map[string]bool)
+var meters map[string]metric.Int64Counter = make(map[string]metric.Int64Counter)
 
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	var err error
+	var messageCounter, typeCounter metric.Int64Counter
+	var ok bool
+
 	log := logging.GetFromContext(ctx)
 
-	messageCounter, err := otel.Meter("iot-transform-fiware/transform").Int64Counter(
-		"diwise.transform.entities.total",
-		metric.WithUnit("1"),
-		metric.WithDescription("Total number of transformed entities"),
-	)
-	if err != nil {
-		log.Error("failed to create otel message counter", "err", err.Error())
+	if messageCounter, ok = meters["diwise.transform.entities.total"]; !ok {
+		messageCounter, err := otel.Meter("iot-transform-fiware/transform").Int64Counter(
+			"diwise.transform.entities.total",
+			metric.WithUnit("1"),
+			metric.WithDescription("Total number of transformed entities"),
+		)
+		if err != nil {
+			log.Error("failed to create otel message counter", "err", err.Error())
+		} else {
+			meters["diwise.transform.entities.total"] = messageCounter
+		}
 	}
 
-	typeCounter, err := otel.Meter("iot-transform-fiware/transform").Int64Counter(
-		fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName)),
-		metric.WithUnit("1"),
-		metric.WithDescription(fmt.Sprintf("Total number of transformed %s", strings.ToLower(typeName))),
-	)
-	if err != nil {
-		log.Error("failed to create otel message counter", "err", err.Error())
+	if typeCounter, ok = meters[fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName))]; !ok {
+		typeCounter, err = otel.Meter("iot-transform-fiware/transform").Int64Counter(
+			fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName)),
+			metric.WithUnit("1"),
+			metric.WithDescription(fmt.Sprintf("Total number of transformed %s", strings.ToLower(typeName))),
+		)
+		if err != nil {
+			log.Error("failed to create otel message counter", "err", err.Error())
+		} else {
+			meters[fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName))] = typeCounter
+		}
 	}
 
 	ctx = logging.NewContextWithLogger(ctx, log, "entity_id", id, "type_name", typeName)
 
-	return func() error {
-		mu.Lock()
-		defer mu.Unlock()
+	_, shouldMergeExistingEntity := retrieveEntity(ctx, cbClient, id)
 
-		_, shouldMergeExistingEntity := retrieveEntity(ctx, cbClient, id)
-
-		if shouldMergeExistingEntity {
-			err := mergeEntity(ctx, cbClient, id, properties)
-			if err != nil {
-				log.Error("failed to merge existing entity", "err", err.Error())
-				return err
-			}
-
-			messageCounter.Add(ctx, 1)
-			typeCounter.Add(ctx, 1)
-
-			log.Debug(fmt.Sprintf("merged existing %s", typeName))
-
-			return nil
-		}
-
-		err := createNewEntity(ctx, cbClient, id, typeName, properties)
+	if shouldMergeExistingEntity {
+		err := mergeEntity(ctx, cbClient, id, properties)
 		if err != nil {
-			log.Error("failed to create new entity", "err", err.Error())
+			log.Error("failed to merge existing entity", "err", err.Error())
 			return err
 		}
 
-		messageCounter.Add(ctx, 1)
-		typeCounter.Add(ctx, 1)
+		if messageCounter != nil {
+			messageCounter.Add(ctx, 1)
+		}
 
-		log.Debug(fmt.Sprintf("created new %s", typeName), "entity_id", id)
+		if typeCounter != nil {
+			typeCounter.Add(ctx, 1)
+		}
+
+		log.Debug(fmt.Sprintf("merged existing %s", typeName))
 
 		return nil
-	}()
+	}
+
+	err = createNewEntity(ctx, cbClient, id, typeName, properties)
+	if err != nil {
+		log.Error("failed to create new entity", "err", err.Error())
+		return err
+	}
+
+	if messageCounter != nil {
+		messageCounter.Add(ctx, 1)
+	}
+
+	if typeCounter != nil {
+		typeCounter.Add(ctx, 1)
+	}
+
+	log.Debug(fmt.Sprintf("created new %s", typeName), "entity_id", id)
+
+	return nil
 }
 
 func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
@@ -90,6 +111,7 @@ func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 		"Content-Type": {"application/ld+json"},
 	})
 	if err != nil {
+		delete(known, id)
 		log.Error("failed to create entity (cbClient.CreateEntity)", "err", err.Error())
 		return err
 	}
@@ -110,6 +132,7 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 		"Content-Type": {"application/ld+json"},
 	})
 	if err != nil {
+		delete(known, id)
 		log.Error("failed to merge entity", "err", err.Error())
 		return err
 	}
