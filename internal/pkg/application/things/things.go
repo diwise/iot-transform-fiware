@@ -181,6 +181,10 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			helpers.Temperature(*poi.Current.Value, poi.Current.Timestamp.UTC()),
 		)
 
+		if poi.Description != nil && *poi.Description != "" {
+			props = append(props, decorators.Description(*poi.Description))
+		}
+
 		if poi.Current.Source != nil {
 			props = append(props, decorators.Source(*poi.Current.Source))
 		}
