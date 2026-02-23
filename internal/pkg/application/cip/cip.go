@@ -28,8 +28,8 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		log.Debug("entity created", "entity_id", id, "type_name", typeName)
 
 		return nil
-	} 
-	
+	}
+
 	log.Debug("entity merged", "entity_id", id, "type_name", typeName)
 
 	// Sleep for a short time to allow the context broker to process the merge before any subsequent operations on the same entity
