@@ -1,12 +1,12 @@
 module github.com/diwise/iot-transform-fiware
 
-go 1.25.0
+go 1.26
 
 require (
-	github.com/diwise/context-broker v0.0.0-20260203222930-8416915705bf
+	github.com/diwise/context-broker v0.0.0-20260224082514-5dacca8690cd
 	github.com/diwise/messaging-golang v0.0.0-20250628135946-f23f34d06003
 	github.com/diwise/senml v0.0.0-20251022134045-d0045d1dd610
-	github.com/diwise/service-chassis v0.0.0-20260223135725-6d7d041046a6
+	github.com/diwise/service-chassis v0.0.0-20260224075452-111d1a12718e
 	github.com/google/uuid v1.6.0
 )
 
@@ -34,12 +34,12 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.16.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260217215200-42d3e9bedb6d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260223185530-2f722ef697dc // indirect
 )
 
 require (
-	github.com/diwise/iot-core v0.0.0-20260123092611-0333923bb4d4
+	github.com/diwise/iot-core v0.0.0-20260224141203-6271f82d756e
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
