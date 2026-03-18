@@ -182,6 +182,36 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	is.True(strings.Contains(string(b), `"temperature":{"type":"Property","value":22.2,"observedAt":"2022-01-01T00:00:00Z"},"type":"IndoorEnvironmentObserved"}`))
 }
 
+func TestThatNoiseLevelObservedCanBeCreated(t *testing.T) {
+	noise := 58.0
+	is, cbClient := testSetup(t)
+	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
+	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3324", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &noise, nil, 0, nil))
+	msg.Timestamp = ti
+
+	err := NoiseLevelObserved(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+	is.Equal(len(cbClient.MergeEntityCalls()), 1)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"type":"NoiseLevelObserved"`))
+	is.True(strings.Contains(string(b), `"noiseLevel":{"type":"Property","value":58`))
+	is.True(strings.Contains(string(b), `"dateObserved":{"type":"Property","value":{"@type":"DateTime","@value":"2022-01-01T00:00:00Z"}}`))
+}
+
+func TestThatNoiseLevelObservedRequiresNoiseLevel(t *testing.T) {
+	is := is.New(t)
+
+	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3324", "deviceID", time.Now().UTC()))
+
+	cbClient := &client.ContextBrokerClientMock{}
+	err := NoiseLevelObserved(context.Background(), *msg, cbClient)
+
+	is.Equal(err, ErrNoRelevantProperties)
+	is.Equal(len(cbClient.MergeEntityCalls()), 0)
+	is.Equal(len(cbClient.CreateEntityCalls()), 0)
+}
+
 /*
 	func TestThatLifebuoyCanBeCreated(t *testing.T) {
 		p := true
