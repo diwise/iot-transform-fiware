@@ -21,6 +21,10 @@ func Illuminance(illuminance float64, observedAt time.Time) entities.EntityDecor
 	return decorators.Number("illuminance", illuminance, properties.ObservedAt(FormatTime(observedAt)))
 }
 
+func NoiseLevel(noise float64, observedAt time.Time) entities.EntityDecoratorFunc {
+	return decorators.Number("noiseLevel", noise, properties.ObservedAt(FormatTime(observedAt)))
+}
+
 func PeopleCount(peopleCount float64, observedAt time.Time) entities.EntityDecoratorFunc {
 	return decorators.Number("peopleCount", peopleCount, properties.ObservedAt(FormatTime(observedAt)))
 }

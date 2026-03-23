@@ -5,7 +5,6 @@ A service for handling core functionality in the IoT platform
 
 # Design 
 
-
 ```mermaid
 flowchart LR
     iot-core--rabbitMQ-->handler

@@ -3,95 +3,37 @@ package cip
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
 )
 
 var mu sync.Mutex
-var known map[string]bool = make(map[string]bool)
-var meters map[string]metric.Int64Counter = make(map[string]metric.Int64Counter)
 
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	var err error
-	var messageCounter, typeCounter metric.Int64Counter
-	var ok bool
-
 	log := logging.GetFromContext(ctx)
 
-	if messageCounter, ok = meters["diwise.transform.entities.total"]; !ok {
-		messageCounter, err := otel.Meter("iot-transform-fiware/transform").Int64Counter(
-			"diwise.transform.entities.total",
-			metric.WithUnit("1"),
-			metric.WithDescription("Total number of transformed entities"),
-		)
+	if err := mergeEntity(ctx, cbClient, id, properties); err != nil {
+		err := createNewEntity(ctx, cbClient, id, typeName, properties)
 		if err != nil {
-			log.Error("failed to create otel message counter", "err", err.Error())
-		} else {
-			meters["diwise.transform.entities.total"] = messageCounter
-		}
-	}
-
-	if typeCounter, ok = meters[fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName))]; !ok {
-		typeCounter, err = otel.Meter("iot-transform-fiware/transform").Int64Counter(
-			fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName)),
-			metric.WithUnit("1"),
-			metric.WithDescription(fmt.Sprintf("Total number of transformed %s", strings.ToLower(typeName))),
-		)
-		if err != nil {
-			log.Error("failed to create otel message counter", "err", err.Error())
-		} else {
-			meters[fmt.Sprintf("diwise.transform.%s.total", strings.ToLower(typeName))] = typeCounter
-		}
-	}
-
-	ctx = logging.NewContextWithLogger(ctx, log, "entity_id", id, "type_name", typeName)
-
-	_, shouldMergeExistingEntity := retrieveEntity(ctx, cbClient, id)
-
-	if shouldMergeExistingEntity {
-		err := mergeEntity(ctx, cbClient, id, properties)
-		if err != nil {
-			log.Error("failed to merge existing entity", "err", err.Error())
 			return err
 		}
 
-		if messageCounter != nil {
-			messageCounter.Add(ctx, 1)
-		}
-
-		if typeCounter != nil {
-			typeCounter.Add(ctx, 1)
-		}
-
-		log.Debug(fmt.Sprintf("merged existing %s", typeName))
+		log.Debug("entity created", "entity_id", id, "type_name", typeName)
 
 		return nil
 	}
 
-	err = createNewEntity(ctx, cbClient, id, typeName, properties)
-	if err != nil {
-		log.Error("failed to create new entity", "err", err.Error())
-		return err
-	}
+	log.Debug("entity merged", "entity_id", id, "type_name", typeName)
 
-	if messageCounter != nil {
-		messageCounter.Add(ctx, 1)
-	}
-
-	if typeCounter != nil {
-		typeCounter.Add(ctx, 1)
-	}
-
-	log.Debug(fmt.Sprintf("created new %s", typeName), "entity_id", id)
+	// Sleep for a short time to allow the context broker to process the merge before any subsequent operations on the same entity
+	time.Sleep(100 * time.Millisecond)
 
 	return nil
 }
@@ -111,7 +53,6 @@ func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 		"Content-Type": {"application/ld+json"},
 	})
 	if err != nil {
-		delete(known, id)
 		log.Error("failed to create entity (cbClient.CreateEntity)", "err", err.Error())
 		return err
 	}
@@ -132,34 +73,9 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 		"Content-Type": {"application/ld+json"},
 	})
 	if err != nil {
-		delete(known, id)
 		log.Error("failed to merge entity", "err", err.Error())
 		return err
 	}
 
 	return nil
-}
-
-func retrieveEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string) (string, bool) {
-	log := logging.GetFromContext(ctx)
-
-	if _, ok := known[id]; ok {
-		return id, true
-	}
-
-	headers := map[string][]string{
-		"Accept": {"application/ld+json"},
-		"Link":   {entities.LinkHeader},
-	}
-
-	_, err := cbClient.RetrieveEntity(ctx, id, headers)
-	if err != nil {
-		log.Debug("could not retrieve entity", "err", err.Error())
-		delete(known, id)
-		return id, false
-	}
-
-	known[id] = true
-
-	return id, true
 }

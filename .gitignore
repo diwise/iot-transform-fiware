@@ -18,3 +18,4 @@
 tempo-data
 
 *.test.*
+.env
