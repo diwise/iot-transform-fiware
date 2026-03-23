@@ -33,6 +33,7 @@ const (
 	ConductivityURN string = "urn:oma:lwm2m:ext:3327"
 	HumidityURN     string = "urn:oma:lwm2m:ext:3304"
 	IlluminanceURN  string = "urn:oma:lwm2m:ext:3301"
+	LoudnessURN     string = "urn:oma:lwm2m:ext:3324"
 	PeopleCountURN  string = "urn:oma:lwm2m:ext:3434"
 	PresenceURN     string = "urn:oma:lwm2m:ext:3302"
 	PressureURN     string = "urn:oma:lwm2m:ext:3323"
@@ -51,6 +52,7 @@ var (
 		HumidityURN + "/indoors":    IndoorEnvironmentObserved,
 		TemperatureURN + "/indoors": IndoorEnvironmentObserved,
 		TemperatureURN + "/air":     WeatherObserved,
+		LoudnessURN:                 NoiseLevelObserved,
 		PeopleCountURN + "/indoors": IndoorEnvironmentObserved,
 		ConductivityURN + "/soil":   GreenspaceRecord,
 		PressureURN + "/soil":       GreenspaceRecord,
@@ -282,6 +284,26 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
 	return cip.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
+}
+func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	const SensorValue int = 5700
+	noise, ok := msg.Pack().GetValue(finder(msg, LoudnessURN, SensorValue))
+	if !ok {
+		return ErrNoRelevantProperties
+	}
+
+	properties := []entities.EntityDecoratorFunc{
+		NoiseLevel(noise, timestamp(msg)),
+		decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)),
+	}
+
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
+	}
+
+	id := "urn:ngsi-ld:NoiseLevelObserved:" + msg.DeviceID()
+
+	return cip.MergeOrCreate(ctx, cbClient, id, "NoiseLevelObserved", properties)
 }
 
 func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
