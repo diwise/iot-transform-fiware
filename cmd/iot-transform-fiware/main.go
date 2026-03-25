@@ -10,8 +10,8 @@ import (
 	"os"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/measurements"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/things"
+	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -187,7 +187,7 @@ func newContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, servic
 			token, err := tokenSource.Token()
 			if err != nil {
 				log.Error("failed to retrieve oauth2 token", "err", err.Error())
-				return nil
+				panic(err)
 			}
 
 			return client.NewContextBrokerClient(

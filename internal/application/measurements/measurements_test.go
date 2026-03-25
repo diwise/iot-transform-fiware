@@ -82,7 +82,7 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 	is, cbClient := testSetup(t)
 
 	cbClient.RetrieveEntityFunc = func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
-		return nil, fmt.Errorf("not found")
+		return nil, ngsierrors.ErrNotFound
 	}
 
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
@@ -243,10 +243,10 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 			return &ngsild.UpdateEntityAttributesResult{}, nil
 		},
 		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
-			return nil, fmt.Errorf("not found")
+			return nil, ngsierrors.ErrNotFound
 		},
 		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
-			return nil, fmt.Errorf("not found")
+			return nil, ngsierrors.ErrNotFound
 		},
 		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
 			return &ngsild.CreateEntityResult{}, nil

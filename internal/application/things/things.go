@@ -11,8 +11,8 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
-	"github.com/diwise/iot-transform-fiware/internal/pkg/application/cip"
-	helpers "github.com/diwise/iot-transform-fiware/internal/pkg/application/decorators"
+	"github.com/diwise/iot-transform-fiware/internal/application/cip"
+	helpers "github.com/diwise/iot-transform-fiware/internal/application/decorators"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
