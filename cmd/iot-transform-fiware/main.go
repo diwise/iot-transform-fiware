@@ -55,8 +55,6 @@ func main() {
 	ctx, logger, cleanup := o11y.Init(ctx, serviceName, serviceVersion, "json")
 	defer cleanup()
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	messenger, err := messaging.Initialize(
 		ctx, messaging.LoadConfiguration(ctx, serviceName, logger),
 	)
@@ -67,7 +65,6 @@ func main() {
 	cfg := &AppConfig{
 		messenger:  messenger,
 		cbClientFn: factory,
-		cancel:     cancel,
 	}
 
 	runner, _ := initialize(ctx, flags, cfg)
@@ -122,7 +119,6 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
 			svcCfg.messenger.Close()
-			svcCfg.cancel()
 			return nil
 		}))
 
@@ -157,13 +153,6 @@ type ContextBrokerClientFactoryFunc func(string) client.ContextBrokerClient
 func newContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, serviceName, serviceVersion, oauth2ClientId, oauth2ClientSecret, oauth2TokenUrl string, oauthInsecureURL bool) ContextBrokerClientFactoryFunc {
 	log := logging.GetFromContext(ctx)
 
-	type request struct {
-		tenant string
-		result chan client.ContextBrokerClient
-	}
-
-	requestQueue := make(chan request)
-
 	var tokenSource oauth2.TokenSource
 
 	if oauth2ClientId != "" && oauth2ClientSecret != "" && oauth2TokenUrl != "" {
@@ -193,39 +182,26 @@ func newContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, servic
 		tokenSource = oauthConfig.TokenSource(ctx)
 	}
 
-	go func() {
-		for r := range requestQueue {
-			var c client.ContextBrokerClient
-
-			if tokenSource != nil {
-				token, err := tokenSource.Token()
-				if err != nil {
-					log.Error("failed to retrieve oauth2 token", "err", err.Error())
-					r.result <- nil
-					continue
-				}
-
-				c = client.NewContextBrokerClient(
-					contextBrokerUrl,
-					client.Tenant(r.tenant),
-					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
-					client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
-				)
-			} else {
-				c = client.NewContextBrokerClient(
-					contextBrokerUrl,
-					client.Tenant(r.tenant),
-					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
-				)
+	return func(tenant string) client.ContextBrokerClient {
+		if tokenSource != nil {
+			token, err := tokenSource.Token()
+			if err != nil {
+				log.Error("failed to retrieve oauth2 token", "err", err.Error())
+				return nil
 			}
 
-			r.result <- c
+			return client.NewContextBrokerClient(
+				contextBrokerUrl,
+				client.Tenant(tenant),
+				client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+				client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
+			)
 		}
-	}()
 
-	return func(tenant string) client.ContextBrokerClient {
-		r := request{tenant: tenant, result: make(chan client.ContextBrokerClient)}
-		requestQueue <- r
-		return <-r.result
+		return client.NewContextBrokerClient(
+			contextBrokerUrl,
+			client.Tenant(tenant),
+			client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+		)
 	}
 }
