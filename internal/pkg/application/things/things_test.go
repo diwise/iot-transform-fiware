@@ -231,3 +231,83 @@ const sewerJson = `
 `
 
 const pumpingStationJson = `{"id":"pump-001","type":"PumpingStation","thing":{"id":"pump-001","location":{"latitude":0,"longitude":0},"name":"","observedAt":"2025-01-15T07:47:38Z","pumpingCumulativeTime":0,"pumpingDuration":null,"pumpingObserved":false,"pumpingObservedAt":null,"refDevices":[{"deviceID":"ce3acc09ab62"}],"tenant":"default","type":"PumpingStation","validURN":["urn:oma:lwm2m:ext:3200"]},"tenant":"default","timestamp":"2025-01-15T07:47:40.360378603Z"}`
+
+
+func TestBeachMessage(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.Background()
+
+	observationID := ""
+	cb := &testClient.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			observationID = entityID
+			return &ngsild.MergeEntityResult{}, nil
+		},
+		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
+			return nil, nil
+		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			observationID = entity.ID()
+			return &ngsild.CreateEntityResult{}, nil
+		},
+	}
+	msgCtx := &messaging.MsgContextMock{}
+	itm := &messaging.IncomingTopicMessageMock{
+		BodyFunc:        func() []byte { return []byte(pointOfInterestJson) },
+		ContentTypeFunc: func() string { return "content-type" },
+		TopicNameFunc:   func() string { return "topic" },
+	}
+
+	handler := NewPointOfInterestTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+		return cb
+	})
+
+	handler(ctx, itm, slog.Default())
+
+	is.Equal(observationID, "urn:ngsi-ld:WaterQualityObserved:09089d61-8f40-5ac8-a631-c940dab1fc9b")
+}
+
+
+const pointOfInterestJson = `{
+  "id": "71ed07e4-52c0-417c-be15-3110b8e1f4e8",
+  "type": "PointOfInterest",
+  "thing": {
+    "current": {
+      "ref": "09089d61-8f40-5ac8-a631-c940dab1fc9b",
+      "timestamp": "2026-03-23T16:20:30Z",
+      "v": 21.1
+    },
+    "id": "71ed07e4-52c0-417c-be15-3110b8e1f4e8",
+    "location": {
+      "latitude": 0,
+      "longitude": 0
+    },
+    "name": "Teststrand",
+    "observedAt": "2026-03-23T16:20:30Z",
+    "refDevices": [
+      {
+        "deviceID": "3e85f04b-a64b-51a6-a3a9-e33aaf11986e"
+      },
+      {
+        "deviceID": "d549c148-e73e-5cb6-bb74-96b588c59258"
+      },
+      {
+        "deviceID": "09089d61-8f40-5ac8-a631-c940dab1fc9b"
+      }
+    ],
+    "subType": "Beach",
+    "temperature": {
+      "ref": "09089d61-8f40-5ac8-a631-c940dab1fc9b",
+      "timestamp": "2026-03-23T16:20:30Z",
+      "v": 21.1
+    },
+    "tenant": "default",
+    "type": "PointOfInterest",
+    "validURN": [
+      "urn:oma:lwm2m:ext:3303"
+    ]
+  },
+  "tenant": "default",
+  "timestamp": "2026-03-23T16:21:34.397588165Z"
+}`

@@ -73,6 +73,10 @@ func RefDevices(devices []string) entities.EntityDecoratorFunc {
 	return entities.R("refDevices", relationships.NewMultiObjectRelationship(devices))
 }
 
+func RefLocation(entityID string) entities.EntityDecoratorFunc {
+	return entities.R("refLocation", relationships.NewSingleObjectRelationship(entityID))
+}
+
 func FormatTime(ts time.Time) string {
 	return ts.UTC().Format(time.RFC3339)
 }

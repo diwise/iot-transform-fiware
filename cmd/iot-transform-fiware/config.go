@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
@@ -23,6 +25,7 @@ const (
 type AppConfig struct {
 	messenger  messaging.MsgContext
 	cbClientFn ContextBrokerClientFactoryFunc
+	cancel     context.CancelFunc
 }
 
 var onstarting = servicerunner.OnStarting[AppConfig]

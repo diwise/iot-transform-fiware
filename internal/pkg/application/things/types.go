@@ -112,6 +112,7 @@ type measurement struct {
 	Unit        string    `json:"unit,omitempty"`
 	Timestamp   time.Time `json:"timestamp"`
 	Source      *string   `json:"source,omitzero"`
+	Ref         string    `json:"ref,omitzero"`
 }
 
 type room struct {

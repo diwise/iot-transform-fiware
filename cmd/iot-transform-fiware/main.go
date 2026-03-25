@@ -55,6 +55,8 @@ func main() {
 	ctx, logger, cleanup := o11y.Init(ctx, serviceName, serviceVersion, "json")
 	defer cleanup()
 
+	ctx, cancel := context.WithCancel(ctx)
+
 	messenger, err := messaging.Initialize(
 		ctx, messaging.LoadConfiguration(ctx, serviceName, logger),
 	)
@@ -65,6 +67,7 @@ func main() {
 	cfg := &AppConfig{
 		messenger:  messenger,
 		cbClientFn: factory,
+		cancel:     cancel,
 	}
 
 	runner, _ := initialize(ctx, flags, cfg)
@@ -119,6 +122,7 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
 			svcCfg.messenger.Close()
+			svcCfg.cancel()
 			return nil
 		}))
 

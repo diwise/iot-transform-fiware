@@ -147,7 +147,6 @@ func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn fu
 func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
-		log.Debug("point of interest received")
 
 		m := msg[pointOfInterest]{}
 		err := json.Unmarshal(itm.Body(), &m)
@@ -158,40 +157,55 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 		poi := m.Thing
 
-		var entityID, typeNamePrefix, typeName string
-		props := make([]entities.EntityDecoratorFunc, 0)
+		var poiTypePrefix, observationID, observationTypePrefix, observationTypeName string
+		observation := make([]entities.EntityDecoratorFunc, 0)
 
 		switch strings.ToLower(poi.TypeName()) {
 		case "beach":
-			typeNamePrefix = fiware.WaterQualityObservedIDPrefix
-			typeName = fiware.WaterQualityObservedTypeName
+			observationTypePrefix = fiware.WaterQualityObservedIDPrefix
+			observationTypeName = fiware.WaterQualityObservedTypeName
+			poiTypePrefix = fiware.BeachIDPrefix
+
+			if poi.Current.Ref != "" {
+				observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.Current.Ref)
+				observation = append(observation, decorators.RefDevice(fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, poi.Current.Ref)))
+			} else {
+				observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.AlternativeNameOrNameOrID())
+			}
 		default:
-			typeNamePrefix = fiware.WeatherObservedIDPrefix
-			typeName = fiware.WeatherObservedTypeName
+			observationTypePrefix = fiware.WeatherObservedIDPrefix
+			observationTypeName = fiware.WeatherObservedTypeName
+			poiTypePrefix = fiware.PointOfInterestIDPrefix
+
+			observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.AlternativeNameOrNameOrID())
 		}
 
-		entityID = fmt.Sprintf("%s%s", typeNamePrefix, poi.AlternativeNameOrNameOrID())
+		poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
 
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", poi.Tenant))
+		log = log.With(slog.String("entity_id", observationID), slog.String("ref_location", poiEntityID), slog.String("type_name", observationTypeName), slog.String("tenant", poi.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		props = append(props,
+		observation = append(observation,
+			helpers.RefLocation(poiEntityID),
 			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
-			helpers.Temperature(*poi.Current.Value, poi.Current.Timestamp.UTC()),
 		)
 
+		if poi.Current.Value != nil {
+			observation = append(observation, helpers.Temperature(*poi.Current.Value, poi.Current.Timestamp.UTC()))
+		}
+
 		if poi.Description != nil && *poi.Description != "" {
-			props = append(props, decorators.Description(*poi.Description))
+			observation = append(observation, decorators.Description(*poi.Description))
 		}
 
 		if poi.Current.Source != nil {
-			props = append(props, decorators.Source(*poi.Current.Source))
+			observation = append(observation, decorators.Source(*poi.Current.Source))
 		}
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(poi.Tenant), entityID, typeName, props)
+		err = cip.MergeOrCreate(ctx, cbClientFn(poi.Tenant), observationID, observationTypeName, observation)
 		if err != nil {
-			log.Error("failed to merge or create entity", "err", err.Error())
+			log.Error("could not merge or create point of interest", "err", err.Error())
 			return
 		}
 
@@ -237,7 +251,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		typeName := "SewagePumpingStation"
 		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.AlternativeNameOrNameOrID())
 
-		log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", p.Tenant))
+		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", p.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
