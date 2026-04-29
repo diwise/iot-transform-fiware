@@ -18,6 +18,8 @@ const (
 	oauth2ClientSecret
 	oauth2TokenUrl
 	oauth2InsecureURL
+
+	logLevel
 )
 
 type AppConfig struct {
