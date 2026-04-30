@@ -87,6 +87,46 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	return nil
 }
 
+func CreateIfNotExists(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
+	unlock := locks.lock(id)
+	defer unlock()
+
+	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
+	ctx = logging.NewContextWithLogger(ctx, log)
+
+	exists, err := checkEntityExists(ctx, cbClient, id)
+	if err != nil {
+		return err
+	}
+
+	if exists {
+		log.Debug("entity already exists")
+		return nil
+	}
+
+	err = createNewEntity(ctx, cbClient, id, typeName, properties)
+	if err != nil {
+		if errors.Is(err, errEntityAlreadyExists) {
+			log.Warn("entity already exists, check existence again...")
+			exists, err := checkEntityExists(ctx, cbClient, id)
+			if err != nil {
+				return err
+			}
+
+			if exists {
+				log.Debug("entity already exists")
+				return nil
+			}
+		}
+
+		return err
+	}
+
+	log.Debug("entity created")
+
+	return nil
+}
+
 var errEntityAlreadyExists = errors.New("entity already exists")
 
 func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
@@ -137,4 +177,21 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 	time.Sleep(100 * time.Millisecond) // give the context broker some time to process the merge before any subsequent operations
 
 	return nil
+}
+
+func checkEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) (bool, error) {
+	log := logging.GetFromContext(ctx)
+
+	_, err := cbClient.RetrieveEntity(ctx, id, nil)
+	if err != nil {
+		if errors.Is(err, ngsilderrors.ErrNotFound) {
+			return false, nil
+		}
+
+		log.Error("failed to check if entity exists", "err", err.Error())
+
+		return false, err
+	}
+
+	return true, nil
 }
