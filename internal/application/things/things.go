@@ -339,6 +339,14 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 		props := make([]entities.EntityDecoratorFunc, 0, 4)
 		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
 
+		if s.Name != "" {
+			props = append(props, helpers.Name(s.Name))
+		}
+
+		if s.AlternativeName != "" {
+			props = append(props, helpers.AlternativeName(s.AlternativeName))
+		}
+
 		var observedAt string
 
 		if s.ObservedAt.IsZero() {
