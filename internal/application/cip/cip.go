@@ -182,7 +182,7 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 func checkEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) (bool, error) {
 	log := logging.GetFromContext(ctx)
 
-	_, err := cbClient.RetrieveEntity(ctx, id, nil)
+	_, err := cbClient.RetrieveEntity(ctx, id, map[string][]string{"Content-Type": {"application/ld+json"}})
 	if err != nil {
 		if errors.Is(err, ngsilderrors.ErrNotFound) {
 			return false, nil
