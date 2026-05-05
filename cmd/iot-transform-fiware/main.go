@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
@@ -39,6 +40,8 @@ func defaultFlags() FlagMap {
 		oauth2ClientSecret: "",
 		oauth2TokenUrl:     "",
 		oauth2InsecureURL:  "true",
+
+		logLevel: "debug",
 	}
 }
 
@@ -54,6 +57,8 @@ func main() {
 	serviceVersion := buildinfo.SourceVersion()
 	ctx, logger, cleanup := o11y.Init(ctx, serviceName, serviceVersion, "json")
 	defer cleanup()
+
+	logging.SetLogLevel(parseLogLevel(flags[logLevel]))
 
 	messenger, err := messaging.Initialize(
 		ctx, messaging.LoadConfiguration(ctx, serviceName, logger),
@@ -135,10 +140,34 @@ func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, F
 	flags[oauth2ClientId] = envOrDef(ctx, "OAUTH2_CLIENT_ID", flags[oauth2ClientId])
 	flags[oauth2ClientSecret] = envOrDef(ctx, "OAUTH2_CLIENT_SECRET", flags[oauth2ClientSecret])
 	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
+	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 
+	apply := func(f FlagType) func(string) error {
+		return func(value string) error {
+			flags[f] = value
+			return nil
+		}
+	}
+
+	flag.Func("loglevel", "set the log level", apply(logLevel))
 	flag.Parse()
 
 	return ctx, flags
+}
+
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelDebug
+	}
 }
 
 func exitIf(err error, logger *slog.Logger, msg string, args ...any) {

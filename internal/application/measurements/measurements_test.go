@@ -262,7 +262,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 	is.Equal(cbClient.CreateEntityCalls()[0].Entity.ID(), expectedEntityID) // the entity id should be ...
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmStopsLeaks":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
+	const expectedPatchBody string = `{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmInProgress":{"type":"Property","value":0},"alarmStopsLeaks":{"type":"Property","value":0},"alarmTamper":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"id":"urn:ngsi-ld:WaterConsumptionObserved:watermeter-01","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:watermeter-01"},"unitCode":"LTR"}}`
 	is.Equal(string(b), expectedPatchBody)
 }
 
@@ -299,8 +299,52 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
-	expectedCreateBody := fmt.Sprintf(`{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmStopsLeaks":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"id":"urn:ngsi-ld:WaterConsumptionObserved:%s","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:%s"},"unitCode":"LTR"}}`, devid, devid)
+	expectedCreateBody := fmt.Sprintf(`{"@context":["https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld"],"alarmInProgress":{"type":"Property","value":0},"alarmStopsLeaks":{"type":"Property","value":0},"alarmTamper":{"type":"Property","value":0},"alarmWaterQuality":{"type":"Property","value":0},"id":"urn:ngsi-ld:WaterConsumptionObserved:%s","location":{"type":"GeoProperty","value":{"type":"Point","coordinates":[17.509804,62.362829]}},"type":"WaterConsumptionObserved","waterConsumption":{"type":"Property","value":1009,"observedAt":"2006-01-02T15:04:05Z","observedBy":{"type":"Relationship","object":"urn:ngsi-ld:Device:%s"},"unitCode":"LTR"}}`, devid, devid)
 	is.Equal(string(b), expectedCreateBody)
+}
+
+func TestThatWaterConsumptionObservedMapsConservativeAlarms(t *testing.T) {
+	v := 1.009
+	leakSuspected := true
+	backflowDetected := false
+	tamperDetected := true
+	is := is.New(t)
+
+	ct, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z")
+
+	msg := iotcore.NewMessageAccepted(senml.Pack{},
+		base("urn:oma:lwm2m:ext:3424", "watermeter-01", time.Unix(0, 0)),
+		iotcore.Lat(62.362829),
+		iotcore.Lon(17.509804),
+		iotcore.Rec("1", "", &v, nil, float64(ct.Unix()), &v),
+		iotcore.Rec("9", "", nil, &leakSuspected, 0, nil),
+		iotcore.Rec("11", "", nil, &backflowDetected, 0, nil),
+		iotcore.Rec("64007", "", nil, &tamperDetected, 0, nil),
+	)
+
+	cbClient := &client.ContextBrokerClientMock{
+		UpdateEntityAttributesFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.UpdateEntityAttributesResult, error) {
+			return nil, ngsierrors.ErrNotFound
+		},
+		CreateEntityFunc: func(ctx context.Context, entity types.Entity, headers map[string][]string) (*ngsild.CreateEntityResult, error) {
+			return ngsild.NewCreateEntityResult("ignored"), nil
+		},
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, ngsierrors.ErrNotFound
+		},
+		RetrieveEntityFunc: func(ctx context.Context, entityID string, headers map[string][]string) (types.Entity, error) {
+			return nil, ngsierrors.ErrNotFound
+		},
+	}
+
+	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
+	is.NoErr(err)
+
+	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
+	is.True(strings.Contains(string(b), `"alarmInProgress":{"type":"Property","value":1}`))
+	is.True(strings.Contains(string(b), `"alarmStopsLeaks":{"type":"Property","value":1}`))
+	is.True(strings.Contains(string(b), `"alarmTamper":{"type":"Property","value":1}`))
+	is.True(strings.Contains(string(b), `"alarmWaterQuality":{"type":"Property","value":0}`))
 }
 
 /*

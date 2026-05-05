@@ -412,39 +412,23 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 */
 
 func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	log := logging.GetFromContext(ctx)
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
 	const (
 		CumulatedWaterVolume string = "1"
 		TypeOfMeter          int    = 3
-		LeakDetected         int    = 10
+		LeakSuspected        int    = 9
 		BackFlowDetected     int    = 11
+		TamperDetected       int    = 64007
 	)
 
-	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.DeviceID())
-	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
+	toAlarmValue := func(recordFinder senml.RecordFinder) float64 {
+		if active, ok := msg.Pack().GetBoolValue(recordFinder); ok && active {
+			return 1
+		}
 
-	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
-		properties = append(properties, decorators.Location(lat, lon))
-	}
-
-	// Alarm signifying the potential for an intermittent leak
-	if leak, ok := msg.Pack().GetBoolValue(finder(msg, WatermeterURN, LeakDetected)); ok && leak {
-		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(1)))
-	} else {
-		properties = append(properties, decorators.Number("alarmStopsLeaks", float64(0)))
-	}
-
-	// Alarm signifying the potential of backflows occurring
-	if backflow, ok := msg.Pack().GetBoolValue(finder(msg, WatermeterURN, BackFlowDetected)); ok && backflow {
-		properties = append(properties, decorators.Number("alarmWaterQuality", float64(1)))
-	} else {
-		properties = append(properties, decorators.Number("alarmWaterQuality", float64(0)))
-	}
-
-	// An alternative name for this item
-	if t, ok := msg.Pack().GetStringValue(finder(msg, WatermeterURN, TypeOfMeter)); ok {
-		properties = append(properties, decorators.Text("alternateName", t))
+		return 0
 	}
 
 	// lwm2m reports water volume in m3, but the context broker expects litres as default
@@ -455,7 +439,35 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	r, ok := msg.Pack().GetRecord(senml.FindByName(CumulatedWaterVolume))
 
 	if !ok {
-		return fmt.Errorf("unable to get record for CumulatedWaterVolume")
+		log.Debug("message does not contain a record for CumulatedWaterVolume, skipping", "device_id", msg.DeviceID())
+		return nil
+	}
+
+	entityID := fmt.Sprintf("%s%s", fiware.WaterConsumptionObservedIDPrefix, msg.DeviceID())
+	observedBy := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, msg.DeviceID())
+
+	if lat, lon, ok := msg.Pack().GetLatLon(); ok {
+		properties = append(properties, decorators.Location(lat, lon))
+	}
+
+	leakAlarm := toAlarmValue(finder(msg, WatermeterURN, LeakSuspected))
+	backflowAlarm := toAlarmValue(finder(msg, WatermeterURN, BackFlowDetected))
+	tamperAlarm := toAlarmValue(finder(msg, WatermeterURN, TamperDetected))
+	alarmInProgress := float64(0)
+	if leakAlarm == 1 || backflowAlarm == 1 || tamperAlarm == 1 {
+		alarmInProgress = 1
+	}
+
+	properties = append(properties,
+		decorators.Number("alarmInProgress", alarmInProgress),
+		decorators.Number("alarmStopsLeaks", leakAlarm),
+		decorators.Number("alarmTamper", tamperAlarm),
+		decorators.Number("alarmWaterQuality", backflowAlarm),
+	)
+
+	// An alternative name for this item
+	if t, ok := msg.Pack().GetStringValue(finder(msg, WatermeterURN, TypeOfMeter)); ok {
+		properties = append(properties, decorators.Text("alternateName", t))
 	}
 
 	vol, volOk := r.GetValue()
