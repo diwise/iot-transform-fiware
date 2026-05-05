@@ -94,35 +94,18 @@ func CreateIfNotExists(ctx context.Context, cbClient client.ContextBrokerClient,
 	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
 	ctx = logging.NewContextWithLogger(ctx, log)
 
-	exists, err := checkEntityExists(ctx, cbClient, id)
-	if err != nil {
-		return err
-	}
-
-	if exists {
-		log.Debug("entity already exists")
-		return nil
-	}
-
-	err = createNewEntity(ctx, cbClient, id, typeName, properties)
-	if err != nil {
-		if errors.Is(err, errEntityAlreadyExists) {
-			log.Warn("entity already exists, check existence again...")
-			exists, err := checkEntityExists(ctx, cbClient, id)
-			if err != nil {
-				return err
-			}
-
-			if exists {
-				log.Debug("entity already exists")
-				return nil
-			}
+	exists := checkIfEntityExists(ctx, cbClient, id)
+	if !exists {
+		log.Info("entity does not exist")
+		err := createNewEntity(ctx, cbClient, id, typeName, properties)
+		if err != nil {
+			return err
 		}
 
-		return err
+		log.Info("entity created")
 	}
 
-	log.Debug("entity created")
+	log.Info("entity already exists, will not attempt to create")
 
 	return nil
 }
@@ -179,19 +162,22 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 	return nil
 }
 
-func checkEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) (bool, error) {
+func checkIfEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) bool {
 	log := logging.GetFromContext(ctx)
 
-	_, err := cbClient.RetrieveEntity(ctx, id, map[string][]string{"Content-Type": {"application/ld+json"}})
-	if err != nil {
-		if errors.Is(err, ngsilderrors.ErrNotFound) {
-			return false, nil
-		}
-
-		log.Error("failed to check if entity exists", "err", err.Error())
-
-		return false, err
+	result, err := cbClient.RetrieveEntity(ctx, id, map[string][]string{"Content-Type": {"application/ld+json"}, "Link": {`<https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"`}})
+	if err != nil && errors.Is(err, ngsilderrors.ErrNotFound) {
+		log.Info(fmt.Sprintf("entity with id %s does not exist", id))
+		return false
+	} else if err != nil {
+		log.Error("failed to retrieve entity", "err", err.Error())
+		return true
 	}
 
-	return true, nil
+	if result != nil && result.ID() == id {
+		log.Info(fmt.Sprintf("entity with id %s exists", id))
+		return true
+	}
+
+	return false
 }
