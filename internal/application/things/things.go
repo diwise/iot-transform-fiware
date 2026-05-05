@@ -175,9 +175,12 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 			poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
 
+			if poi.Description != nil && *poi.Description != "" {
+				observation = append(observation, decorators.Description(*poi.Description))
+			}
+
 			err = cip.CreateNewEntity(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
 				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
-				decorators.Description(*poi.Description),
 			})
 			if err != nil {
 				log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
