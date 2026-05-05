@@ -175,7 +175,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 
 			poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
 
-			err = cip.CreateIfNotExists(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
+			err = cip.CreateNewEntity(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
 				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 				decorators.Description(*poi.Description),
 			})
