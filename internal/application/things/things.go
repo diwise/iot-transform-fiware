@@ -172,6 +172,17 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			} else {
 				observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.AlternativeNameOrNameOrID())
 			}
+
+			poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
+
+			err = cip.CreateNewEntity(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
+				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
+				decorators.Description(*poi.Description),
+			})
+			if err != nil {
+				log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
+				return
+			}
 		default:
 			observationTypePrefix = fiware.WeatherObservedIDPrefix
 			observationTypeName = fiware.WeatherObservedTypeName
@@ -212,6 +223,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 		log.Debug("point of interest handled successfully")
 	}
 }
+
 func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())

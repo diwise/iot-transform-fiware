@@ -72,7 +72,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return nil
 	}
 
-	err = createNewEntity(ctx, cbClient, id, typeName, properties)
+	err = CreateNewEntity(ctx, cbClient, id, typeName, properties)
 	if err != nil {
 		if errors.Is(err, errEntityAlreadyExists) {
 			log.Warn("entity already exists, try merging again...")
@@ -87,9 +87,32 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	return nil
 }
 
+/*func CreateIfNotExists(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
+	unlock := locks.lock(id)
+	defer unlock()
+
+	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
+	ctx = logging.NewContextWithLogger(ctx, log)
+
+	exists := checkIfEntityExists(ctx, cbClient, id)
+	if !exists {
+		log.Info("entity does not exist")
+		err := CreateNewEntity(ctx, cbClient, id, typeName, properties)
+		if err != nil {
+			return err
+		}
+
+		log.Info("entity created")
+	}
+
+	log.Info("entity already exists, will not attempt to create")
+
+	return nil
+}*/
+
 var errEntityAlreadyExists = errors.New("entity already exists")
 
-func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
+func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
 	log := logging.GetFromContext(ctx)
 
 	properties = append(properties, entities.DefaultContext())
@@ -138,3 +161,23 @@ func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id st
 
 	return nil
 }
+
+/*func checkIfEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) bool {
+	log := logging.GetFromContext(ctx)
+
+	result, err := cbClient.RetrieveEntity(ctx, id, map[string][]string{"Content-Type": {"application/ld+json"}, "Link": {`<https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"`}})
+	if err != nil && errors.Is(err, ngsilderrors.ErrNotFound) {
+		log.Info(fmt.Sprintf("entity with id %s does not exist", id))
+		return false
+	} else if err != nil {
+		log.Error("failed to retrieve entity", "err", err.Error())
+		return true
+	}
+
+	if result != nil && result.ID() == id {
+		log.Info(fmt.Sprintf("entity with id %s exists", id))
+		return true
+	}
+
+	return false
+}*/
