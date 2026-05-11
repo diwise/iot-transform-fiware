@@ -74,7 +74,7 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 
 	err = CreateNewEntity(ctx, cbClient, id, typeName, properties)
 	if err != nil {
-		if errors.Is(err, errEntityAlreadyExists) {
+		if errors.Is(err, ErrEntityAlreadyExists) {
 			log.Warn("entity already exists, try merging again...")
 			return mergeEntity(ctx, cbClient, id, properties)
 		}
@@ -110,11 +110,9 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 	return nil
 }*/
 
-var errEntityAlreadyExists = errors.New("entity already exists")
+var ErrEntityAlreadyExists = errors.New("entity already exists")
 
 func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	log := logging.GetFromContext(ctx)
-
 	properties = append(properties, entities.DefaultContext())
 
 	entity, err := entities.New(id, typeName, properties...)
@@ -125,10 +123,8 @@ func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 	_, err = cbClient.CreateEntity(ctx, entity, map[string][]string{"Content-Type": {"application/ld+json"}})
 	if err != nil {
 		if errors.Is(err, ngsilderrors.ErrAlreadyExists) {
-			return errEntityAlreadyExists
+			return ErrEntityAlreadyExists
 		}
-
-		log.Error("failed to create entity", "err", err.Error())
 
 		return err
 	}

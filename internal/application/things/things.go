@@ -3,6 +3,7 @@ package things
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -183,8 +184,10 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			})
 			if err != nil {
-				log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
-				return
+				if !errors.Is(err, cip.ErrEntityAlreadyExists) {
+					log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
+					return
+				}
 			}
 		default:
 			observationTypePrefix = fiware.WeatherObservedIDPrefix
