@@ -69,7 +69,9 @@ docker build -f deployments/Dockerfile . -t diwise/iot-transform-fiware:latest
 Testing is best done using unit tests. For integration testing the preferred way is to use `docker-compose.yaml` found in repository [diwise](https://github.com/diwise/diwise) 
 
 # Configuration
+
 ## Environment variables
+
 ```json
 "RABBITMQ_HOST": "<rabbit mq hostname>"
 "RABBITMQ_PORT": "5672"
