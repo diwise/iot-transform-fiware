@@ -9,15 +9,27 @@ import (
 	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
+	brokerclient "github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
+	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	client "github.com/diwise/context-broker/pkg/test"
 	iotcore "github.com/diwise/iot-core/pkg/messaging/events"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/senml"
 	"github.com/google/uuid"
 
 	"github.com/matryer/is"
 )
+
+// stubBroker delegates to the real merge/create logic with a mock
+// client, preserving the existing assertions on broker calls while
+// exercising the application-owned persistence port.
+type stubBroker struct{}
+
+func (stubBroker) MergeOrCreate(ctx context.Context, cbClient brokerclient.ContextBrokerClient, id, typeName string, properties []entities.EntityDecoratorFunc) error {
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, typeName, properties)
+}
 
 func base(objectURN, deviceID string, baseTime time.Time) iotcore.EventDecoratorFunc {
 	return func(m iotcore.Message) {
@@ -55,7 +67,7 @@ func TestThatAirQualityObservedCanBeCreated(t *testing.T) {
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3428", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("17", "", &temp, nil, 0, nil))
 
-	err := AirQualityObserved(context.Background(), *msg, cbClient)
+	err := AirQualityObserved(context.Background(), *msg, cbClient, stubBroker{})
 
 	is.NoErr(err)
 	is.Equal(len(cbClient.MergeEntityCalls()), 1)
@@ -70,7 +82,7 @@ func TestThatAirQualityIsNotCreatedOnNoValidProperties(t *testing.T) {
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804))
 
 	cbClient := &client.ContextBrokerClientMock{}
-	err := AirQualityObserved(context.Background(), *msg, cbClient)
+	err := AirQualityObserved(context.Background(), *msg, cbClient, stubBroker{})
 
 	is.True(err != nil)
 	is.Equal(len(cbClient.MergeEntityCalls()), 0)  // should not have been called
@@ -87,7 +99,7 @@ func TestThatDeviceCanBeCreated(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
-	Device(context.Background(), *msg, cbClient)
+	Device(context.Background(), *msg, cbClient, stubBroker{})
 	//is.NoErr(err)
 	is.Equal(len(cbClient.CreateEntityCalls()), 1)
 
@@ -127,7 +139,7 @@ func TestThatGreenspaceRecordIsCreatedIfNonExistant(t *testing.T) {
 		},
 	}
 
-	err := GreenspaceRecord(context.Background(), *msg, cbClient)
+	err := GreenspaceRecord(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
@@ -159,7 +171,7 @@ func TestThatGreenspaceRecordIsPatchedIfAlreadyExisting(t *testing.T) {
 		},
 	}
 
-	err := GreenspaceRecord(context.Background(), *msg, cbClient)
+	err := GreenspaceRecord(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	is.Equal(len(cbClient.MergeEntityCalls()), 1) // merge entity attributes should have been called once
@@ -174,7 +186,7 @@ func TestThatIndoorEnvironmentObservedCanBeCreated(t *testing.T) {
 	ti, _ := time.Parse(time.RFC3339, "2022-01-01T00:00:00Z")
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Environment("indoors"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil))
 
-	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient)
+	err := IndoorEnvironmentObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
@@ -189,7 +201,7 @@ func TestThatNoiseLevelObservedCanBeCreated(t *testing.T) {
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3324", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &noise, nil, 0, nil))
 	msg.Timestamp = ti
 
-	err := NoiseLevelObserved(context.Background(), *msg, cbClient)
+	err := NoiseLevelObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 	is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
@@ -205,7 +217,7 @@ func TestThatNoiseLevelObservedRequiresNoiseLevel(t *testing.T) {
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3324", "deviceID", time.Now().UTC()))
 
 	cbClient := &client.ContextBrokerClientMock{}
-	err := NoiseLevelObserved(context.Background(), *msg, cbClient)
+	err := NoiseLevelObserved(context.Background(), *msg, cbClient, stubBroker{})
 
 	is.Equal(err, ErrNoRelevantProperties)
 	is.Equal(len(cbClient.MergeEntityCalls()), 0)
@@ -218,7 +230,7 @@ func TestThatNoiseLevelObservedRequiresNoiseLevel(t *testing.T) {
 		is, cbClient := testSetup(t)
 		msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3302", "deviceID", time.Now().UTC()), iotcore.Environment("Lifebuoy"), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5500", "", nil, &p, 0, nil))
 
-		err := Lifebuoy(context.Background(), *msg, cbClient)
+		err := Lifebuoy(context.Background(), *msg, cbClient, stubBroker{})
 		is.NoErr(err)
 		is.Equal(len(cbClient.MergeEntityCalls()), 1)
 
@@ -253,7 +265,7 @@ func TestThatWaterConsumptionObservedIsPatchedIfAlreadyExisting(t *testing.T) {
 		},
 	}
 
-	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
+	err := WaterConsumptionObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	is.Equal(len(cbClient.CreateEntityCalls()), 1) // create entity should have been called once
@@ -295,7 +307,7 @@ func TestThatWaterConsumptionObservedIsCreatedIfNonExisting(t *testing.T) {
 		},
 	}
 
-	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
+	err := WaterConsumptionObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
@@ -337,7 +349,7 @@ func TestThatWaterConsumptionObservedMapsConservativeAlarms(t *testing.T) {
 		},
 	}
 
-	err := WaterConsumptionObserved(context.Background(), *msg, cbClient)
+	err := WaterConsumptionObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	b, _ := json.Marshal(cbClient.CreateEntityCalls()[0].Entity)
@@ -356,7 +368,7 @@ func TestThatWaterConsumptionIntegration(t *testing.T) {
 
 	cb := c.NewContextBrokerClient("http://localhost:64519", c.Debug("true"), c.Tenant("msva"))
 
-	err := WaterConsumptionObserved(context.Background(), msg, cb)
+	err := WaterConsumptionObserved(context.Background(), msg, cb, stubBroker{})
 	is.NoErr(err)
 }
 */
@@ -369,7 +381,7 @@ func TestThatWeatherObservedCanBeCreated(t *testing.T) {
 
 	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", ti), iotcore.Lat(62.362829), iotcore.Lon(17.509804), iotcore.Rec("5700", "", &temp, nil, 0, nil), iotcore.Rec("source", "src", nil, nil, 0, nil))
 
-	err := WeatherObserved(context.Background(), *msg, cbClient)
+	err := WeatherObserved(context.Background(), *msg, cbClient, stubBroker{})
 	is.NoErr(err)
 
 	is.Equal(len(cbClient.MergeEntityCalls()), 1)

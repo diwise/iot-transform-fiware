@@ -125,14 +125,13 @@ internal/presentation/messaging/{measurements,things}
 - `servicerunner` med kontrollserver, liveness och namngivna readiness-stubbar som returnerar OK.
 - Felreturnerande `initialize` och felkontrollerad handlerregistrering; endast `main` avgor exitkod.
 - Outbound-adaptrar (context-broker-klient, OAuth-fabrik, merge/create) i `internal/infrastructure`.
-- Inkommande RabbitMQ-adaptrar i `internal/presentation/messaging`, med use-case-grans via `TransformerFor` dar transformationen redan ar separerbar.
+- Inkommande RabbitMQ-adaptrar i `internal/presentation/messaging`: envelopeavkodning och brokeranrop, med transformationer och applikationsagda portar (`TransformerFor`, `EntityWriter`) i `internal/application`.
 - Karakteriseringstester for kontrakt, config och lifecycle; verifiering med `gofmt`, `go test ./...`, `go vet ./...`, `go build ./cmd/...` och Dockerbygge.
 
 ## Att inte kopiera
 
 - Tjansten saknar publik server (ingen `servicePort`); API-tjanster ska ha separat publik server pa `SERVICE_PORT`.
-- `application` och presentation importerar annu `internal/infrastructure/contextbroker` direkt. Full port/adapter-separation (application ager portar, infrastructure implementerar) ar framtida arbete.
-- Thing-adaptrarna fusionerar annu transformation och persistens; `measurements` visar den renare gransen via `TransformerFor`.
+- Presentation far importera bade `internal/application` och `internal/infrastructure`; `internal/application` far inte importera `internal/infrastructure`.
 - `FunctionUpdatedTopic`-konstanten i `cmd` ar deklarerad men oanvand lamnad kvarstand.
 
 # Links

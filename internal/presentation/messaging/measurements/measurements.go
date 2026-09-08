@@ -86,7 +86,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return
 		}
 
-		err = transformer(ctx, messageAccepted, cbClient)
+		err = transformer(ctx, messageAccepted, cbClient, contextbroker.EntityWriter{})
 		if err != nil {
 			if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
 				log.Debug("message did not contain any relevant properties")

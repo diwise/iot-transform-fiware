@@ -6,19 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
-	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
-	helpers "github.com/diwise/iot-transform-fiware/internal/application/decorators"
+	"github.com/diwise/context-broker/pkg/ngsild/client"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
-
-	"github.com/diwise/context-broker/pkg/datamodels/fiware"
-	. "github.com/diwise/context-broker/pkg/ngsild/types/properties"
 )
 
 type msg[T any] struct {
@@ -27,6 +21,27 @@ type msg[T any] struct {
 	Thing     T         `json:"thing"`
 	Tenant    string    `json:"tenant"`
 	Timestamp time.Time `json:"timestamp"`
+}
+
+// applyWrites executes transformed entity writes in order against the
+// broker. A harmless already-exists on create continues with the
+// remaining writes; any other error aborts the delivery.
+func applyWrites(ctx context.Context, cbClient client.ContextBrokerClient, writes []appthings.EntityWrite) error {
+	for _, w := range writes {
+		if w.Create {
+			err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
+			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
+				return fmt.Errorf("failed to create entity %s: %w", w.EntityID, err)
+			}
+			continue
+		}
+
+		if err := contextbroker.MergeOrCreate(ctx, cbClient, w.EntityID, w.TypeName, w.Props); err != nil {
+			return fmt.Errorf("failed to merge or create entity %s: %w", w.EntityID, err)
+		}
+	}
+
+	return nil
 }
 
 func NewBuildingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
@@ -46,26 +61,19 @@ func NewContainerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClien
 			return
 		}
 
-		c := m.Thing
+		writes := appthings.TransformContainer(m.Thing)
 
-		props := make([]entities.EntityDecoratorFunc, 0)
-
-		props = append(props, helpers.FillingLevel(c.Percent, c.ObservedAt))
-		props = append(props, decorators.Location(c.Location.Latitude, c.Location.Longitude))
-		props = append(props, decorators.DateObserved(c.ObservedAt.UTC().Format(time.RFC3339)))
-
-		log = log.With(slog.String("entity_id", c.EntityID()), slog.String("type_name", c.TypeName()), slog.String("tenant", c.Tenant))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		cbClient, err := cbClientFn(c.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, c.EntityID(), c.TypeName(), props)
-		if err != nil {
-			log.Error("failed to merge or create entity", slog.String("type_name", c.TypeName()), "err", err.Error())
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
+			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
 			return
 		}
 
@@ -85,30 +93,19 @@ func NewLifebuoyTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClient
 			return
 		}
 
-		lb := m.Thing
+		writes := appthings.TransformLifebuoy(m.Thing)
 
-		statusValue := map[bool]string{true: "on", false: "off"}
-		props := make([]entities.EntityDecoratorFunc, 0, 5)
-
-		props = append(props, decorators.DateLastValueReported(lb.ObservedAt.UTC().Format(time.RFC3339)))
-		props = append(props, decorators.Status(statusValue[lb.Presence], TxtObservedAt(lb.ObservedAt.UTC().Format(time.RFC3339))))
-		props = append(props, decorators.Location(lb.Location.Latitude, lb.Location.Longitude))
-
-		typeName := "Lifebuoy"
-		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, lb.AlternativeNameOrNameOrID())
-
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", lb.Tenant))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		cbClient, err := cbClientFn(lb.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, entityID, typeName, props)
-		if err != nil {
-			log.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
+			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
 			return
 		}
 
@@ -128,29 +125,19 @@ func NewDeskTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 			return
 		}
 
-		desk := m.Thing
+		writes := appthings.TransformDesk(m.Thing)
 
-		statusValue := map[bool]string{true: "on", false: "off"}
-		props := make([]entities.EntityDecoratorFunc, 0, 5)
-
-		props = append(props, decorators.DateLastValueReported(desk.ObservedAt.UTC().Format(time.RFC3339)))
-		props = append(props, decorators.Status(statusValue[desk.Presence], TxtObservedAt(desk.ObservedAt.UTC().Format(time.RFC3339))))
-		props = append(props, decorators.Location(desk.Location.Latitude, desk.Location.Longitude))
-
-		entityID := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, desk.AlternativeNameOrNameOrID())
-
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.DeviceTypeName), slog.String("tenant", desk.Tenant))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		cbClient, err := cbClientFn(desk.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, entityID, fiware.DeviceTypeName, props)
-		if err != nil {
-			log.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
+			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
 			return
 		}
 
@@ -174,84 +161,19 @@ func NewPointOfInterestTopicMessageHandler(cbClientFn contextbroker.ContextBroke
 			return
 		}
 
-		poi := m.Thing
+		writes := appthings.TransformPointOfInterest(m.Thing)
+		last := writes[len(writes)-1]
 
-		var poiTypePrefix, observationID, observationTypePrefix, observationTypeName string
-		observation := make([]entities.EntityDecoratorFunc, 0)
-
-		switch strings.ToLower(poi.TypeName()) {
-		case "beach":
-			observationTypePrefix = fiware.WaterQualityObservedIDPrefix
-			observationTypeName = fiware.WaterQualityObservedTypeName
-			poiTypePrefix = fiware.BeachIDPrefix
-
-			if poi.Current.Ref != "" {
-				observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.Current.Ref)
-				observation = append(observation, decorators.RefDevice(fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, poi.Current.Ref)))
-			} else {
-				observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.AlternativeNameOrNameOrID())
-			}
-
-			poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
-
-			if poi.Description != nil && *poi.Description != "" {
-				observation = append(observation, decorators.Description(*poi.Description))
-			}
-
-			cbClient, err := cbClientFn(poi.Tenant)
-			if err != nil {
-				log.Error("failed to create context broker client", "err", err.Error())
-				return
-			}
-
-			err = contextbroker.CreateNewEntity(ctx, cbClient, poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
-				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
-			})
-			if err != nil {
-				if !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
-					log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
-					return
-				}
-			}
-		default:
-			observationTypePrefix = fiware.WeatherObservedIDPrefix
-			observationTypeName = fiware.WeatherObservedTypeName
-			poiTypePrefix = fiware.PointOfInterestIDPrefix
-
-			observationID = fmt.Sprintf("%s%s", observationTypePrefix, poi.AlternativeNameOrNameOrID())
-		}
-
-		poiEntityID := fmt.Sprintf("%s%s", poiTypePrefix, poi.AlternativeNameOrNameOrID())
-
-		log = log.With(slog.String("entity_id", observationID), slog.String("ref_location", poiEntityID), slog.String("type_name", observationTypeName), slog.String("tenant", poi.Tenant))
+		log = log.With(slog.String("entity_id", last.EntityID), slog.String("type_name", last.TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		observation = append(observation,
-			helpers.RefLocation(poiEntityID),
-			decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
-			decorators.DateObserved(poi.ObservedAt.UTC().Format(time.RFC3339)),
-		)
-
-		if poi.Current.Value != nil {
-			observation = append(observation, helpers.Temperature(*poi.Current.Value, poi.Current.Timestamp.UTC()))
-		}
-
-		if poi.Description != nil && *poi.Description != "" {
-			observation = append(observation, decorators.Description(*poi.Description))
-		}
-
-		if poi.Current.Source != nil {
-			observation = append(observation, decorators.Source(*poi.Current.Source))
-		}
-
-		cbClient, err := cbClientFn(poi.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, observationID, observationTypeName, observation)
-		if err != nil {
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("could not merge or create point of interest", "err", err.Error())
 			return
 		}
@@ -265,8 +187,6 @@ func NewPumpingstationTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("pumpingstation received")
 
-		var statusValue = map[bool]string{true: "on", false: "off"}
-
 		m := msg[appthings.PumpingStation]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
@@ -274,42 +194,18 @@ func NewPumpingstationTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 			return
 		}
 
-		props := make([]entities.EntityDecoratorFunc, 0, 5)
+		writes := appthings.TransformPumpingStation(m.Thing)
 
-		p := m.Thing
-
-		observedAt := time.Now().UTC().Format(time.RFC3339)
-		if !p.ObservedAt.IsZero() {
-			observedAt = p.ObservedAt.UTC().Format(time.RFC3339)
-		}
-
-		if p.PumpingAt == nil {
-			props = append(props, decorators.DateObserved(observedAt))
-		} else {
-			props = append(props, decorators.DateObserved(observedAt))
-			pumpingAt := p.PumpingAt.UTC().Format(time.RFC3339)
-			props = append(props, decorators.Status(statusValue[p.Pumping], TxtObservedAt(pumpingAt)))
-		}
-
-		//timestamp := p.PumpingAt.UTC().Format(time.RFC3339)
-		//props = append(props, decorators.DateObserved(timestamp))
-		//props = append(props, decorators.Status(statusValue[p.Pumping], TxtObservedAt(timestamp)))
-		props = append(props, decorators.Location(p.Location.Latitude, p.Location.Longitude))
-
-		typeName := "SewagePumpingStation"
-		entityID := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, p.AlternativeNameOrNameOrID())
-
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", p.Tenant))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		cbClient, err := cbClientFn(p.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, entityID, "SewagePumpingStation", props)
-		if err != nil {
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
 			return
 		}
@@ -329,46 +225,19 @@ func NewRoomTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 			return
 		}
 
-		r := m.Thing
+		writes := appthings.TransformRoom(m.Thing)
 
-		var entityID string
-		props := make([]entities.EntityDecoratorFunc, 0)
-
-		entityID = fmt.Sprintf("%s%s:%s", fiware.IndoorEnvironmentObservedIDPrefix, r.TypeName(), r.AlternativeNameOrNameOrID())
-
-		ts := r.ObservedAt
-
-		if ts.IsZero() {
-			ts = time.Now()
-		}
-
-		props = append(props, decorators.Location(r.Location.Latitude, r.Location.Longitude))
-		props = append(props, decorators.DateObserved(helpers.FormatTime(ts)))
-		if r.Temperature.Value != nil {
-			props = append(props, helpers.Temperature(*r.Temperature.Value, ts))
-		}
-		props = append(props, helpers.Humidity(r.Humidity, ts))
-		props = append(props, helpers.Illuminance(r.Illuminance, ts))
-		props = append(props, helpers.CO2(r.CO2, ts))
-		if len(r.Name) > 0 {
-			props = append(props, helpers.Name(r.Name))
-		}
-		if len(r.AlternativeName) > 0 {
-			props = append(props, helpers.AlternativeName(r.AlternativeName))
-		}
-
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName), slog.String("tenant", r.Tenant))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		cbClient, err := cbClientFn(r.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, entityID, fiware.IndoorEnvironmentObservedTypeName, props)
-		if err != nil {
-			log.Error("failed to merge or create entity", "err", err.Error())
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
+			log.Error("failed to write entity", "err", err.Error())
 			return
 		}
 
@@ -388,131 +257,18 @@ func NewSewerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFac
 			return
 		}
 
-		s := m.Thing
+		writes := appthings.TransformSewer(m.Thing)
 
-		entityID := s.EntityID()
-		typeName := s.TypeName()
-
-		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", s.Tenant), slog.String("action", s.LastAction))
+		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant), slog.String("action", m.Thing.LastAction))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		props := make([]entities.EntityDecoratorFunc, 0, 4)
-		props = append(props, decorators.Location(s.Location.Latitude, s.Location.Longitude))
-
-		if s.Name != "" {
-			props = append(props, helpers.Name(s.Name))
-		}
-
-		if s.AlternativeName != "" {
-			props = append(props, helpers.AlternativeName(s.AlternativeName))
-		}
-
-		var observedAt string
-
-		if s.ObservedAt.IsZero() {
-			observedAt = time.Now().UTC().Format(time.RFC3339)
-		} else {
-			observedAt = s.ObservedAt.UTC().Format(time.RFC3339)
-		}
-
-		const (
-			OverflowStarted string = "overflow started"
-			OverflowStopped string = "overflow stopped"
-			OverflowUpdated string = "overflow updated"
-			OverflowUnknown string = "overflow unknown"
-		)
-
-		if s.Measured != nil {
-			ob := s.Measured.ObservedAt.UTC().Format(time.RFC3339)
-			props = append(props, decorators.Number("level", s.Measured.Level, ObservedAt(ob)))
-			props = append(props, decorators.Number("percent", s.Measured.Percent, ObservedAt(ob)))
-			props = append(props, decorators.DateObserved(observedAt))
-
-			log.Debug("measured level and percent", "sewer", s, "observedAt", observedAt)
-		}
-
-		/*
-			if s.CurrentLevel != 0 {
-				props = append(props, decorators.Number("level", s.CurrentLevel, ObservedAt(observedAt)))
-			}
-
-			if s.Percent != 0 {
-				props = append(props, decorators.Number("percent", s.Percent, ObservedAt(observedAt)))
-			}
-		*/
-
-		if s.LastAction == OverflowUnknown {
-			props = append(props, decorators.DateObserved(observedAt))
-		}
-
-		if s.LastAction == OverflowStarted || s.LastAction == OverflowUpdated {
-			props = append(props, decorators.DateObserved(observedAt))
-			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
-
-			overflow := fmt.Sprintf("%t", s.Overflow)
-			props = append(props, decorators.Status(overflow, TxtObservedAt(overflowAt)))
-
-			log.Debug("overflow started", slog.String("overflow", overflow), slog.String("observedAt", observedAt), slog.String("overflowAt", overflowAt))
-		}
-
-		if s.LastAction == OverflowStopped {
-			endAt := s.OverflowEndAt.UTC().Format(time.RFC3339)
-			overflowAt := s.OverflowAt.UTC().Format(time.RFC3339)
-			overflow := fmt.Sprintf("%t", s.Overflow)
-
-			props = append(props, decorators.DateObserved(observedAt))
-			props = append(props, decorators.Status(overflow, TxtObservedAt(endAt)))
-
-			log.Debug("overflow ended", slog.String("overflow", overflow), slog.String("observedAt", observedAt), slog.String("overflowAt", overflowAt), slog.String("endAt", endAt))
-		}
-
-		if s.Description != nil && *s.Description != "" {
-			props = append(props, decorators.Description(*s.Description))
-		}
-
-		if len(s.RefDevices) > 0 {
-			devices := []string{}
-			for _, d := range s.RefDevices {
-				devices = append(devices, d.DeviceID)
-			}
-
-			if len(devices) == 1 {
-				urn := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, devices[0])
-
-				//TODO: find :: and remove it in the right place...
-				if strings.Contains(urn, "::") {
-					log.Debug("replacing :: with : in URN (1)", slog.String("urn", urn))
-					urn = strings.ReplaceAll(urn, "::", ":")
-				}
-
-				props = append(props, decorators.RefDevice(urn))
-				props = append(props, decorators.Source(urn))
-			} else {
-				urns := []string{}
-				for _, d := range devices {
-					urn := fmt.Sprintf("%s%s", fiware.DeviceIDPrefix, d)
-
-					if strings.Contains(urn, "::") {
-						log.Debug("replacing :: with : in URN (2)", slog.String("urn", urn))
-						urn = strings.ReplaceAll(urn, "::", ":")
-					}
-
-					urns = append(urns, urn)
-				}
-
-				props = append(props, helpers.RefDevices(urns))
-				props = append(props, decorators.Source(urns[0]))
-			}
-		}
-
-		cbClient, err := cbClientFn(s.Tenant)
+		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
 			return
 		}
 
-		err = contextbroker.MergeOrCreate(ctx, cbClient, entityID, typeName, props)
-		if err != nil {
+		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to merge or create Sewer", "err", err.Error())
 			return
 		}

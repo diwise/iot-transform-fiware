@@ -15,7 +15,6 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 
-	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	//lint:ignore ST1001 "github.com/diwise/iot-transform-fiware/internal/application/decorators" is a valid import path
 	. "github.com/diwise/iot-transform-fiware/internal/application/decorators"
 
@@ -39,7 +38,14 @@ const (
 	WatermeterURN   string = "urn:oma:lwm2m:ext:3424"
 )
 
-type MeasurementTransformerFunc func(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error
+// EntityWriter persists transformed entities. It is owned by
+// application and implemented by infrastructure, so transformations
+// stay free of infrastructure imports.
+type EntityWriter interface {
+	MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id, typeName string, properties []entities.EntityDecoratorFunc) error
+}
+
+type MeasurementTransformerFunc func(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error
 
 var (
 	statusValue = map[bool]string{true: "on", false: "off"}
@@ -100,7 +106,7 @@ func timestamp(msg events.MessageAccepted) time.Time {
 	return ts
 }
 
-func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	const (
 		SensorValue         int = 5700
 		CarbonDioxide       int = 17
@@ -162,10 +168,10 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
 
-func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties,
@@ -188,10 +194,10 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }
 
-func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	const SensorValue int = 5700
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
@@ -220,9 +226,9 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
 }
-func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	const SensorValue int = 5700
 	noise, ok := msg.Pack().GetValue(finder(msg, LoudnessURN, SensorValue))
 	if !ok {
@@ -240,10 +246,10 @@ func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 
 	id := "urn:ngsi-ld:NoiseLevelObserved:" + msg.DeviceID()
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, "NoiseLevelObserved", properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, "NoiseLevelObserved", properties)
 }
 
-func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
 	properties = append(properties, decorators.DateObserved(msg.Timestamp.Format(time.RFC3339)))
@@ -285,11 +291,11 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
 /*
-func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	properties = append(properties, decorators.DateLastValueReported(msg.Timestamp.Format(time.RFC3339)))
@@ -309,11 +315,11 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 	typeName := "Lifebuoy"
 	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, msg.DeviceID())
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, typeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
 */
 
-func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	log := logging.GetFromContext(ctx)
 	properties := make([]entities.EntityDecoratorFunc, 0, 10)
 
@@ -384,7 +390,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", entityID))
 
-	err := contextbroker.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
+	err := broker.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
 	if err != nil {
 		return fmt.Errorf("unable to merge or create WaterConsumptionObserved: %w", err)
 	}
@@ -392,7 +398,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 	return nil
 }
 
-func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient, broker EntityWriter) error {
 	properties := make([]entities.EntityDecoratorFunc, 0, 5)
 
 	const SensorValue int = 5700
@@ -418,5 +424,5 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
+	return broker.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
 }
