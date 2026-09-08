@@ -7,17 +7,14 @@ import (
 	"net/http"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-type ContextBrokerClientFactoryFunc func(string) client.ContextBrokerClient
+type ContextBrokerClientFactoryFunc func(string) (client.ContextBrokerClient, error)
 
 func NewContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, serviceName, serviceVersion, oauth2ClientId, oauth2ClientSecret, oauth2TokenUrl string, oauthInsecureURL bool) ContextBrokerClientFactoryFunc {
-	log := logging.GetFromContext(ctx)
-
 	var tokenSource oauth2.TokenSource
 
 	if oauth2ClientId != "" && oauth2ClientSecret != "" && oauth2TokenUrl != "" {
@@ -48,25 +45,25 @@ func NewContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, servic
 		tokenSource = oauthConfig.TokenSource(ctx)
 	}
 
-	return func(tenant string) client.ContextBrokerClient {
+	return func(tenant string) (client.ContextBrokerClient, error) {
 		if tokenSource != nil {
 			token, err := tokenSource.Token()
 			if err != nil {
-				log.Error("failed to retrieve oauth2 token, continuing without authorization header", "err", err.Error())
-			} else {
-				return client.NewContextBrokerClient(
-					contextBrokerUrl,
-					client.Tenant(tenant),
-					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
-					client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
-				)
+				return nil, fmt.Errorf("failed to retrieve oauth2 token: %w", err)
 			}
+
+			return client.NewContextBrokerClient(
+				contextBrokerUrl,
+				client.Tenant(tenant),
+				client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+				client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
+			), nil
 		}
 
 		return client.NewContextBrokerClient(
 			contextBrokerUrl,
 			client.Tenant(tenant),
 			client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
-		)
+		), nil
 	}
 }

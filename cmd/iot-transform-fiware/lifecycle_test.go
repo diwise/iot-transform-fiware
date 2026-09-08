@@ -3,10 +3,17 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
@@ -26,7 +33,7 @@ func TestRegisterHandlersPropagatesError(t *testing.T) {
 		},
 	}
 
-	err := registerHandlers(messenger, func(string) client.ContextBrokerClient { return nil })
+	err := registerHandlers(messenger, func(string) (client.ContextBrokerClient, error) { return nil, nil })
 	is.True(err != nil)
 	is.True(errors.Is(err, want))
 }
@@ -45,7 +52,7 @@ func TestRegisterHandlersRegistersAllHandlers(t *testing.T) {
 		},
 	}
 
-	is.NoErr(registerHandlers(messenger, func(string) client.ContextBrokerClient { return nil }))
+	is.NoErr(registerHandlers(messenger, func(string) (client.ContextBrokerClient, error) { return nil, nil }))
 
 	filtered := messenger.RegisterTopicMessageHandlerWithFilterCalls()
 	is.Equal(len(filtered), 9)
@@ -70,20 +77,140 @@ func TestInitializeRejectsEmptyContextBrokerURL(t *testing.T) {
 	is.True(err != nil)
 }
 
-// BASE-001: an OAuth token failure must not crash the process. The
-// factory falls back to a client without authorization header so the
-// failure surfaces as a logged context broker error instead of a panic.
-func TestTokenFailureDoesNotPanic(t *testing.T) {
+// REV-001: a configured OAuth token failure must abort the delivery
+// without any broker call (no panic, no anonymous fallback). Verified
+// through the real container handler, factory and broker call path.
+func TestTokenFailureAbortsDeliveryWithoutBrokerCall(t *testing.T) {
 	is := is.New(t)
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer tokenServer.Close()
+
+	var brokerCalls int64
+	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&brokerCalls, 1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer brokerServer.Close()
 
 	factory := contextbroker.NewContextBrokerClientFactory(
 		context.Background(),
-		"http://context-broker", serviceName, "test",
-		"client-id", "client-secret", "http://127.0.0.1:1/token",
+		brokerServer.URL, serviceName, "test",
+		"client-id", "client-secret", tokenServer.URL,
 		false,
 	)
 
-	// Would panic before BASE-001; a panic here fails the test.
-	c := factory("default")
-	is.True(c != nil)
+	_, err := factory("default")
+	is.True(err != nil)
+
+	handler := things.NewContainerTopicMessageHandler(factory)
+	handler(context.Background(), containerMessage(t), slog.Default())
+
+	is.Equal(atomic.LoadInt64(&brokerCalls), int64(0))
 }
+
+// REV-001: a valid token produces exactly one authorized broker request.
+func TestSuccessfulDeliverySendsAuthorizedBrokerRequest(t *testing.T) {
+	is := is.New(t)
+
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"test-token","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenServer.Close()
+
+	var brokerCalls int64
+	var authHeader string
+	var mu sync.Mutex
+	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&brokerCalls, 1)
+		mu.Lock()
+		authHeader = r.Header.Get("Authorization")
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer brokerServer.Close()
+
+	factory := contextbroker.NewContextBrokerClientFactory(
+		context.Background(),
+		brokerServer.URL, serviceName, "test",
+		"client-id", "client-secret", tokenServer.URL,
+		false,
+	)
+
+	handler := things.NewContainerTopicMessageHandler(factory)
+	handler(context.Background(), containerMessage(t), slog.Default())
+
+	is.Equal(atomic.LoadInt64(&brokerCalls), int64(1))
+	mu.Lock()
+	defer mu.Unlock()
+	is.Equal(authHeader, "Bearer test-token")
+}
+
+// REV-001: deliberately unconfigured OAuth keeps working anonymously,
+// with exactly one broker request and no Authorization header.
+func TestAnonymousModeSkipsAuthorizationHeader(t *testing.T) {
+	is := is.New(t)
+
+	var brokerCalls int64
+	var authHeader string
+	var mu sync.Mutex
+	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&brokerCalls, 1)
+		mu.Lock()
+		authHeader = r.Header.Get("Authorization")
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer brokerServer.Close()
+
+	factory := contextbroker.NewContextBrokerClientFactory(
+		context.Background(),
+		brokerServer.URL, serviceName, "test",
+		"", "", "",
+		false,
+	)
+
+	handler := things.NewContainerTopicMessageHandler(factory)
+	handler(context.Background(), containerMessage(t), slog.Default())
+
+	is.Equal(atomic.LoadInt64(&brokerCalls), int64(1))
+	mu.Lock()
+	defer mu.Unlock()
+	is.Equal(authHeader, "")
+}
+
+func containerMessage(t *testing.T) *messaging.IncomingTopicMessageMock {
+	t.Helper()
+
+	return &messaging.IncomingTopicMessageMock{
+		BodyFunc: func() []byte { return []byte(containerEnvelopeJson) },
+		ContentTypeFunc: func() string {
+			return "application/vnd.diwise.container+json"
+		},
+		TopicNameFunc: func() string { return ThingUpdatedTopic },
+	}
+}
+
+const containerEnvelopeJson = `{
+	"id": "2bf440f4",
+	"type": "Container",
+	"thing": {
+		"id": "2bf440f4",
+		"type": "Container",
+		"subType": "WasteContainer",
+		"name": "Soptunnor.X",
+		"alternativeName": "Soptunnor.XY",
+		"location": {
+			"latitude": 62,
+			"longitude": 17
+		},
+		"observedAt": "2024-11-19T10:49:59Z",
+		"percent": 56,
+		"tenant": "default"
+	},
+	"tenant": "default",
+	"timestamp": "2024-11-19T10:49:59.748823813Z"
+}`

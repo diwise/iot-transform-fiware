@@ -38,8 +38,8 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewContainerTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewContainerTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())
@@ -72,8 +72,8 @@ func TestSewerMessage(t *testing.T) {
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewSewerTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewSewerTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())
@@ -106,8 +106,8 @@ func TestPumpingStationMessage(t *testing.T) {
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewPumpingstationTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewPumpingstationTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())
@@ -126,8 +126,8 @@ func TestPumpingStationMessageIntegration(t *testing.T) {
 
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
 
-	handler := NewPumpingstationTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewPumpingstationTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())
@@ -146,8 +146,8 @@ func TestSewerMessageIntegration(t *testing.T) {
 
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
 
-	handler := NewSewerTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewSewerTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())
@@ -252,8 +252,8 @@ func TestBeachMessage(t *testing.T) {
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewPointOfInterestTopicMessageHandler(func(s string) client.ContextBrokerClient {
-		return cb
+	handler := NewPointOfInterestTopicMessageHandler(func(s string) (client.ContextBrokerClient, error) {
+		return cb, nil
 	})
 
 	handler(ctx, itm, slog.Default())

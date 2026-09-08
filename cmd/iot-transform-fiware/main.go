@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
@@ -117,7 +116,7 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	// things
 	thingHandlers := []struct {
 		name    string
-		handler func(func(string) client.ContextBrokerClient) messaging.TopicMessageHandler
+		handler func(contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler
 		filter  messaging.MessageFilter
 	}{
 		{"building", things.NewBuildingTopicMessageHandler, building},

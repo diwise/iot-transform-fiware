@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-core/pkg/messaging/events"
 	appmeasurements "github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/senml"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
@@ -17,7 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-func NewMeasurementTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
 
 	log := logging.GetFromContext(context.Background())
 
@@ -80,7 +80,13 @@ func NewMeasurementTopicMessageHandler(cbClientFn func(string) client.ContextBro
 		log = log.With(slog.String("device_id", deviceID), slog.String("tenant", tenant), slog.String("measurement_type", measurementType))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = transformer(ctx, messageAccepted, cbClientFn(tenant))
+		cbClient, err := cbClientFn(tenant)
+		if err != nil {
+			log.Error("failed to create context broker client", "err", err.Error())
+			return
+		}
+
+		err = transformer(ctx, messageAccepted, cbClient)
 		if err != nil {
 			if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
 				log.Debug("message did not contain any relevant properties")
