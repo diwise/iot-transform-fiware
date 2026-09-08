@@ -72,14 +72,40 @@ func main() {
 		cbClientFn: factory,
 	}
 
-	runner, _ := initialize(ctx, flags, cfg)
+	runner, err := initialize(ctx, flags, cfg)
+	exitIf(err, logger, "failed to initialize service runner")
 
 	err = runner.Run(ctx)
 	exitIf(err, logger, "failed to start service runner")
 }
 
 func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunner.Runner[AppConfig], error) {
+	if flags[contextbrokerUrl] == "" {
+		return nil, fmt.Errorf("context broker URL is empty")
+	}
 
+	probes := map[string]k8shandlers.ServiceProber{
+		"rabbitmq": func(context.Context) (string, error) { return "ok", nil },
+	}
+
+	_, runner := servicerunner.New(ctx, *cfg,
+		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
+			pprof(), liveness(func() error { return nil }), readiness(probes),
+		),
+		onstarting(func(ctx context.Context, svcCfg *AppConfig) error {
+			svcCfg.messenger.Start()
+
+			return registerHandlers(svcCfg.messenger, svcCfg.cbClientFn)
+		}),
+		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
+			svcCfg.messenger.Close()
+			return nil
+		}))
+
+	return runner, nil
+}
+
+func registerHandlers(messenger messaging.MsgContext, cbClientFn ContextBrokerClientFactoryFunc) error {
 	var (
 		building        = messaging.MatchContentType("application/vnd.diwise.building+json")
 		container       = messaging.MatchContentType("application/vnd.diwise.container+json")
@@ -93,41 +119,35 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		desk = messaging.MatchContentType("application/vnd.diwise.desk+json")
 	)
 
-	probes := map[string]k8shandlers.ServiceProber{
-		"rabbitmq": func(context.Context) (string, error) { return "ok", nil },
+	// things
+	thingHandlers := []struct {
+		name    string
+		handler func(messaging.MsgContext, func(string) client.ContextBrokerClient) messaging.TopicMessageHandler
+		filter  messaging.MessageFilter
+	}{
+		{"building", things.NewBuildingTopicMessageHandler, building},
+		{"container", things.NewContainerTopicMessageHandler, container},
+		{"lifebuoy", things.NewLifebuoyTopicMessageHandler, lifebuoy},
+		{"passage", things.NewPassageTopicMessageHandler, passage},
+		{"pointofinterest", things.NewPointOfInterestTopicMessageHandler, pointofinterest},
+		{"pumpingstation", things.NewPumpingstationTopicMessageHandler, pumpingstation},
+		{"room", things.NewRoomTopicMessageHandler, room},
+		{"sewer", things.NewSewerTopicMessageHandler, sewer},
+		{"desk", things.NewDeskTopicMessageHandler, desk},
 	}
 
-	_, runner := servicerunner.New(ctx, *cfg,
-		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
-			pprof(), liveness(func() error { return nil }), readiness(probes),
-		), onstarting(func(ctx context.Context, svcCfg *AppConfig) (err error) {
-			return nil
-		}),
-		onstarting(func(ctx context.Context, svcCfg *AppConfig) error {
-			svcCfg.messenger.Start()
+	for _, h := range thingHandlers {
+		if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(messenger, cbClientFn), h.filter); err != nil {
+			return fmt.Errorf("failed to register %s handler: %w", h.name, err)
+		}
+	}
 
-			// things
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewBuildingTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), building)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewContainerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), container)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewLifebuoyTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), lifebuoy)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPassageTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), passage)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPointOfInterestTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pointofinterest)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewPumpingstationTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), pumpingstation)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewRoomTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), room)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewSewerTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), sewer)
-			//svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewWaterMeterTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), watermeter)
-			svcCfg.messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, things.NewDeskTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn), desk)
-			// measurements
-			svcCfg.messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(svcCfg.messenger, svcCfg.cbClientFn))
+	// measurements
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(messenger, cbClientFn)); err != nil {
+		return fmt.Errorf("failed to register measurements handler: %w", err)
+	}
 
-			return nil
-		}),
-		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
-			svcCfg.messenger.Close()
-			return nil
-		}))
-
-	return runner, nil
+	return nil
 }
 
 func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, FlagMap) {
@@ -215,16 +235,15 @@ func newContextBrokerClientFactory(ctx context.Context, contextBrokerUrl, servic
 		if tokenSource != nil {
 			token, err := tokenSource.Token()
 			if err != nil {
-				log.Error("failed to retrieve oauth2 token", "err", err.Error())
-				panic(err)
+				log.Error("failed to retrieve oauth2 token, continuing without authorization header", "err", err.Error())
+			} else {
+				return client.NewContextBrokerClient(
+					contextBrokerUrl,
+					client.Tenant(tenant),
+					client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
+					client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
+				)
 			}
-
-			return client.NewContextBrokerClient(
-				contextBrokerUrl,
-				client.Tenant(tenant),
-				client.UserAgent(fmt.Sprintf("%s/%s", serviceName, serviceVersion)),
-				client.RequestHeader("Authorization", []string{fmt.Sprintf("%s %s", token.TokenType, token.AccessToken)}),
-			)
 		}
 
 		return client.NewContextBrokerClient(
