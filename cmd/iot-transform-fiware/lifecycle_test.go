@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
@@ -75,7 +76,7 @@ func TestInitializeRejectsEmptyContextBrokerURL(t *testing.T) {
 func TestTokenFailureDoesNotPanic(t *testing.T) {
 	is := is.New(t)
 
-	factory := newContextBrokerClientFactory(
+	factory := contextbroker.NewContextBrokerClientFactory(
 		context.Background(),
 		"http://context-broker", serviceName, "test",
 		"client-id", "client-secret", "http://127.0.0.1:1/token",

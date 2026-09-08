@@ -12,8 +12,8 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
-	"github.com/diwise/iot-transform-fiware/internal/application/cip"
 	helpers "github.com/diwise/iot-transform-fiware/internal/application/decorators"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 
@@ -57,7 +57,7 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 		log = log.With(slog.String("entity_id", c.EntityID()), slog.String("type_name", c.TypeName()), slog.String("tenant", c.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(c.Tenant), c.EntityID(), c.TypeName(), props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(c.Tenant), c.EntityID(), c.TypeName(), props)
 		if err != nil {
 			log.Error("failed to merge or create entity", slog.String("type_name", c.TypeName()), "err", err.Error())
 			return
@@ -94,7 +94,7 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", lb.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(lb.Tenant), entityID, typeName, props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(lb.Tenant), entityID, typeName, props)
 		if err != nil {
 			log.Error("failed to merge or create entity", slog.String("type_name", typeName), "err", err.Error())
 			return
@@ -130,7 +130,7 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.DeviceTypeName), slog.String("tenant", desk.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(desk.Tenant), entityID, fiware.DeviceTypeName, props)
 		if err != nil {
 			log.Error("failed to merge or create entity", slog.String("type_name", fiware.DeviceTypeName), "err", err.Error())
 			return
@@ -180,11 +180,11 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 				observation = append(observation, decorators.Description(*poi.Description))
 			}
 
-			err = cip.CreateNewEntity(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
+			err = contextbroker.CreateNewEntity(ctx, cbClientFn(poi.Tenant), poiEntityID, poi.TypeName(), []entities.EntityDecoratorFunc{
 				decorators.Location(poi.Location.Latitude, poi.Location.Longitude),
 			})
 			if err != nil {
-				if !errors.Is(err, cip.ErrEntityAlreadyExists) {
+				if !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
 					log.Error(fmt.Sprintf("failed to create beach with id %s", poiEntityID), "err", err.Error())
 					return
 				}
@@ -220,7 +220,7 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 			observation = append(observation, decorators.Source(*poi.Current.Source))
 		}
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(poi.Tenant), observationID, observationTypeName, observation)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(poi.Tenant), observationID, observationTypeName, observation)
 		if err != nil {
 			log.Error("could not merge or create point of interest", "err", err.Error())
 			return
@@ -272,7 +272,7 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", typeName), slog.String("tenant", p.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(p.Tenant), entityID, "SewagePumpingStation", props)
 		if err != nil {
 			log.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
 			return
@@ -324,7 +324,7 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 		log = log.With(slog.String("entity_id", entityID), slog.String("type_name", fiware.IndoorEnvironmentObservedTypeName), slog.String("tenant", r.Tenant))
 		ctx = logging.NewContextWithLogger(ctx, log)
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(r.Tenant), entityID, fiware.IndoorEnvironmentObservedTypeName, props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(r.Tenant), entityID, fiware.IndoorEnvironmentObservedTypeName, props)
 		if err != nil {
 			log.Error("failed to merge or create entity", "err", err.Error())
 			return
@@ -463,7 +463,7 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 			}
 		}
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(s.Tenant), entityID, typeName, props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(s.Tenant), entityID, typeName, props)
 		if err != nil {
 			log.Error("failed to merge or create Sewer", "err", err.Error())
 			return
@@ -508,7 +508,7 @@ func NewWaterMeterTopicMessageHandler(messenger messaging.MsgContext, cbClientFn
 			props = append(props, decorators.Description(*w.Description))
 		}
 
-		err = cip.MergeOrCreate(ctx, cbClientFn(w.Tenant), entityID, fiware.WaterConsumptionObservedTypeName, props)
+		err = contextbroker.MergeOrCreate(ctx, cbClientFn(w.Tenant), entityID, fiware.WaterConsumptionObservedTypeName, props)
 		if err != nil {
 			l.Error("failed to merge or create entity", slog.String("type_name", fiware.WaterConsumptionObservedTypeName), "err", err.Error())
 			return

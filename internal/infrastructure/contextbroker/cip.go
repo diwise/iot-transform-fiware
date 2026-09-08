@@ -1,4 +1,4 @@
-package cip
+package contextbroker
 
 import (
 	"context"

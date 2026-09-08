@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
@@ -24,7 +25,7 @@ const (
 
 type AppConfig struct {
 	messenger  messaging.MsgContext
-	cbClientFn ContextBrokerClientFactoryFunc
+	cbClientFn contextbroker.ContextBrokerClientFactoryFunc
 }
 
 var onstarting = servicerunner.OnStarting[AppConfig]

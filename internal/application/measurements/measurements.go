@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 
-	"github.com/diwise/iot-transform-fiware/internal/application/cip"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	//lint:ignore ST1001 "github.com/diwise/iot-transform-fiware/internal/application/decorators" is a valid import path
 	. "github.com/diwise/iot-transform-fiware/internal/application/decorators"
 
@@ -260,7 +260,7 @@ func AirQualityObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.AirQualityObservedTypeName, properties)
 }
 
 func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -286,7 +286,7 @@ func Device(ctx context.Context, msg events.MessageAccepted, cbClient client.Con
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.DeviceTypeName, properties)
 }
 
 func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -318,7 +318,7 @@ func GreenspaceRecord(ctx context.Context, msg events.MessageAccepted, cbClient 
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.GreenspaceRecordTypeName, properties)
 }
 func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
 	const SensorValue int = 5700
@@ -338,7 +338,7 @@ func NoiseLevelObserved(ctx context.Context, msg events.MessageAccepted, cbClien
 
 	id := "urn:ngsi-ld:NoiseLevelObserved:" + msg.DeviceID()
 
-	return cip.MergeOrCreate(ctx, cbClient, id, "NoiseLevelObserved", properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, "NoiseLevelObserved", properties)
 }
 
 func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, cbClient client.ContextBrokerClient) error {
@@ -383,7 +383,7 @@ func IndoorEnvironmentObserved(ctx context.Context, msg events.MessageAccepted, 
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.IndoorEnvironmentObservedTypeName, properties)
 }
 
 /*
@@ -407,7 +407,7 @@ func Lifebuoy(ctx context.Context, msg events.MessageAccepted, cbClient client.C
 	typeName := "Lifebuoy"
 	id := fmt.Sprintf("urn:ngsi-ld:%s:%s", typeName, msg.DeviceID())
 
-	return cip.MergeOrCreate(ctx, cbClient, id, typeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, typeName, properties)
 }
 */
 
@@ -482,7 +482,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", entityID))
 
-	err := cip.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
+	err := contextbroker.MergeOrCreate(ctx, cbClient, entityID, fiware.WaterConsumptionObservedTypeName, propsForEachReading)
 	if err != nil {
 		return fmt.Errorf("unable to merge or create WaterConsumptionObserved: %w", err)
 	}
@@ -516,5 +516,5 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 
 	ctx = logging.NewContextWithLogger(ctx, logging.GetFromContext(ctx), slog.String("entity_id", id))
 
-	return cip.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
+	return contextbroker.MergeOrCreate(ctx, cbClient, id, fiware.WeatherObservedTypeName, properties)
 }
