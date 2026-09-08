@@ -93,7 +93,6 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | Variabel | Default | Notering |
 | --- | --- | --- |
 | `LISTEN_ADDRESS` | `0.0.0.0` | Galler kontrollservern |
-| `SERVICE_PORT` | `8080` | Las in men anvands ej; tjansten startar ingen publik server |
 | `CONTROL_PORT` | `8000` | Kontrollserver: pprof, liveness, `rabbitmq`-stubb som returnerar OK |
 | `NGSI_CB_URL` | `http://context-broker` |  |
 | `OAUTH2_TOKEN_URL` | (tom) | Utan fullstandiga OAuth-uppgifter skapas context-broker-klient utan token |
@@ -105,5 +104,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 Konsumerar `thing.updated` (filtrerat per content type) och `message.accepted`. Ingen `message.transformed` publiceras i nulaget.
 
 Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) eftersom tjansten saknar publik server. Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober.
+
+Extern paverkan (PILOT-003): den doda `SERVICE_PORT`-konfigurationen ar borttagen eftersom tjansten saknar publik server. Att satta `SERVICE_PORT` har inte langre nagon effekt; ta bort variabeln ur externa deploymentdefinitioner.
 # Links
 [iot-transform-fiware](https://diwise.github.io/) on diwise.github.io

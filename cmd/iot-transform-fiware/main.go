@@ -25,10 +25,9 @@ import (
 
 const serviceName string = "iot-transform-fiware"
 
-func defaultFlags() FlagMap {
-	return FlagMap{
+func defaultFlags() flagMap {
+	return flagMap{
 		listenAddress:    "0.0.0.0",
-		servicePort:      "8080",
 		controlPort:      "8000",
 		contextbrokerUrl: "http://context-broker",
 
@@ -63,7 +62,7 @@ func main() {
 
 	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], flags[oauth2InsecureURL] == "true")
 
-	cfg := &AppConfig{
+	cfg := &appConfig{
 		messenger:  messenger,
 		cbClientFn: factory,
 	}
@@ -75,7 +74,7 @@ func main() {
 	exitIf(err, logger, "failed to start service runner")
 }
 
-func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunner.Runner[AppConfig], error) {
+func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunner.Runner[appConfig], error) {
 	if flags[contextbrokerUrl] == "" {
 		return nil, fmt.Errorf("context broker URL is empty")
 	}
@@ -88,12 +87,12 @@ func initialize(ctx context.Context, flags FlagMap, cfg *AppConfig) (servicerunn
 		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
 			pprof(), liveness(func() error { return nil }), readiness(probes),
 		),
-		onstarting(func(ctx context.Context, svcCfg *AppConfig) error {
+		onstarting(func(ctx context.Context, svcCfg *appConfig) error {
 			svcCfg.messenger.Start()
 
 			return registerHandlers(svcCfg.messenger, svcCfg.cbClientFn)
 		}),
-		onshutdown(func(ctx context.Context, svcCfg *AppConfig) error {
+		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
 			svcCfg.messenger.Close()
 			return nil
 		}))
@@ -146,12 +145,11 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	return nil
 }
 
-func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, FlagMap) {
+func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, flagMap) {
 	// Allow environment variables to override certain defaults
 	envOrDef := env.GetVariableOrDefault
 
 	flags[listenAddress] = envOrDef(ctx, "LISTEN_ADDRESS", flags[listenAddress])
-	flags[servicePort] = envOrDef(ctx, "SERVICE_PORT", flags[servicePort])
 	flags[controlPort] = envOrDef(ctx, "CONTROL_PORT", flags[controlPort])
 	flags[contextbrokerUrl] = envOrDef(ctx, "NGSI_CB_URL", flags[contextbrokerUrl])
 	flags[oauth2TokenUrl] = envOrDef(ctx, "OAUTH2_TOKEN_URL", flags[oauth2TokenUrl])
@@ -160,7 +158,7 @@ func parseExternalConfig(ctx context.Context, flags FlagMap) (context.Context, F
 	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 
-	apply := func(f FlagType) func(string) error {
+	apply := func(f flagType) func(string) error {
 		return func(value string) error {
 			flags[f] = value
 			return nil

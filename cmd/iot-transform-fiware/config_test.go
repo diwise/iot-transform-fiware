@@ -30,9 +30,8 @@ func TestDefaultFlags(t *testing.T) {
 
 	flags := defaultFlags()
 
-	expected := map[FlagType]string{
+	expected := map[flagType]string{
 		listenAddress:      "0.0.0.0",
-		servicePort:        "8080",
 		controlPort:        "8000",
 		contextbrokerUrl:   "http://context-broker",
 		oauth2ClientId:     "",
@@ -83,8 +82,9 @@ func TestCLIOverridesEnv(t *testing.T) {
 }
 
 // BASE-002: LISTEN_ADDRESS and CONTROL_PORT follow the same env
-// convention as the reference service. SERVICE_PORT is still read but
-// unused since the service starts no public server.
+// convention as the reference service. PILOT-003: the dead SERVICE_PORT
+// flag was removed since the service starts no public server; setting
+// the SERVICE_PORT env var no longer has any effect.
 func TestServerAddressFlagsConfigurable(t *testing.T) {
 	is := is.New(t)
 	withCleanFlags(t, []string{"iot-transform-fiware"})
@@ -96,6 +96,18 @@ func TestServerAddressFlagsConfigurable(t *testing.T) {
 
 	is.Equal(flags[listenAddress], "127.0.0.1")
 	is.Equal(flags[controlPort], "9001")
+}
+
+// PILOT-003: the dead SERVICE_PORT flag was removed since the service
+// starts no public server. Setting SERVICE_PORT must have no effect.
+func TestServicePortEnvIsIgnored(t *testing.T) {
+	is := is.New(t)
+	withCleanFlags(t, []string{"iot-transform-fiware"})
+
+	t.Setenv("SERVICE_PORT", "9090")
+
+	_, flags := parseExternalConfig(context.Background(), defaultFlags())
+	is.Equal(flags, defaultFlags())
 }
 
 // HARM-004: locks log level parsing, including the silent debug fallback.

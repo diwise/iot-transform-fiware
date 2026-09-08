@@ -6,12 +6,11 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
 
-type FlagType int
-type FlagMap map[FlagType]string
+type flagType int
+type flagMap map[flagType]string
 
 const (
-	listenAddress FlagType = iota
-	servicePort
+	listenAddress flagType = iota
 	controlPort
 	contextbrokerUrl
 
@@ -23,16 +22,16 @@ const (
 	logLevel
 )
 
-type AppConfig struct {
+type appConfig struct {
 	messenger  messaging.MsgContext
 	cbClientFn contextbroker.ContextBrokerClientFactoryFunc
 }
 
-var onstarting = servicerunner.OnStarting[AppConfig]
-var onshutdown = servicerunner.OnShutdown[AppConfig]
-var webserver = servicerunner.WithHTTPServeMux[AppConfig]
-var listen = servicerunner.WithListenAddr[AppConfig]
-var port = servicerunner.WithPort[AppConfig]
-var pprof = servicerunner.WithPPROF[AppConfig]
-var liveness = servicerunner.WithK8SLivenessProbe[AppConfig]
-var readiness = servicerunner.WithK8SReadinessProbes[AppConfig]
+var onstarting = servicerunner.OnStarting[appConfig]
+var onshutdown = servicerunner.OnShutdown[appConfig]
+var webserver = servicerunner.WithHTTPServeMux[appConfig]
+var listen = servicerunner.WithListenAddr[appConfig]
+var port = servicerunner.WithPort[appConfig]
+var pprof = servicerunner.WithPPROF[appConfig]
+var liveness = servicerunner.WithK8SLivenessProbe[appConfig]
+var readiness = servicerunner.WithK8SReadinessProbes[appConfig]

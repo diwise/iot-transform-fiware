@@ -66,7 +66,7 @@ func TestInitializeRejectsEmptyContextBrokerURL(t *testing.T) {
 	flags := defaultFlags()
 	flags[contextbrokerUrl] = ""
 
-	_, err := initialize(context.Background(), flags, &AppConfig{})
+	_, err := initialize(context.Background(), flags, &appConfig{})
 	is.True(err != nil)
 }
 
