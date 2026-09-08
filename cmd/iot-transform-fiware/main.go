@@ -59,7 +59,7 @@ func main() {
 	)
 	exitIf(err, logger, "failed to init messenger")
 
-	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], flags[oauth2InsecureURL] == "true")
+	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags))
 
 	cfg := &appConfig{
 		messenger:  messenger,
@@ -142,6 +142,12 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	}
 
 	return nil
+}
+
+// oauthInsecure is the minimal production seam for the TLS-verification
+// toggle. Only the exact string "true" disables verification.
+func oauthInsecure(flags flagMap) bool {
+	return flags[oauth2InsecureURL] == "true"
 }
 
 func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, flagMap) {

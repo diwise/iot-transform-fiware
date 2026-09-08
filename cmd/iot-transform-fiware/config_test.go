@@ -121,3 +121,30 @@ func TestParseLogLevel(t *testing.T) {
 	is.Equal(parseLogLevel("error"), slog.LevelError)
 	is.Equal(parseLogLevel("bogus"), slog.LevelDebug)
 }
+
+// REV-015: only the exact string "true" disables TLS verification.
+// The test targets the production seam so a changed interpretation
+// breaks it.
+func TestOAuthInsecureInterpretation(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{"exact true", "true", true},
+		{"uppercase TRUE", "TRUE", false},
+		{"numeric 1", "1", false},
+		{"false", "false", false},
+		{"empty", "", false},
+		{"invalid", "bogus", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
+
+			flags := defaultFlags()
+			flags[oauth2InsecureURL] = tc.value
+
+			is.Equal(oauthInsecure(flags), tc.want)
+		})
+	}
+}
