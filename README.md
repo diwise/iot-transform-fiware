@@ -82,8 +82,25 @@ Testing is best done using unit tests. For integration testing the preferred way
 "NGSI_CB_URL":"<http://context-broker>"
 ```
 ## CLI flags
-none
+ - `loglevel` - Set the log level (overrides `LOG_LEVEL`)
+
 ## Configuration files
 none
+
+## Faktisk konfiguration (kod ar facit, HARM-002)
+Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt via `messaging.LoadConfiguration`.
+
+| Variabel | Default | Notering |
+| --- | --- | --- |
+| `SERVICE_PORT` | `8080` | Las in men anvands ej; tjansten startar ingen publik server |
+| `CONTROL_PORT` | `8000` | Kontrollserver: pprof, liveness, `rabbitmq`-stubb som returnerar OK. `LISTEN_ADDRESS` (`0.0.0.0`) ar hardkodat i flaggmodellen och kan varken styras via env eller CLI i nulaget |
+| `NGSI_CB_URL` | `http://context-broker` |  |
+| `OAUTH2_TOKEN_URL` | (tom) | Utan fullstandiga OAuth-uppgifter skapas context-broker-klient utan token |
+| `OAUTH2_CLIENT_ID` | (tom) |  |
+| `OAUTH2_CLIENT_SECRET` | (tom) |  |
+| `OAUTH2_REALM_INSECURE` | `true` | `true` stanger av TLS-verifiering |
+| `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
+
+Konsumerar `thing.updated` (filtrerat per content type) och `message.accepted`. Ingen `message.transformed` publiceras i nulaget.
 # Links
 [iot-transform-fiware](https://diwise.github.io/) on diwise.github.io
