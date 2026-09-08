@@ -6,26 +6,26 @@ import (
 	"time"
 )
 
-type thing struct {
+type Thing struct {
 	ID              string    `json:"id"`
 	Type            string    `json:"type"`
 	SubType         *string   `json:"subType,omitempty"`
 	Name            string    `json:"name"`
 	AlternativeName string    `json:"alternativeName,omitempty"`
 	Description     *string   `json:"description"`
-	Location        location  `json:"location"`
-	RefDevices      []device  `json:"refDevices,omitempty"`
+	Location        Location  `json:"location"`
+	RefDevices      []Device  `json:"refDevices,omitempty"`
 	ObservedAt      time.Time `json:"observedAt"`
 	Tenant          string    `json:"tenant"`
 }
 
 var nonSafeUriRegExp = regexp.MustCompile(`[^\w\-~:/?#\[\]@!$&'()*+,;=%.]+`)
 
-func (t thing) EntityID() string {
+func (t Thing) EntityID() string {
 	return fmt.Sprintf("urn:ngsi-ld:%s:%s", t.TypeName(), t.AlternativeNameOrNameOrID())
 }
 
-func (t thing) AlternativeNameOrNameOrID() string {
+func (t Thing) AlternativeNameOrNameOrID() string {
 	n := t.ID
 
 	if t.Name != "" {
@@ -41,7 +41,7 @@ func (t thing) AlternativeNameOrNameOrID() string {
 	return n
 }
 
-func (t thing) TypeName() string {
+func (t Thing) TypeName() string {
 	typeName := t.Type
 
 	if t.SubType != nil && *t.SubType != "" {
@@ -53,36 +53,36 @@ func (t thing) TypeName() string {
 	return typeName
 }
 
-type location struct {
+type Location struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
 
-type device struct {
+type Device struct {
 	DeviceID string `json:"deviceID"`
 }
 
-type container struct {
-	thing
+type Container struct {
+	Thing
 	CurrentLevel float64 `json:"currentLevel"`
 	Percent      float64 `json:"percent"`
 }
 
-type lifebuoy struct {
-	thing
+type Lifebuoy struct {
+	Thing
 	Presence bool `json:"presence"`
 }
 
-type desk struct {
-	thing
+type Desk struct {
+	Thing
 	Presence bool `json:"presence"`
 }
 
-type sewer struct {
-	thing
+type Sewer struct {
+	Thing
 	CurrentLevel   float64        `json:"currentLevel"`
 	Percent        float64        `json:"percent"`
-	Measured       *measured      `json:"measured,omitempty"`
+	Measured       *Measured      `json:"measured,omitempty"`
 	Overflow       bool           `json:"overflowObserved"`
 	OverflowAt     *time.Time     `json:"overflowObservedAt"`
 	OverflowEndAt  *time.Time     `json:"overflowEndedAt"`
@@ -91,19 +91,19 @@ type sewer struct {
 	LastAction     string         `json:"lastAction"`
 }
 
-type measured struct {
+type Measured struct {
 	Level      float64   `json:"level"`
 	Percent    float64   `json:"percent"`
 	ObservedAt time.Time `json:"observedAt"`
 }
 
-type pointOfInterest struct {
-	thing
-	Temperature measurement `json:"temperature"`
-	Current     measurement `json:"current"`
+type PointOfInterest struct {
+	Thing
+	Temperature Measurement `json:"temperature"`
+	Current     Measurement `json:"current"`
 }
 
-type measurement struct {
+type Measurement struct {
 	ID          string    `json:"id,omitzero"`
 	Urn         string    `json:"urn,omitzero"`
 	BoolValue   *bool     `json:"vb,omitempty"`
@@ -115,17 +115,17 @@ type measurement struct {
 	Ref         string    `json:"ref,omitzero"`
 }
 
-type room struct {
-	thing
-	Temperature measurement `json:"temperature"`
+type Room struct {
+	Thing
+	Temperature Measurement `json:"temperature"`
 	Humidity    float64     `json:"humidity"`
 	Illuminance float64     `json:"illuminance"`
 	CO2         float64     `json:"co2"`
 	Presence    bool        `json:"presence"`
 }
 
-type pumpingStation struct {
-	thing
+type PumpingStation struct {
+	Thing
 	Pumping        bool           `json:"pumpingObserved"`
 	PumpingAt      *time.Time     `json:"pumpingObservedAt"`
 	Duration       *time.Duration `json:"pumpingDuration"`

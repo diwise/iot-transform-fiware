@@ -32,14 +32,13 @@ func TestContainerTopicMessageHandler(t *testing.T) {
 			return &ngsild.CreateEntityResult{}, nil
 		},
 	}
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(wastecontainerJson) },
 		ContentTypeFunc: func() string { return "content-type" },
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewContainerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewContainerTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -67,14 +66,13 @@ func TestSewerMessage(t *testing.T) {
 			return &ngsild.CreateEntityResult{}, nil
 		},
 	}
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(sewerJson) },
 		ContentTypeFunc: func() string { return "content-type" },
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewSewerTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -102,14 +100,13 @@ func TestPumpingStationMessage(t *testing.T) {
 			return &ngsild.CreateEntityResult{}, nil
 		},
 	}
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(pumpingStationJson) },
 		ContentTypeFunc: func() string { return "content-type" },
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewPumpingstationTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -127,10 +124,9 @@ func TestPumpingStationMessageIntegration(t *testing.T) {
 	e := ""
 	cb := client.NewContextBrokerClient("http://localhost:63471", client.Debug("true"), client.Tenant("default"))
 
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(pumpingStationJson) }}
 
-	handler := NewPumpingstationTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewPumpingstationTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -148,10 +144,9 @@ func TestSewerMessageIntegration(t *testing.T) {
 	e := ""
 	cb := client.NewContextBrokerClient("http://localhost:1026", client.Tenant("default"), client.Debug("true"))
 
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(sewerJson) }}
 
-	handler := NewSewerTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewSewerTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -232,7 +227,6 @@ const sewerJson = `
 
 const pumpingStationJson = `{"id":"pump-001","type":"PumpingStation","thing":{"id":"pump-001","location":{"latitude":0,"longitude":0},"name":"","observedAt":"2025-01-15T07:47:38Z","pumpingCumulativeTime":0,"pumpingDuration":null,"pumpingObserved":false,"pumpingObservedAt":null,"refDevices":[{"deviceID":"ce3acc09ab62"}],"tenant":"default","type":"PumpingStation","validURN":["urn:oma:lwm2m:ext:3200"]},"tenant":"default","timestamp":"2025-01-15T07:47:40.360378603Z"}`
 
-
 func TestBeachMessage(t *testing.T) {
 	is := is.New(t)
 
@@ -252,14 +246,13 @@ func TestBeachMessage(t *testing.T) {
 			return &ngsild.CreateEntityResult{}, nil
 		},
 	}
-	msgCtx := &messaging.MsgContextMock{}
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(pointOfInterestJson) },
 		ContentTypeFunc: func() string { return "content-type" },
 		TopicNameFunc:   func() string { return "topic" },
 	}
 
-	handler := NewPointOfInterestTopicMessageHandler(msgCtx, func(s string) client.ContextBrokerClient {
+	handler := NewPointOfInterestTopicMessageHandler(func(s string) client.ContextBrokerClient {
 		return cb
 	})
 
@@ -267,7 +260,6 @@ func TestBeachMessage(t *testing.T) {
 
 	is.Equal(observationID, "urn:ngsi-ld:WaterQualityObserved:09089d61-8f40-5ac8-a631-c940dab1fc9b")
 }
-
 
 const pointOfInterestJson = `{
   "id": "71ed07e4-52c0-417c-be15-3110b8e1f4e8",

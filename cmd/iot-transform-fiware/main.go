@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
-	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
-	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
 
 	"github.com/diwise/messaging-golang/pkg/messaging"
 
@@ -118,7 +118,7 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	// things
 	thingHandlers := []struct {
 		name    string
-		handler func(messaging.MsgContext, func(string) client.ContextBrokerClient) messaging.TopicMessageHandler
+		handler func(func(string) client.ContextBrokerClient) messaging.TopicMessageHandler
 		filter  messaging.MessageFilter
 	}{
 		{"building", things.NewBuildingTopicMessageHandler, building},
@@ -133,13 +133,13 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	}
 
 	for _, h := range thingHandlers {
-		if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(messenger, cbClientFn), h.filter); err != nil {
+		if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(cbClientFn), h.filter); err != nil {
 			return fmt.Errorf("failed to register %s handler: %w", h.name, err)
 		}
 	}
 
 	// measurements
-	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(messenger, cbClientFn)); err != nil {
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(cbClientFn)); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
 

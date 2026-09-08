@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/matryer/is"
 )
 
@@ -15,7 +16,7 @@ import (
 func TestProducerEnvelopeShape(t *testing.T) {
 	is := is.New(t)
 
-	m := msg[container]{}
+	m := msg[appthings.Container]{}
 	is.NoErr(json.Unmarshal([]byte(wastecontainerJson), &m))
 
 	is.Equal(m.ID, "2bf440f4")

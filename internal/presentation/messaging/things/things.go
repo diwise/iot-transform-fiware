@@ -13,6 +13,7 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	helpers "github.com/diwise/iot-transform-fiware/internal/application/decorators"
+	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
@@ -29,17 +30,17 @@ type msg[T any] struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func NewBuildingTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewBuildingTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 	}
 }
 
-func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewContainerTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("container received")
 
-		m := msg[container]{}
+		m := msg[appthings.Container]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -67,12 +68,12 @@ func NewContainerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn 
 	}
 }
 
-func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewLifebuoyTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("lifebuoy received")
 
-		m := msg[lifebuoy]{}
+		m := msg[appthings.Lifebuoy]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			l.Error("failed to unmarshal message body", "err", err.Error())
@@ -104,12 +105,12 @@ func NewLifebuoyTopicMessageHandler(messenger messaging.MsgContext, cbClientFn f
 	}
 }
 
-func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewDeskTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("desk received")
 
-		m := msg[desk]{}
+		m := msg[appthings.Desk]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -140,16 +141,16 @@ func NewDeskTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 	}
 }
 
-func NewPassageTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewPassageTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 	}
 }
 
-func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewPointOfInterestTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 
-		m := msg[pointOfInterest]{}
+		m := msg[appthings.PointOfInterest]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -230,14 +231,14 @@ func NewPointOfInterestTopicMessageHandler(messenger messaging.MsgContext, cbCli
 	}
 }
 
-func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewPumpingstationTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("pumpingstation received")
 
 		var statusValue = map[bool]string{true: "on", false: "off"}
 
-		m := msg[pumpingStation]{}
+		m := msg[appthings.PumpingStation]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -281,12 +282,12 @@ func NewPumpingstationTopicMessageHandler(messenger messaging.MsgContext, cbClie
 		log.Debug("pumpingstation handled handled successfully")
 	}
 }
-func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewRoomTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("room received")
 
-		m := msg[room]{}
+		m := msg[appthings.Room]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -334,12 +335,12 @@ func NewRoomTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(
 	}
 }
 
-func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewSewerTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
 		log := l.With("content_type", itm.ContentType())
 		log.Debug("sewer received")
 
-		m := msg[sewer]{}
+		m := msg[appthings.Sewer]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			log.Error("failed to unmarshal message body", "err", err.Error())
@@ -474,9 +475,9 @@ func NewSewerTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func
 }
 
 /*
-func NewWaterMeterTopicMessageHandler(messenger messaging.MsgContext, cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
+func NewWaterMeterTopicMessageHandler(cbClientFn func(string) client.ContextBrokerClient) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) {
-		m := msg[watermeter]{}
+		m := msg[appthings.watermeter]{}
 		err := json.Unmarshal(itm.Body(), &m)
 		if err != nil {
 			l.Error("failed to unmarshal message body", "err", err.Error())
