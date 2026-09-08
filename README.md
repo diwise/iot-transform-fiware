@@ -106,5 +106,34 @@ Konsumerar `thing.updated` (filtrerat per content type) och `message.accepted`. 
 Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) eftersom tjansten saknar publik server. Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober.
 
 Extern paverkan (PILOT-003): den doda `SERVICE_PORT`-konfigurationen ar borttagen eftersom tjansten saknar publik server. Att satta `SERVICE_PORT` har inte langre nagon effekt; ta bort variabeln ur externa deploymentdefinitioner.
+# Harmoniseringspilot (PILOT-004)
+
+Denna tjanst var pilot for harmoniseringen mot malstrukturen
+`cmd/<tjanst>` + `internal/{application,infrastructure,presentation}`.
+Slutstruktur:
+
+```text
+cmd/iot-transform-fiware
+internal/application/{decorators,measurements,things}
+internal/infrastructure/contextbroker
+internal/presentation/messaging/{measurements,things}
+```
+
+## Monster att ateranvanda
+
+- Privat `flagType`, `flagMap` och `appConfig` i `cmd`, med precedensen default < env < CLI-flagga.
+- `servicerunner` med kontrollserver, liveness och namngivna readiness-stubbar som returnerar OK.
+- Felreturnerande `initialize` och felkontrollerad handlerregistrering; endast `main` avgor exitkod.
+- Outbound-adaptrar (context-broker-klient, OAuth-fabrik, merge/create) i `internal/infrastructure`.
+- Inkommande RabbitMQ-adaptrar i `internal/presentation/messaging`, med use-case-grans via `TransformerFor` dar transformationen redan ar separerbar.
+- Karakteriseringstester for kontrakt, config och lifecycle; verifiering med `gofmt`, `go test ./...`, `go vet ./...`, `go build ./cmd/...` och Dockerbygge.
+
+## Att inte kopiera
+
+- Tjansten saknar publik server (ingen `servicePort`); API-tjanster ska ha separat publik server pa `SERVICE_PORT`.
+- `application` och presentation importerar annu `internal/infrastructure/contextbroker` direkt. Full port/adapter-separation (application ager portar, infrastructure implementerar) ar framtida arbete.
+- Thing-adaptrarna fusionerar annu transformation och persistens; `measurements` visar den renare gransen via `TransformerFor`.
+- `FunctionUpdatedTopic`-konstanten i `cmd` ar deklarerad men oanvand lamnad kvarstand.
+
 # Links
 [iot-transform-fiware](https://diwise.github.io/) on diwise.github.io
