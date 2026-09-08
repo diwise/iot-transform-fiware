@@ -24,7 +24,7 @@ COPY --from=builder --chown=1001 /app/cmd/iot-transform-fiware/iot-transform-fiw
 
 RUN chown 1001 /opt/diwise
 
-EXPOSE 8080
+EXPOSE 8000
 USER 1001
 
 ENTRYPOINT ["/opt/diwise/iot-transform-fiware"]

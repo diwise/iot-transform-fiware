@@ -82,12 +82,10 @@ func TestCLIOverridesEnv(t *testing.T) {
 	is.Equal(flags[logLevel], "error")
 }
 
-// HARM-004: locks the current limitations that LISTEN_ADDRESS and
-// CONTROL_PORT exist in the flag model but can be controlled neither via
-// env nor CLI, and that SERVICE_PORT is read but unused since the service
-// starts no public server. Changing any of this is a deliberate decision
-// with external impact.
-func TestServerAddressFlagsNotExternallyConfigurable(t *testing.T) {
+// BASE-002: LISTEN_ADDRESS and CONTROL_PORT follow the same env
+// convention as the reference service. SERVICE_PORT is still read but
+// unused since the service starts no public server.
+func TestServerAddressFlagsConfigurable(t *testing.T) {
 	is := is.New(t)
 	withCleanFlags(t, []string{"iot-transform-fiware"})
 
@@ -96,8 +94,8 @@ func TestServerAddressFlagsNotExternallyConfigurable(t *testing.T) {
 
 	_, flags := parseExternalConfig(context.Background(), defaultFlags())
 
-	is.Equal(flags[listenAddress], "0.0.0.0")
-	is.Equal(flags[controlPort], "8000")
+	is.Equal(flags[listenAddress], "127.0.0.1")
+	is.Equal(flags[controlPort], "9001")
 }
 
 // HARM-004: locks log level parsing, including the silent debug fallback.
