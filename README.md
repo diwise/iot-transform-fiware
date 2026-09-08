@@ -98,8 +98,17 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `OAUTH2_TOKEN_URL` | (tom) | Utan fullstandiga OAuth-uppgifter skapas context-broker-klient utan token |
 | `OAUTH2_CLIENT_ID` | (tom) |  |
 | `OAUTH2_CLIENT_SECRET` | (tom) |  |
-| `OAUTH2_REALM_INSECURE` | `true` | `true` stanger av TLS-verifiering |
+| `OAUTH2_REALM_INSECURE` | `true` | Endast exakt `true` stanger av TLS-verifiering |
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
+| `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
+| `RABBITMQ_PORT` | `5672` |  |
+| `RABBITMQ_VHOST` | `/` |  |
+| `RABBITMQ_USER` | `user` |  |
+| `RABBITMQ_PASS` | `bitnami` |  |
+| `RABBITMQ_DISABLED` | `false` |  |
+| `RABBITMQ_INIT_TIMEOUT` | `10` | Sekunder |
+
+Health paths pa kontrollservern (`CONTROL_PORT`): `/health`, `/healthz`, `/livez`, `/readyz`, `/readyz/{check}`.
 
 Konsumerar `thing.updated` (filtrerat per content type) och `message.accepted`. Ingen `message.transformed` publiceras i nulaget.
 
