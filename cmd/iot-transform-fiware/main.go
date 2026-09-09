@@ -78,9 +78,7 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 		return nil, fmt.Errorf("context broker URL is empty")
 	}
 
-	probes := map[string]k8shandlers.ServiceProber{
-		"rabbitmq": func(context.Context) (string, error) { return "ok", nil },
-	}
+	probes := readinessProbes()
 
 	_, runner := servicerunner.New(ctx, *cfg,
 		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
@@ -97,6 +95,14 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 		}))
 
 	return runner, nil
+}
+
+// readinessProbes returns the named readiness stubs. Per harmonization
+// standard they always report OK and never call any dependency.
+func readinessProbes() map[string]k8shandlers.ServiceProber {
+	return map[string]k8shandlers.ServiceProber{
+		"rabbitmq": func(context.Context) (string, error) { return "ok", nil },
+	}
 }
 
 func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.ContextBrokerClientFactoryFunc) error {

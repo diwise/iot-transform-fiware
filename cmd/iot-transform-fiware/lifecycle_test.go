@@ -18,6 +18,19 @@ import (
 	"github.com/matryer/is"
 )
 
+// FINAL-001: readiness-stubben rapporterar alltid OK utan att röra
+// något beroende.
+func TestReadinessStubsAlwaysOK(t *testing.T) {
+	is := is.New(t)
+
+	probes := readinessProbes()
+	is.Equal(len(probes), 1)
+
+	status, err := probes["rabbitmq"](context.Background())
+	is.NoErr(err)
+	is.Equal(status, "ok")
+}
+
 // BASE-001: handler registration failures must propagate instead of
 // being silently ignored at startup.
 func TestRegisterHandlersPropagatesError(t *testing.T) {
