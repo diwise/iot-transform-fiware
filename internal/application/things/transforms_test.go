@@ -22,18 +22,16 @@ func TestTransformContainerReturnsSingleMergeWrite(t *testing.T) {
 	is := is.New(t)
 
 	writes := TransformContainer(Container{
-		Thing: Thing{
-			ID:              "2bf440f4",
-			Type:            "Container",
-			SubType:         strptr("WasteContainer"),
-			Name:            "Soptunnor.X",
-			AlternativeName: "Soptunnor.XY",
-			Location:        testLocation(),
-			ObservedAt:      testTime(),
-			Tenant:          "default",
-		},
-		CurrentLevel: 0.91,
-		Percent:      56,
+		ID:              "2bf440f4",
+		Type:            "Container",
+		SubType:         new("WasteContainer"),
+		Name:            "Soptunnor.X",
+		AlternativeName: "Soptunnor.XY",
+		Location:        testLocation(),
+		ObservedAt:      testTime(),
+		Tenant:          "default",
+		CurrentLevel:    0.91,
+		Percent:         56,
 	})
 
 	is.Equal(len(writes), 1)
@@ -48,15 +46,13 @@ func TestTransformPointOfInterestBeachReturnsCreatePlusMerge(t *testing.T) {
 
 	ref := "12345"
 	writes := TransformPointOfInterest(PointOfInterest{
-		Thing: Thing{
-			ID:         "poi-1",
-			Type:       "PointOfInterest",
-			SubType:    strptr("Beach"),
-			Location:   testLocation(),
-			ObservedAt: testTime(),
-			Tenant:     "default",
-		},
-		Temperature: Measurement{Value: float64ptr(21.5), Timestamp: testTime()},
+		ID:          "poi-1",
+		Type:        "PointOfInterest",
+		SubType:     new("Beach"),
+		Location:    testLocation(),
+		ObservedAt:  testTime(),
+		Tenant:      "default",
+		Temperature: Measurement{Value: new(21.5), Timestamp: testTime()},
 		Current:     Measurement{Ref: ref, Timestamp: testTime()},
 	})
 
@@ -69,14 +65,12 @@ func TestTransformPointOfInterestDefaultReturnsSingleMerge(t *testing.T) {
 	is := is.New(t)
 
 	writes := TransformPointOfInterest(PointOfInterest{
-		Thing: Thing{
-			ID:         "poi-2",
-			Type:       "PointOfInterest",
-			Location:   testLocation(),
-			ObservedAt: testTime(),
-			Tenant:     "default",
-		},
-		Temperature: Measurement{Value: float64ptr(21.5), Timestamp: testTime()},
+		ID:          "poi-2",
+		Type:        "PointOfInterest",
+		Location:    testLocation(),
+		ObservedAt:  testTime(),
+		Tenant:      "default",
+		Temperature: Measurement{Value: new(21.5), Timestamp: testTime()},
 	})
 
 	is.Equal(len(writes), 1)
@@ -87,13 +81,11 @@ func TestTransformSewerReturnsSingleMergeWrite(t *testing.T) {
 	is := is.New(t)
 
 	writes := TransformSewer(Sewer{
-		Thing: Thing{
-			ID:         "25ba0559",
-			Type:       "Sewer",
-			Location:   testLocation(),
-			ObservedAt: testTime(),
-			Tenant:     "default",
-		},
+		ID:         "25ba0559",
+		Type:       "Sewer",
+		Location:   testLocation(),
+		ObservedAt: testTime(),
+		Tenant:     "default",
 		LastAction: "overflow unknown",
 	})
 
@@ -102,6 +94,8 @@ func TestTransformSewerReturnsSingleMergeWrite(t *testing.T) {
 	is.True(len(writes[0].Props) > 0)
 }
 
-func strptr(s string) *string { return &s }
+//go:fix inline
+func strptr(s string) *string { return new(s) }
 
-func float64ptr(f float64) *float64 { return &f }
+//go:fix inline
+func float64ptr(f float64) *float64 { return new(f) }

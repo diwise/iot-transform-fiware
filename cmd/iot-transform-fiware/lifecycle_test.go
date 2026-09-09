@@ -101,9 +101,9 @@ func TestTokenFailureAbortsDeliveryWithoutBrokerCall(t *testing.T) {
 	}))
 	defer tokenServer.Close()
 
-	var brokerCalls int64
+	var brokerCalls atomic.Int64
 	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&brokerCalls, 1)
+		brokerCalls.Add(1)
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer brokerServer.Close()
@@ -121,7 +121,7 @@ func TestTokenFailureAbortsDeliveryWithoutBrokerCall(t *testing.T) {
 	handler := things.NewContainerTopicMessageHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
-	is.Equal(atomic.LoadInt64(&brokerCalls), int64(0))
+	is.Equal(brokerCalls.Load(), int64(0))
 }
 
 // REV-001: a valid token produces exactly one authorized broker request.
@@ -134,11 +134,11 @@ func TestSuccessfulDeliverySendsAuthorizedBrokerRequest(t *testing.T) {
 	}))
 	defer tokenServer.Close()
 
-	var brokerCalls int64
+	var brokerCalls atomic.Int64
 	var authHeader string
 	var mu sync.Mutex
 	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&brokerCalls, 1)
+		brokerCalls.Add(1)
 		mu.Lock()
 		authHeader = r.Header.Get("Authorization")
 		mu.Unlock()
@@ -156,7 +156,7 @@ func TestSuccessfulDeliverySendsAuthorizedBrokerRequest(t *testing.T) {
 	handler := things.NewContainerTopicMessageHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
-	is.Equal(atomic.LoadInt64(&brokerCalls), int64(1))
+	is.Equal(brokerCalls.Load(), int64(1))
 	mu.Lock()
 	defer mu.Unlock()
 	is.Equal(authHeader, "Bearer test-token")
@@ -167,11 +167,11 @@ func TestSuccessfulDeliverySendsAuthorizedBrokerRequest(t *testing.T) {
 func TestAnonymousModeSkipsAuthorizationHeader(t *testing.T) {
 	is := is.New(t)
 
-	var brokerCalls int64
+	var brokerCalls atomic.Int64
 	var authHeader string
 	var mu sync.Mutex
 	brokerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&brokerCalls, 1)
+		brokerCalls.Add(1)
 		mu.Lock()
 		authHeader = r.Header.Get("Authorization")
 		mu.Unlock()
@@ -189,7 +189,7 @@ func TestAnonymousModeSkipsAuthorizationHeader(t *testing.T) {
 	handler := things.NewContainerTopicMessageHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
-	is.Equal(atomic.LoadInt64(&brokerCalls), int64(1))
+	is.Equal(brokerCalls.Load(), int64(1))
 	mu.Lock()
 	defer mu.Unlock()
 	is.Equal(authHeader, "")
