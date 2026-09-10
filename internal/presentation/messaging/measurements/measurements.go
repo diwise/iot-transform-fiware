@@ -84,6 +84,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 
 			transformer := appmeasurements.TransformerFor(measurementType)
 			if transformer == nil {
+				log.Debug("no transformer for measurement type, skipping", "measurement_type", measurementType)
 				continue
 			}
 
