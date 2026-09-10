@@ -6,7 +6,7 @@ require (
 	github.com/diwise/context-broker v0.0.0-20260224082514-5dacca8690cd
 	github.com/diwise/iot-core v0.0.0-20260224141203-6271f82d756e
 	github.com/diwise/messaging-golang v0.0.0-20250628135946-f23f34d06003
-	github.com/diwise/senml v0.0.0-20251022134045-d0045d1dd610
+	github.com/diwise/senml v0.0.0-20260909175035-ac3958b9698e
 	github.com/diwise/service-chassis v0.0.0-20260602135046-9f4adf349775
 	github.com/google/uuid v1.6.0
 	github.com/matryer/is v1.4.1
