@@ -76,6 +76,27 @@ func TransformerFor(measurementType string) MeasurementTransformerFunc {
 	return transformers[measurementType]
 }
 
+// findShortName matches records by short or resolved (fully qualified)
+// name. Identical to FindByName for legacy raw packs; resolved records
+// carry their full prefix.
+func findShortName(n string) senml.RecordFinder {
+	return func(r senml.Record) bool {
+		return r.Name == n || strings.HasSuffix(r.Name, "/"+n)
+	}
+}
+
+// findHeader matches object headers by short or resolved name. Headers
+// carry the object URN; the URN requirement keeps numeric resource records
+// ending in /0 from matching.
+func findHeader() senml.RecordFinder {
+	return func(r senml.Record) bool {
+		if r.Name != "0" && !strings.HasSuffix(r.Name, "/0") {
+			return false
+		}
+		return strings.HasPrefix(r.StringValue, "urn:oma:lwm2m:")
+	}
+}
+
 func finder(p events.MessageAccepted, objectURN string, n int) senml.RecordFinder {
 	falseFn := func(r senml.Record) bool {
 		return false
@@ -83,23 +104,18 @@ func finder(p events.MessageAccepted, objectURN string, n int) senml.RecordFinde
 
 	//TODO: refactor code not to use this logic. Use messaging with filters instead?
 
-	urn, ok := p.Pack().GetStringValue(senml.FindByName("0"))
-	if !ok {
+	if !strings.EqualFold(events.GetObjectURN(p.Pack()), objectURN) {
 		return falseFn
 	}
 
-	if !strings.EqualFold(urn, objectURN) {
-		return falseFn
-	}
-
-	return senml.FindByName(strconv.Itoa(n))
+	return findShortName(strconv.Itoa(n))
 }
 
 func timestamp(msg events.MessageAccepted) time.Time {
 
 	//TODO: get time from the actual record instead
 
-	ts, ok := msg.Pack().GetTime(senml.FindByName("0"))
+	ts, ok := msg.Pack().GetTime(findHeader())
 	if !ok {
 		return time.Now().UTC()
 	}
@@ -344,7 +360,7 @@ func WaterConsumptionObserved(ctx context.Context, msg events.MessageAccepted, c
 		return math.Floor((m3 + 0.0005) * 1000)
 	}
 
-	r, ok := msg.Pack().GetRecord(senml.FindByName(CumulatedWaterVolume))
+	r, ok := msg.Pack().GetRecord(findShortName(CumulatedWaterVolume))
 
 	if !ok {
 		log.Debug("message does not contain a record for CumulatedWaterVolume, skipping", "device_id", msg.DeviceID())
@@ -412,7 +428,7 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 		Temperature(temp, timestamp(msg)),
 	)
 
-	if src, ok := msg.Pack().GetStringValue(senml.FindByName("source")); ok {
+	if src, ok := msg.Pack().GetStringValue(findShortName("source")); ok {
 		properties = append(properties, decorators.Source(src))
 	}
 

@@ -4,7 +4,7 @@ go 1.27
 
 require (
 	github.com/diwise/context-broker v0.0.0-20260224082514-5dacca8690cd
-	github.com/diwise/iot-core v0.0.0-20260224141203-6271f82d756e
+	github.com/diwise/iot-core v0.0.0-20260910092530-e290ffe2f6bc
 	github.com/diwise/messaging-golang v0.0.0-20260910052156-098a088f6b4f
 	github.com/diwise/senml v0.0.0-20260909175035-ac3958b9698e
 	github.com/diwise/service-chassis v0.0.0-20260602135046-9f4adf349775
@@ -27,7 +27,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.67.5 // indirect
+	github.com/prometheus/common v0.68.0 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/rabbitmq/amqp091-go v1.14.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -42,7 +42,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
