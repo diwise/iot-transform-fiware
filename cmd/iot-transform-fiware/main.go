@@ -54,9 +54,10 @@ func main() {
 
 	logging.SetLogLevel(parseLogLevel(flags[logLevel]))
 
-	messenger, err := messaging.Initialize(
-		ctx, messaging.LoadConfiguration(ctx, serviceName, logger),
-	)
+	messengerConfig, err := messaging.LoadConfiguration(ctx, serviceName, logger)
+	exitIf(err, logger, "messaging configuration error")
+
+	messenger, err := messaging.Initialize(ctx, messengerConfig)
 	exitIf(err, logger, "failed to init messenger")
 
 	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags))
@@ -85,12 +86,16 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 			pprof(), liveness(func() error { return nil }), readiness(probes),
 		),
 		onstarting(func(ctx context.Context, svcCfg *appConfig) error {
-			svcCfg.messenger.Start()
+			if err := svcCfg.messenger.Start(ctx); err != nil {
+				return fmt.Errorf("failed to start messenger: %w", err)
+			}
 
 			return registerHandlers(svcCfg.messenger, svcCfg.cbClientFn)
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
-			svcCfg.messenger.Close()
+			if err := svcCfg.messenger.Shutdown(ctx); err != nil {
+				logging.GetFromContext(ctx).Debug("failed to shut down messenger", "err", err.Error())
+			}
 			return nil
 		}))
 

@@ -41,7 +41,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		log.Error("failed to create otel transformed measurements counter", "err", err.Error())
 	}
 
-	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) error {
 		messageAccepted := events.MessageAccepted{}
 
 		log = log.With(slog.String("content_type", msg.ContentType()))
@@ -49,7 +49,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		err := json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
 			log.Error("unable to unmarshal incoming message", "err", err.Error())
-			return
+			return messaging.Permanent(err)
 		}
 
 		totalCounter.Add(ctx, 1)
@@ -57,24 +57,24 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		measurementType := getMeasurementType(messageAccepted)
 		if measurementType == "" {
 			log.Debug("unable to determine measurement type from message, skipping")
-			return
+			return nil
 		}
 
 		transformer := appmeasurements.TransformerFor(measurementType)
 		if transformer == nil {
-			return
+			return nil
 		}
 
 		deviceID := messageAccepted.DeviceID()
 		if deviceID == "" {
 			log.Debug("device id is missing in message, skipping")
-			return
+			return nil
 		}
 
 		tenant := messageAccepted.Tenant()
 		if tenant == "" {
 			log.Debug("tenant is missing in message, skipping")
-			return
+			return nil
 		}
 
 		log = log.With(slog.String("device_id", deviceID), slog.String("tenant", tenant), slog.String("measurement_type", measurementType))
@@ -83,24 +83,28 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		cbClient, err := cbClientFn(tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return
+			return nil
 		}
 
+		// Bevarad semantik: transformeringsfel loggas och ackas.
+		// Klassificering till Temporary/Permanent kräver verifierad
+		// idempotens mot context broker.
 		err = transformer(ctx, messageAccepted, cbClient, contextbroker.EntityWriter{})
 		if err != nil {
 			if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
 				log.Debug("message did not contain any relevant properties")
-				return
+				return nil
 			}
 
 			log.Error("transform failed", "err", err.Error())
 
-			return
+			return nil
 		}
 
 		transformedCounter.Add(ctx, 1)
 
 		log.Debug("measurement handled successfully")
+		return nil
 	}
 }
 
