@@ -68,41 +68,6 @@ type Container struct {
 	Percent      float64 `json:"percent"`
 }
 
-type Lifebuoy struct {
-	Thing
-	Presence bool `json:"presence"`
-}
-
-type Desk struct {
-	Thing
-	Presence bool `json:"presence"`
-}
-
-type Sewer struct {
-	Thing
-	CurrentLevel   float64        `json:"currentLevel"`
-	Percent        float64        `json:"percent"`
-	Measured       *Measured      `json:"measured,omitempty"`
-	Overflow       bool           `json:"overflowObserved"`
-	OverflowAt     *time.Time     `json:"overflowObservedAt"`
-	OverflowEndAt  *time.Time     `json:"overflowEndedAt"`
-	Duration       *time.Duration `json:"overflowDuration"`
-	CumulativeTime time.Duration  `json:"overflowCumulativeTime"`
-	LastAction     string         `json:"lastAction"`
-}
-
-type Measured struct {
-	Level      float64   `json:"level"`
-	Percent    float64   `json:"percent"`
-	ObservedAt time.Time `json:"observedAt"`
-}
-
-type PointOfInterest struct {
-	Thing
-	Temperature Measurement `json:"temperature"`
-	Current     Measurement `json:"current"`
-}
-
 type Measurement struct {
 	ID          string    `json:"id,omitzero"`
 	Urn         string    `json:"urn,omitzero"`
@@ -122,12 +87,4 @@ type Room struct {
 	Illuminance float64     `json:"illuminance"`
 	CO2         float64     `json:"co2"`
 	Presence    bool        `json:"presence"`
-}
-
-type PumpingStation struct {
-	Thing
-	Pumping        bool           `json:"pumpingObserved"`
-	PumpingAt      *time.Time     `json:"pumpingObservedAt"`
-	Duration       *time.Duration `json:"pumpingDuration"`
-	CumulativeTime time.Duration  `json:"pumpingCumulativeTime"`
 }

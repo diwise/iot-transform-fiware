@@ -119,3 +119,21 @@ func shortResourceName(name string) string {
 	}
 	return name
 }
+
+// findHeader matchar objektheaders på kort eller fullständigt namn. Headers
+// bär objektets URN.
+func findHeader() senml.RecordFinder {
+	return func(r senml.Record) bool {
+		if r.Name != "0" && !strings.HasSuffix(r.Name, "/0") {
+			return false
+		}
+		return strings.HasPrefix(r.StringValue, "urn:oma:lwm2m:")
+	}
+}
+
+// findShortName matchar poster på kort eller fullständigt namn.
+func findShortName(n string) senml.RecordFinder {
+	return func(r senml.Record) bool {
+		return r.Name == n || strings.HasSuffix(r.Name, "/"+n)
+	}
+}

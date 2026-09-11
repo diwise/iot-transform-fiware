@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -22,11 +21,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
-
-// NewMeasurementTopicMessageHandler använder den statiska motorn.
-func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
-	return newMeasurementTopicMessageHandler(cbClientFn, nil)
-}
 
 // NewDynamicMeasurementTopicMessageHandler använder den konfigurationsstyrda
 // motorn.
@@ -118,11 +112,6 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			// Meddelanden utan relevanta egenskaper ackas (skip).
 			err = transformObservation(octx, dynamic, observation, cbClient)
 			if err != nil {
-				if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
-					olog.Debug("message did not contain any relevant properties")
-					continue
-				}
-
 				if errors.Is(err, apptransform.ErrNoMatchingRule) {
 					olog.Debug("no matching rule for measurement")
 					continue
@@ -142,61 +131,29 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 	}
 }
 
-// transformObservation väljer dynamisk motor när en sådan är konfigurerad,
-// annars den statiska transformers-tabellen.
+// transformObservation kör den konfigurationsstyrda motorn och skriver
+// entiteterna mot brokern.
 func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient) error {
-	if dynamic != nil {
-		writes, err := dynamic.Transform(ctx, observation)
-		if err != nil {
-			return err
-		}
+	writes, err := dynamic.Transform(ctx, observation)
+	if err != nil {
+		return err
+	}
 
-		for _, w := range writes {
-			if w.Create {
-				err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
-				if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
-					return err
-				}
-				continue
-			}
-
-			if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, w.Context, w.Props); err != nil {
+	for _, w := range writes {
+		if w.Create {
+			err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
+			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
 				return err
 			}
+			continue
 		}
 
-		return nil
-	}
-
-	measurementType := getMeasurementType(observation)
-	if measurementType == "" {
-		return appmeasurements.ErrNoRelevantProperties
-	}
-
-	transformer := appmeasurements.TransformerFor(measurementType)
-	if transformer == nil {
-		return appmeasurements.ErrNoRelevantProperties
-	}
-
-	return transformer(ctx, observation, cbClient, contextbroker.EntityWriter{})
-}
-
-// findHeader matchar objektheaders på kort eller fullständigt namn.
-// Headers bär objektets URN.
-func findHeader() senml.RecordFinder {
-	return func(r senml.Record) bool {
-		if r.Name != "0" && !strings.HasSuffix(r.Name, "/0") {
-			return false
+		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, w.Context, w.Props); err != nil {
+			return err
 		}
-		return strings.HasPrefix(r.StringValue, "urn:oma:lwm2m:")
 	}
-}
 
-// findShortName matchar poster på kort eller fullständigt namn.
-func findShortName(n string) senml.RecordFinder {
-	return func(r senml.Record) bool {
-		return r.Name == n || strings.HasSuffix(r.Name, "/"+n)
-	}
+	return nil
 }
 
 // scopePack partitionerar en observation ur ett tolkat pack: headern, dess
@@ -229,18 +186,4 @@ func scopePack(parsed *diwisepkg.Pack, o diwisepkg.Object) senml.Pack {
 	}
 
 	return scoped
-}
-
-func getMeasurementType(m events.MessageAccepted) string {
-	urn, ok := m.Pack().GetStringValue(findHeader())
-	if !ok {
-		return ""
-	}
-
-	env, ok := m.Pack().GetStringValue(findShortName("env"))
-	if ok {
-		urn = fmt.Sprintf("%s/%s", urn, env)
-	}
-
-	return urn
 }

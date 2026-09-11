@@ -12,11 +12,29 @@ import (
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
+	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
+
+// containerHandler bygger den dynamiska container-handlern för OAuth-testerna.
+func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
+	rules := []transform.Rule{{
+		Match: transform.Match{Kind: transform.KindThing, Type: "Container"},
+		Entities: []transform.Entity{{
+			ID: "urn:ngsi-ld:WasteContainer:{{nameOrID}}", Type: "WasteContainer",
+			Properties: []transform.Property{
+				{Target: "fillingLevel", Type: transform.TypeNumber, Source: transform.Source{Field: "percent"}},
+				{Target: "location", Type: transform.TypeGeo, Source: transform.Source{Field: "location"}},
+			},
+		}},
+	}}
+
+	return things.NewDynamicThingTopicMessageHandler(cbClientFn, appthings.NewDynamicThingTransformer(rules))
+}
 
 // FINAL-001: readiness-stubben rapporterar alltid OK utan att röra
 // något beroende.
@@ -105,7 +123,7 @@ func TestTokenFailureAbortsDeliveryWithoutBrokerCall(t *testing.T) {
 	_, err := factory("default")
 	is.True(err != nil)
 
-	handler := things.NewContainerTopicMessageHandler(factory)
+	handler := containerHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
 	is.Equal(brokerCalls.Load(), int64(0))
@@ -140,7 +158,7 @@ func TestSuccessfulDeliverySendsAuthorizedBrokerRequest(t *testing.T) {
 		false,
 	)
 
-	handler := things.NewContainerTopicMessageHandler(factory)
+	handler := containerHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
 	is.Equal(brokerCalls.Load(), int64(1))
@@ -173,7 +191,7 @@ func TestAnonymousModeSkipsAuthorizationHeader(t *testing.T) {
 		false,
 	)
 
-	handler := things.NewContainerTopicMessageHandler(factory)
+	handler := containerHandler(factory)
 	handler(context.Background(), containerMessage(t), slog.Default())
 
 	is.Equal(brokerCalls.Load(), int64(1))
