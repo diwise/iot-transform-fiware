@@ -237,4 +237,25 @@ func TestValidateTemplateVariables(t *testing.T) {
 	is.True(Validate([]Rule{r}) != nil)
 }
 
+func TestValidateAcceptsEveryKnownFunction(t *testing.T) {
+	is := is.New(t)
+
+	for _, op := range KnownTransformOps() {
+		r := validRule()
+		tr := Transform{Op: op}
+		if transformNeedsValue[op] {
+			tr.Value = ptr(2)
+		}
+		r.Entities[0].Properties[0].Transform = []Transform{tr}
+		is.NoErr(Validate([]Rule{r}))
+	}
+
+	for _, fn := range KnownDeriveFns() {
+		r := validRule()
+		r.Entities[0].Properties[0].Source = Source{}
+		r.Entities[0].Properties[0].Derive = &Derive{Fn: fn, Of: []Source{{Resource: "a"}}}
+		is.NoErr(Validate([]Rule{r}))
+	}
+}
+
 func ptr(f float64) *float64 { return &f }

@@ -6,8 +6,77 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/matryer/is"
 )
+
+// En komplett, realistisk konfiguration ska parsa och validera.
+func TestParseModelFullExample(t *testing.T) {
+	is := is.New(t)
+
+	data := []byte(`
+rules:
+  - match: { kind: measurement, sensorType: waterquality }
+    entities:
+      - name: observed
+        id: "urn:ngsi-ld:WaterQualityObserved:{{deviceID}}"
+        type: WaterQualityObserved
+        context: "https://example.invalid/context.jsonld"
+        create: true
+        properties:
+          - target: temperature
+            type: Number
+            resource: "5700"
+            unit: Cel
+            transform: [{ op: multiply, value: 2 }]
+          - target: category
+            type: TextArray
+            field: category
+          - target: address
+            type: Structured
+            subproperties:
+              - { target: streetAddress, type: Text, field: address.streetAddress }
+      - name: beach
+        id: "urn:ngsi-ld:Beach:{{safeURI(name)}}"
+        type: Beach
+        create: true
+        properties:
+          - { target: name, type: Text, name: name }
+      - id: "urn:ngsi-ld:Thing:{{entities.observed.id}}"
+        type: Thing
+        properties:
+          - { target: refObserved, type: Relationship, value: "{{entities.observed.id}}" }
+`)
+
+	rules, err := ParseModel(data)
+	is.NoErr(err)
+	is.Equal(len(rules), 1)
+	is.NoErr(transform.Validate(rules))
+}
+
+// Valideringsfel ska propageras från LoadModelsDir.
+func TestLoadModelsDirPropagatesValidationError(t *testing.T) {
+	is := is.New(t)
+
+	dir := t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(dir, "bad.yaml"),
+		[]byte("rules:\n  - match: { kind: nope }\n    entities: []\n"), 0o644))
+
+	_, err := LoadModelsDir(dir)
+	is.True(err != nil)
+}
+
+// En fil med okänt fält ska ge fel via LoadModelsDir.
+func TestLoadModelsDirRejectsUnknownField(t *testing.T) {
+	is := is.New(t)
+
+	dir := t.TempDir()
+	is.NoErr(os.WriteFile(filepath.Join(dir, "bad.yaml"),
+		[]byte("rules:\n  - match: { kind: measurement }\n    entities: []\n    oops: 1\n"), 0o644))
+
+	_, err := LoadModelsDir(dir)
+	is.True(err != nil)
+}
 
 // Okända fält ska ge fel (strikt avkodning).
 func TestParseModelRejectsUnknownField(t *testing.T) {
