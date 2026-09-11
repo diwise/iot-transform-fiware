@@ -90,8 +90,9 @@ func main() {
 	exitIf(err, logger, "failed to load model configuration")
 
 	var sensorTypes devicemanagement.SensorTypeResolver
-	if len(models) > 0 && flags[deviceMgmtUrl] != "" {
-		sensorTypes = devicemanagement.New(flags[deviceMgmtUrl], nil, devicemanagement.DefaultTTL)
+	if flags[deviceMgmtUrl] != "" {
+		dmClient := devicemanagement.NewOAuth2Client(ctx, flags[oauth2TokenUrl], flags[oauth2ClientId], flags[oauth2ClientSecret], oauthInsecure(flags))
+		sensorTypes = devicemanagement.New(flags[deviceMgmtUrl], dmClient, devicemanagement.DefaultTTL)
 	}
 
 	cfg := &appConfig{

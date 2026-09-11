@@ -3,6 +3,7 @@ package devicemanagement
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,31 @@ import (
 
 	"github.com/matryer/is"
 )
+
+func TestSensorTypeUsesOAuth2Token(t *testing.T) {
+	is := is.New(t)
+
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"tok","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenSrv.Close()
+
+	var auth string
+	devSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"data":{"sensorProfile":{"decoder":"temperature"}}}`))
+	}))
+	defer devSrv.Close()
+
+	httpClient := NewOAuth2Client(context.Background(), tokenSrv.URL, "id", "secret", false)
+	c := New(devSrv.URL, httpClient, DefaultTTL)
+
+	st, err := c.SensorType(context.Background(), "dev-1")
+	is.NoErr(err)
+	is.Equal(st, "temperature")
+	is.Equal(auth, "Bearer tok")
+}
 
 func TestSensorTypeCachesUntilTTL(t *testing.T) {
 	is := is.New(t)

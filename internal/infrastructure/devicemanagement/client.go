@@ -4,6 +4,7 @@ package devicemanagement
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,10 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 // DefaultTTL är hur länge en uppslagen sensortyp cachas.
@@ -56,6 +61,35 @@ func New(baseURL string, httpClient *http.Client, ttl time.Duration) *Client {
 		now:     time.Now,
 		cache:   map[string]cacheEntry{},
 	}
+}
+
+// NewOAuth2Client returnerar en http-klient som autentiserar med
+// client_credentials mot tokenURL. Tomma uppgifter ger nil, så att anroparen
+// kan falla tillbaka på en oautentiserad klient.
+func NewOAuth2Client(ctx context.Context, tokenURL, clientID, clientSecret string, insecureURL bool) *http.Client {
+	if tokenURL == "" || clientID == "" || clientSecret == "" {
+		return nil
+	}
+
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+	if insecureURL {
+		baseTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+
+	tokenClient := &http.Client{
+		Transport: otelhttp.NewTransport(baseTransport),
+		Timeout:   10 * time.Second,
+	}
+
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, tokenClient)
+
+	oauthConfig := &clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     tokenURL,
+	}
+
+	return oauthConfig.Client(ctx)
 }
 
 // SensorType returnerar enhetens sensortyp. Uppslag cachas i ttl. Vid
