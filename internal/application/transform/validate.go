@@ -109,6 +109,9 @@ func (e Entity) validate() error {
 	if err := validateTemplate(e.ID); err != nil {
 		return fmt.Errorf("entity.id: %w", err)
 	}
+	if err := validateTemplate(e.Type); err != nil {
+		return fmt.Errorf("entity.type: %w", err)
+	}
 
 	for i, p := range e.Properties {
 		if err := p.validate(); err != nil {
@@ -189,6 +192,9 @@ func (p Property) validateSource() error {
 		primary++
 	}
 	if p.Field != "" {
+		primary++
+	}
+	if p.Ref != "" {
 		primary++
 	}
 	if p.Name != "" {

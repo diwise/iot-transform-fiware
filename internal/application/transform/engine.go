@@ -10,33 +10,43 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 )
 
-// Record är en normaliserad resurs-/metadatapost i en mätning.
-type Record struct {
-	Object  string
-	Name    string
-	Value   *float64
-	Bool    *bool
-	String  *string
-	Time    time.Time
-	HasTime bool
+// Input är den normaliserade indata motorn arbetar på. Implementeras av
+// Measurement (mätvärden) och Thing (saker).
+type Input interface {
+	Kind() Kind
+	TenantID() string
+	MatchInfo() MatchInfo
+	Variables() map[string]string
+	LatLon() (float64, float64, bool)
+	MessageTime() time.Time
+	BaseTime() (time.Time, bool)
+
+	// Resolve slår upp en egenskaps värdekälla.
+	Resolve(p Property) (resolvedValue, error)
+	// ResolveTime slår upp en tid via en field-väg (observedAt: field:<väg>).
+	ResolveTime(path string) (time.Time, bool)
+	// ResolvePath slår upp ett värde via en JSON-väg/namn (arrayer, Structured).
+	ResolvePath(path string) (any, bool)
 }
 
-// Measurement är motorns normaliserade indata för en enskild
-// objektobservation (ett objekt ur ett SenML-pack).
-type Measurement struct {
-	DeviceID      string
-	SensorType    string
-	Object        string
-	Env           string
-	Port          string
-	Tenant        string
-	Timestamp     time.Time
-	HeaderTime    time.Time
-	HasHeaderTime bool
-	Lat           float64
-	Lon           float64
-	HasLatLon     bool
-	Records       []Record
+// MatchInfo är de fält en regel kan matcha mot, oavsett indatatyp.
+type MatchInfo struct {
+	Device     string
+	SensorType string
+	Object     string
+	Env        string
+	Port       string
+	Tenant     string
+	Type       string
+	SubType    string
+}
+
+// resolvedValue är resultatet av en värdekälleuppslagning.
+type resolvedValue struct {
+	value   any
+	time    time.Time
+	hasTime bool
+	found   bool
 }
 
 // EntityWrite beskriver en entitet som ska skrivas, utan att utföra
@@ -58,15 +68,15 @@ func NewEngine(rules []Rule) *Engine {
 	return &Engine{rules: rules}
 }
 
-// Transform matchar mätningen mot den mest specifika regeln och producerar
+// Transform matchar indatat mot den mest specifika regeln och producerar
 // entitetsskrivningar. Ingen matchande regel ger ErrNoMatchingRule.
-func (e *Engine) Transform(m Measurement) ([]EntityWrite, error) {
-	rule, ok := e.match(m)
+func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
+	rule, ok := e.match(in)
 	if !ok {
 		return nil, ErrNoMatchingRule
 	}
 
-	vars := m.templateVars()
+	vars := in.Variables()
 	ids := map[string]string{}
 	writes := make([]EntityWrite, 0, len(rule.Entities))
 
@@ -80,7 +90,12 @@ func (e *Engine) Transform(m Measurement) ([]EntityWrite, error) {
 			ids[ent.Name] = id
 		}
 
-		props, err := entityProps(ent, m)
+		typeName, err := renderTemplate(ent.Type, vars, ids)
+		if err != nil {
+			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+		}
+
+		props, err := entityProps(ent, in)
 		if err != nil {
 			if errors.Is(err, ErrRequiredSourceMissing) {
 				continue
@@ -90,7 +105,7 @@ func (e *Engine) Transform(m Measurement) ([]EntityWrite, error) {
 
 		writes = append(writes, EntityWrite{
 			EntityID: id,
-			TypeName: ent.Type,
+			TypeName: typeName,
 			Context:  ent.Context,
 			Create:   ent.Create,
 			Props:    props,
@@ -100,11 +115,11 @@ func (e *Engine) Transform(m Measurement) ([]EntityWrite, error) {
 	return writes, nil
 }
 
-func entityProps(ent Entity, m Measurement) ([]entities.EntityDecoratorFunc, error) {
+func entityProps(ent Entity, in Input) ([]entities.EntityDecoratorFunc, error) {
 	props := make([]entities.EntityDecoratorFunc, 0, len(ent.Properties))
 
 	for _, p := range ent.Properties {
-		dec, err := buildProperty(p, m)
+		dec, err := buildProperty(p, in)
 		if err != nil {
 			return nil, err
 		}
@@ -117,14 +132,17 @@ func entityProps(ent Entity, m Measurement) ([]entities.EntityDecoratorFunc, err
 	return props, nil
 }
 
-// match väljer den regel med högst specificitet (device > sensorType >
-// object) och därefter lägst konfigordning.
-func (e *Engine) match(m Measurement) (Rule, bool) {
+// match väljer den regel med högst specificitet och därefter lägst
+// konfigordning.
+func (e *Engine) match(in Input) (Rule, bool) {
+	info := in.MatchInfo()
+	kind := in.Kind()
+
 	best := -1
 	bestScore := -1
 
 	for i, r := range e.rules {
-		if r.Match.Kind != KindMeasurement || !r.Match.matches(m) {
+		if r.Match.Kind != kind || !r.Match.matches(info) {
 			continue
 		}
 
@@ -140,23 +158,29 @@ func (e *Engine) match(m Measurement) (Rule, bool) {
 	return e.rules[best], true
 }
 
-func (mm Match) matches(m Measurement) bool {
-	if mm.Device != "" && mm.Device != m.DeviceID {
+func (mm Match) matches(info MatchInfo) bool {
+	if mm.Device != "" && mm.Device != info.Device {
 		return false
 	}
-	if mm.SensorType != "" && !strings.EqualFold(mm.SensorType, m.SensorType) {
+	if mm.SensorType != "" && !strings.EqualFold(mm.SensorType, info.SensorType) {
 		return false
 	}
-	if mm.Object != "" && mm.Object != m.Object {
+	if mm.Object != "" && mm.Object != info.Object {
 		return false
 	}
-	if mm.Env != "" && mm.Env != m.Env {
+	if mm.Env != "" && mm.Env != info.Env {
 		return false
 	}
-	if mm.Port != "" && mm.Port != m.Port {
+	if mm.Port != "" && mm.Port != info.Port {
 		return false
 	}
-	if mm.Tenant != "" && mm.Tenant != m.Tenant {
+	if mm.Type != "" && mm.Type != info.Type {
+		return false
+	}
+	if mm.SubType != "" && mm.SubType != info.SubType {
+		return false
+	}
+	if mm.Tenant != "" && mm.Tenant != info.Tenant {
 		return false
 	}
 	return true
@@ -173,19 +197,16 @@ func (mm Match) score() int {
 	if mm.Object != "" {
 		s++
 	}
-	return s
-}
-
-func (m Measurement) templateVars() map[string]string {
-	return map[string]string{
-		"deviceID":   m.DeviceID,
-		"sensorType": m.SensorType,
-		"object":     m.Object,
-		"env":        m.Env,
-		"port":       m.Port,
-		"tenant":     m.Tenant,
-		"timestamp":  m.Timestamp.UTC().Format(time.RFC3339),
+	if mm.Type != "" {
+		s += 4
 	}
+	if mm.SubType != "" {
+		s += 2
+	}
+	if mm.Tenant != "" {
+		s++
+	}
+	return s
 }
 
 // renderTemplate ersätter {{variabel}}, {{safeURI(variabel)}} och

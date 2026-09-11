@@ -87,6 +87,7 @@ type Source struct {
 	Env       string `yaml:"env,omitempty"`
 	Name      string `yaml:"name,omitempty"`
 	Field     string `yaml:"field,omitempty"`
+	Ref       string `yaml:"ref,omitempty"`
 	Const     any    `yaml:"const,omitempty"`
 	LatLon    bool   `yaml:"latlon,omitempty"`
 	Timestamp bool   `yaml:"timestamp,omitempty"`

@@ -11,106 +11,61 @@ import (
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
+	"github.com/diwise/context-broker/pkg/ngsild/types/relationships"
 )
-
-// findRecord slår upp en post för en property. Mätvärden använder
-// resource (+ valfritt object) eller metadata via name.
-func (m Measurement) findRecord(p Property) (Record, bool) {
-	for _, r := range m.Records {
-		switch {
-		case p.Resource != "":
-			if r.Name != p.Resource {
-				continue
-			}
-		case p.Name != "":
-			if r.Name != p.Name {
-				continue
-			}
-		default:
-			continue
-		}
-
-		if p.Object != "" && r.Object != p.Object {
-			continue
-		}
-
-		return r, true
-	}
-
-	return Record{}, false
-}
 
 // buildProperty skapar dekoratören för en property. Saknad källa ger
 // (nil, nil) för valfria properties och ErrRequiredSourceMissing för
 // required.
-func buildProperty(p Property, m Measurement) (entities.EntityDecoratorFunc, error) {
+func buildProperty(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 	if p.Derive != nil {
-		return buildDerived(p, m)
+		return buildDerived(p, in)
 	}
 
 	if p.LatLon {
-		if !m.HasLatLon {
+		lat, lon, ok := in.LatLon()
+		if !ok {
 			if p.Required {
 				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
 			}
 			return nil, nil
 		}
-		return decorators.Location(m.Lat, m.Lon), nil
+		return decorators.Location(lat, lon), nil
 	}
 
 	if p.Timestamp {
-		return decorate(p, m.Timestamp.UTC().Format(rfc3339), "", "")
+		return decorate(p, in.MessageTime().UTC().Format(rfc3339), "", "")
 	}
 
-	r, ok := m.findRecord(p)
-	if !ok {
+	rv, err := in.Resolve(p)
+	if err != nil {
+		return nil, err
+	}
+	if !rv.found {
 		if p.Required {
 			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
 		}
 		return nil, nil
 	}
 
-	raw, err := rawValue(p, r)
+	raw, err := applyTransforms(p, rv.value)
 	if err != nil {
 		return nil, err
 	}
 
-	raw, err = applyTransforms(p, raw)
+	observedBy, err := renderObservedBy(p, in)
 	if err != nil {
 		return nil, err
 	}
 
-	observedBy, err := renderObservedBy(p, m)
-	if err != nil {
-		return nil, err
-	}
-
-	return decorate(p, raw, observationTime(p, m, r), observedBy)
+	return decorate(p, raw, observationTime(p, in, rv), observedBy)
 }
 
-func renderObservedBy(p Property, m Measurement) (string, error) {
+func renderObservedBy(p Property, in Input) (string, error) {
 	if p.ObservedBy == "" {
 		return "", nil
 	}
-	return renderTemplate(p.ObservedBy, m.templateVars(), nil)
-}
-
-// rawValue returnerar postens nativa värde. Typomvandling till propertyns
-// måltyp sker efter transformstegen, så att t.ex. boolToOnOff kan arbeta på
-// en bool.
-func rawValue(p Property, r Record) (any, error) {
-	switch {
-	case r.Value != nil:
-		return *r.Value, nil
-	case r.Bool != nil:
-		return *r.Bool, nil
-	case r.String != nil:
-		return *r.String, nil
-	case r.HasTime:
-		return r.Time.UTC().Format(rfc3339), nil
-	default:
-		return nil, fmt.Errorf("property %s: value is missing", p.Target)
-	}
+	return renderTemplate(p.ObservedBy, in.Variables(), nil)
 }
 
 func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
@@ -157,50 +112,21 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 			return nil, fmt.Errorf("property %s: expected date time", p.Target)
 		}
 		return decorators.DateTime(p.Target, s), nil
-	default:
-		return nil, fmt.Errorf("property %s: type %q is not supported for measurements yet", p.Target, p.Type)
-	}
-}
-
-func toFloat(v any) (float64, bool) {
-	switch x := v.(type) {
-	case float64:
-		return x, true
-	case string:
-		f, err := strconv.ParseFloat(x, 64)
-		return f, err == nil
-	case bool:
-		if x {
-			return 1, true
+	case TypeGeo:
+		lat, lon, ok := toLatLon(raw)
+		if !ok {
+			return nil, fmt.Errorf("property %s: expected a location", p.Target)
 		}
-		return 0, true
+		return decorators.Location(lat, lon), nil
+	case TypeRelationship:
+		s, ok := toString(raw)
+		if !ok {
+			return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
+		}
+		return relationshipDecorator(p.Target, s), nil
+	default:
+		return nil, fmt.Errorf("property %s: type %q is not supported yet", p.Target, p.Type)
 	}
-	return 0, false
-}
-
-func toString(v any) (string, bool) {
-	switch x := v.(type) {
-	case string:
-		return x, true
-	case float64:
-		return strconv.FormatFloat(x, 'f', -1, 64), true
-	case bool:
-		return strconv.FormatBool(x), true
-	}
-	return "", false
-}
-
-func toBool(v any) (bool, bool) {
-	switch x := v.(type) {
-	case bool:
-		return x, true
-	case float64:
-		return x != 0, true
-	case string:
-		b, err := strconv.ParseBool(x)
-		return b, err == nil
-	}
-	return false, false
 }
 
 func textDecorator(name, value string, opts ...properties.TextPropertyDecoratorFunc) entities.EntityDecoratorFunc {
@@ -209,6 +135,10 @@ func textDecorator(name, value string, opts ...properties.TextPropertyDecoratorF
 		o(tp)
 	}
 	return entities.P(name, tp)
+}
+
+func relationshipDecorator(name, value string) entities.EntityDecoratorFunc {
+	return entities.R(name, relationships.NewSingleObjectRelationship(value))
 }
 
 // applyTransforms kör transformstegen i ordning. Ett steg kan byta typ
@@ -227,7 +157,7 @@ func applyTransforms(p Property, raw any) (any, error) {
 func applyTransform(t Transform, raw any) (any, error) {
 	switch t.Op {
 	case OpMultiply, OpDivide, OpAdd:
-		f, ok := raw.(float64)
+		f, ok := toFloat(raw)
 		if !ok {
 			return nil, fmt.Errorf("%s expects a number", t.Op)
 		}
@@ -245,13 +175,13 @@ func applyTransform(t Transform, raw any) (any, error) {
 		}
 		return f, nil
 	case OpFloor:
-		f, ok := raw.(float64)
+		f, ok := toFloat(raw)
 		if !ok {
 			return nil, fmt.Errorf("floor expects a number")
 		}
 		return math.Floor(f), nil
 	case OpRound:
-		f, ok := raw.(float64)
+		f, ok := toFloat(raw)
 		if !ok {
 			return nil, fmt.Errorf("round expects a number")
 		}
@@ -276,56 +206,19 @@ func applyTransform(t Transform, raw any) (any, error) {
 	}
 }
 
-// observationTime bestämmer propertyns observationstid enligt
-// observedAt: header (default), record, message eller field:<namn>.
-func observationTime(p Property, m Measurement, r Record) string {
-	switch p.ObservedAt {
-	case ObservedAtNone:
-		return ""
-	case ObservedAtRecord:
-		if r.HasTime {
-			return r.Time.UTC().Format(rfc3339)
-		}
-		return ""
-	case ObservedAtMessage:
-		return m.Timestamp.UTC().Format(rfc3339)
-	case ObservedAtHeader, "":
-		if m.HasHeaderTime {
-			return m.HeaderTime.UTC().Format(rfc3339)
-		}
-		return m.Timestamp.UTC().Format(rfc3339)
-	default:
-		name := strings.TrimPrefix(string(p.ObservedAt), "field:")
-		if rec, ok := m.findByRecordName(name); ok && rec.HasTime {
-			return rec.Time.UTC().Format(rfc3339)
-		}
-		return ""
-	}
-}
-
-func (m Measurement) findByRecordName(name string) (Record, bool) {
-	for _, r := range m.Records {
-		if r.Name == name {
-			return r, true
-		}
-	}
-	return Record{}, false
-}
-
 // buildDerived kombinerar flera källor med en namngiven funktion.
-func buildDerived(p Property, m Measurement) (entities.EntityDecoratorFunc, error) {
+func buildDerived(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 	values := make([]any, 0, len(p.Derive.Of))
 
 	for _, s := range p.Derive.Of {
-		r, ok := m.findRecord(Property{Source: s})
-		if !ok {
-			continue
-		}
-		v, err := rawValue(p, r)
+		rv, err := in.Resolve(Property{Source: s})
 		if err != nil {
+			return nil, err
+		}
+		if !rv.found {
 			continue
 		}
-		values = append(values, v)
+		values = append(values, rv.value)
 	}
 
 	raw, err := deriveValue(p.Derive.Fn, values)
@@ -340,12 +233,12 @@ func buildDerived(p Property, m Measurement) (entities.EntityDecoratorFunc, erro
 		return nil, nil
 	}
 
-	observedBy, err := renderObservedBy(p, m)
+	observedBy, err := renderObservedBy(p, in)
 	if err != nil {
 		return nil, err
 	}
 
-	return decorate(p, raw, observationTime(p, m, Record{}), observedBy)
+	return decorate(p, raw, observationTime(p, in, resolvedValue{}), observedBy)
 }
 
 func deriveValue(fn string, values []any) (any, error) {
@@ -401,6 +294,90 @@ func deriveValue(fn string, values []any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown derive fn %q", fn)
 	}
+}
+
+// observationTime bestämmer propertyns observationstid enligt
+// observedAt: header (default), record, message, field:<väg> eller none.
+func observationTime(p Property, in Input, rv resolvedValue) string {
+	switch p.ObservedAt {
+	case ObservedAtNone:
+		return ""
+	case ObservedAtRecord:
+		if rv.hasTime {
+			return rv.time.UTC().Format(rfc3339)
+		}
+		return ""
+	case ObservedAtMessage:
+		return in.MessageTime().UTC().Format(rfc3339)
+	case ObservedAtHeader, "":
+		if t, ok := in.BaseTime(); ok {
+			return t.UTC().Format(rfc3339)
+		}
+		return in.MessageTime().UTC().Format(rfc3339)
+	default:
+		path := strings.TrimPrefix(string(p.ObservedAt), "field:")
+		if t, ok := in.ResolveTime(path); ok {
+			return t.UTC().Format(rfc3339)
+		}
+		return ""
+	}
+}
+
+func toFloat(v any) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case string:
+		f, err := strconv.ParseFloat(x, 64)
+		return f, err == nil
+	case bool:
+		if x {
+			return 1, true
+		}
+		return 0, true
+	}
+	return 0, false
+}
+
+func toString(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, true
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64), true
+	case bool:
+		return strconv.FormatBool(x), true
+	}
+	return "", false
+}
+
+func toBool(v any) (bool, bool) {
+	switch x := v.(type) {
+	case bool:
+		return x, true
+	case float64:
+		return x != 0, true
+	case string:
+		b, err := strconv.ParseBool(x)
+		return b, err == nil
+	}
+	return false, false
+}
+
+func toLatLon(v any) (float64, float64, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return 0, 0, false
+	}
+	lat, latOK := toFloat(m["latitude"])
+	lon, lonOK := toFloat(m["longitude"])
+	return lat, lon, latOK && lonOK
 }
 
 const rfc3339 = "2006-01-02T15:04:05Z07:00"
