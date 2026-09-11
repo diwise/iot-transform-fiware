@@ -47,3 +47,28 @@ verifiera att
 - en sak på `thing.updated`
 
 ger förväntade NGSI-LD-entiteter enligt modellerna.
+
+## Utrullningsordning
+
+1. Bygg och tagga imagen. Standardmodellerna är inbakade, så ingen separat
+   config-fil behövs för grundfallet.
+2. Används en delad `MODELS_DIR`-mount: uppdatera modellerna och imagen i samma
+   rullning så att versionerna inte glider isär. Tjänsten validerar modellerna
+   vid start och vägrar starta vid fel.
+3. Rulla ut och verifiera `/health`/`/readyz` samt att `message.accepted` och
+   `thing.updated` ger förväntade entiteter i context-broker.
+
+Det finns ingen `DYNAMIC_MODELS`-flagga längre; den dynamiska motorn är den
+enda vägen.
+
+## Rollback
+
+Tjänsten är tillståndslös och skriver entiteter med idempotent merge/create, så
+en rollback är att rulla tillbaka till föregående image-tagg (och, om mount
+används, föregående modellkatalog).
+
+Observera att entiteter som redan skrivits ligger kvar i context-broker. Eftersom
+migreringen bytte vissa attributnamn till modellens (`co2` i stället för `CO2`,
+`relativeHumidity` i stället för `humidity`, `LAeq` i stället för `noiseLevel`)
+kan gamla och nya attribut existera sida vid sida under en övergång.
+NGSI-LD-merge är additivt; städa bort inaktuella attribut separat om så behövs.
