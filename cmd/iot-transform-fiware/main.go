@@ -48,19 +48,12 @@ func defaultFlags() flagMap {
 		logLevel: "debug",
 
 		modelsDir:     "/opt/diwise/config/models",
-		dynamicEngine: "false",
 		deviceMgmtUrl: "http://device-management",
 	}
 }
 
-// loadModels läser och validerar modellkonfigurationen när den dynamiska
-// motorn är aktiverad. Med den statiska motorn (default) returneras inga
-// regler.
+// loadModels läser och validerar modellkonfigurationen.
 func loadModels(flags flagMap) ([]transform.Rule, error) {
-	if flags[dynamicEngine] != "true" {
-		return nil, nil
-	}
-
 	rules, err := config.LoadModelsDir(flags[modelsDir])
 	if err != nil {
 		return nil, fmt.Errorf("failed to load models from %s: %w", flags[modelsDir], err)
@@ -163,58 +156,15 @@ func registerHandlers(svcCfg *appConfig) error {
 	messenger := svcCfg.messenger
 	cbClientFn := svcCfg.cbClientFn
 
-	var (
-		building        = messaging.MatchContentType("application/vnd.diwise.building+json")
-		container       = messaging.MatchContentType("application/vnd.diwise.container+json")
-		lifebuoy        = messaging.MatchContentType("application/vnd.diwise.lifebuoy+json")
-		passage         = messaging.MatchContentType("application/vnd.diwise.passage+json")
-		pointofinterest = messaging.MatchContentType("application/vnd.diwise.pointofinterest+json")
-		pumpingstation  = messaging.MatchContentType("application/vnd.diwise.pumpingstation+json")
-		room            = messaging.MatchContentType("application/vnd.diwise.room+json")
-		sewer           = messaging.MatchContentType("application/vnd.diwise.sewer+json")
-		//watermeter      = messaging.MatchContentType("application/vnd.diwise.watermeter+json")
-		desk = messaging.MatchContentType("application/vnd.diwise.desk+json")
-	)
-
 	// things
-	thingHandlers := []struct {
-		name    string
-		handler func(contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler
-		filter  messaging.MessageFilter
-	}{
-		{"building", things.NewBuildingTopicMessageHandler, building},
-		{"container", things.NewContainerTopicMessageHandler, container},
-		{"lifebuoy", things.NewLifebuoyTopicMessageHandler, lifebuoy},
-		{"passage", things.NewPassageTopicMessageHandler, passage},
-		{"pointofinterest", things.NewPointOfInterestTopicMessageHandler, pointofinterest},
-		{"pumpingstation", things.NewPumpingstationTopicMessageHandler, pumpingstation},
-		{"room", things.NewRoomTopicMessageHandler, room},
-		{"sewer", things.NewSewerTopicMessageHandler, sewer},
-		{"desk", things.NewDeskTopicMessageHandler, desk},
-	}
-
-	if len(svcCfg.models) > 0 {
-		dynamic := thingsApp.NewDynamicThingTransformer(svcCfg.models)
-		handler := things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamic)
-		if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, handler); err != nil {
-			return fmt.Errorf("failed to register dynamic thing handler: %w", err)
-		}
-	} else {
-		for _, h := range thingHandlers {
-			if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(cbClientFn), h.filter); err != nil {
-				return fmt.Errorf("failed to register %s handler: %w", h.name, err)
-			}
-		}
+	dynamicThings := thingsApp.NewDynamicThingTransformer(svcCfg.models)
+	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamicThings)); err != nil {
+		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
 	}
 
 	// measurements
-	measurementHandler := measurements.NewMeasurementTopicMessageHandler(cbClientFn)
-	if len(svcCfg.models) > 0 {
-		dynamic := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
-		measurementHandler = measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamic)
-	}
-
-	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurementHandler); err != nil {
+	dynamicMeasurements := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements)); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
 
@@ -240,7 +190,6 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
-	flags[dynamicEngine] = envOrDef(ctx, "DYNAMIC_MODELS", flags[dynamicEngine])
 	flags[deviceMgmtUrl] = envOrDef(ctx, "DEVICE_MGMT_URL", flags[deviceMgmtUrl])
 
 	apply := func(f flagType) func(string) error {

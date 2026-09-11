@@ -55,44 +55,14 @@ func TestRegisterHandlersPropagatesError(t *testing.T) {
 
 	want := errors.New("registration failed")
 	messenger := &messaging.MsgContextMock{
-		RegisterTopicMessageHandlerWithFilterFunc: func(string, messaging.TopicMessageHandler, messaging.MessageFilter) error {
-			return want
-		},
 		RegisterTopicMessageHandlerFunc: func(string, messaging.TopicMessageHandler) error {
-			return nil
+			return want
 		},
 	}
 
 	err := registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (client.ContextBrokerClient, error) { return nil, nil }})
 	is.True(err != nil)
 	is.True(errors.Is(err, want))
-}
-
-// BASE-001: locks the current registration set (9 thing handlers with
-// content type filters + 1 measurements handler) and their topics.
-func TestRegisterHandlersRegistersAllHandlers(t *testing.T) {
-	is := is.New(t)
-
-	messenger := &messaging.MsgContextMock{
-		RegisterTopicMessageHandlerWithFilterFunc: func(string, messaging.TopicMessageHandler, messaging.MessageFilter) error {
-			return nil
-		},
-		RegisterTopicMessageHandlerFunc: func(string, messaging.TopicMessageHandler) error {
-			return nil
-		},
-	}
-
-	is.NoErr(registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (client.ContextBrokerClient, error) { return nil, nil }}))
-
-	filtered := messenger.RegisterTopicMessageHandlerWithFilterCalls()
-	is.Equal(len(filtered), 9)
-	for _, c := range filtered {
-		is.Equal(c.RoutingKey, ThingUpdatedTopic)
-	}
-
-	plain := messenger.RegisterTopicMessageHandlerCalls()
-	is.Equal(len(plain), 1)
-	is.Equal(plain[0].RoutingKey, MessageAcceptedTopic)
 }
 
 // BASE-001: initialize must reject an empty context broker URL instead

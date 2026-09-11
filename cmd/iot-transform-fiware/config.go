@@ -24,7 +24,6 @@ const (
 	logLevel
 
 	modelsDir
-	dynamicEngine
 	deviceMgmtUrl
 )
 

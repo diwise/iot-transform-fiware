@@ -40,7 +40,6 @@ func TestDefaultFlags(t *testing.T) {
 		oauth2InsecureURL:  "true",
 		logLevel:           "debug",
 		modelsDir:          "/opt/diwise/config/models",
-		dynamicEngine:      "false",
 		deviceMgmtUrl:      "http://device-management",
 	}
 
@@ -62,7 +61,6 @@ func TestEnvOverrides(t *testing.T) {
 	t.Setenv("OAUTH2_REALM_INSECURE", "false")
 	t.Setenv("LOG_LEVEL", "info")
 	t.Setenv("MODELS_DIR", "/tmp/models")
-	t.Setenv("DYNAMIC_MODELS", "true")
 
 	_, flags := parseExternalConfig(context.Background(), defaultFlags())
 
@@ -73,7 +71,6 @@ func TestEnvOverrides(t *testing.T) {
 	is.Equal(flags[oauth2InsecureURL], "false")
 	is.Equal(flags[logLevel], "info")
 	is.Equal(flags[modelsDir], "/tmp/models")
-	is.Equal(flags[dynamicEngine], "true")
 }
 
 // HARM-004: locks CLI-over-env precedence. -loglevel is the only CLI flag.
