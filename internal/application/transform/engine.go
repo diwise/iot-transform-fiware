@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -77,15 +78,41 @@ func (e *Engine) Transform(m Measurement) ([]EntityWrite, error) {
 			ids[ent.Name] = id
 		}
 
+		props, err := entityProps(ent, m)
+		if err != nil {
+			if errors.Is(err, ErrRequiredSourceMissing) {
+				continue
+			}
+			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+		}
+
 		writes = append(writes, EntityWrite{
 			EntityID: id,
 			TypeName: ent.Type,
 			Context:  ent.Context,
 			Create:   ent.Create,
+			Props:    props,
 		})
 	}
 
 	return writes, nil
+}
+
+func entityProps(ent Entity, m Measurement) ([]entities.EntityDecoratorFunc, error) {
+	props := make([]entities.EntityDecoratorFunc, 0, len(ent.Properties))
+
+	for _, p := range ent.Properties {
+		dec, err := buildProperty(p, m)
+		if err != nil {
+			return nil, err
+		}
+		if dec == nil {
+			continue
+		}
+		props = append(props, dec)
+	}
+
+	return props, nil
 }
 
 // match väljer den regel med högst specificitet (device > sensorType >
