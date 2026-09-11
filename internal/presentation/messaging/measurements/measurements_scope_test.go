@@ -64,7 +64,7 @@ func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) mes
 		},
 	}
 
-	return NewDynamicMeasurementTopicMessageHandler(cbClientFn, appmeasurements.NewDynamicTransformer(rules, nil))
+	return NewDynamicMeasurementTopicMessageHandler(cbClientFn, appmeasurements.NewDynamicTransformer(rules, nil), "")
 }
 
 // Fas D: ett pack med två observationer (luftkvalitet + ljudnivå) ska ge en

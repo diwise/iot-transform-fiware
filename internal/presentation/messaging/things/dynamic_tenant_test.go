@@ -23,6 +23,7 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 			return nil, nil
 		},
 		appthings.NewDynamicThingTransformer([]transform.Rule{}),
+		"",
 	)
 
 	body := `{"thing":{"id":"x","type":"Container","percent":50,"tenant":""},"tenant":"","timestamp":"2024-01-01T00:00:00Z"}`
@@ -47,6 +48,7 @@ func TestDynamicThingHandlerReturnsBrokerError(t *testing.T) {
 			Match:    transform.Match{Kind: transform.KindThing, Type: "Container"},
 			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{nameOrID}}", Type: "Thing"}},
 		}}),
+		"",
 	)
 
 	body := `{"thing":{"id":"x","type":"Container","name":"n","percent":50,"tenant":"default"},"tenant":"default","timestamp":"2024-01-01T00:00:00Z"}`

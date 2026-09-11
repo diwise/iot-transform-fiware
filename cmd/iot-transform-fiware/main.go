@@ -47,8 +47,9 @@ func defaultFlags() flagMap {
 
 		logLevel: "debug",
 
-		modelsDir:     "/opt/diwise/config/models",
-		deviceMgmtUrl: "http://iot-device-mgmt",
+		modelsDir:         "/opt/diwise/config/models",
+		deviceMgmtUrl:     "http://iot-device-mgmt",
+		defaultContextUrl: "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
 	}
 }
 
@@ -94,10 +95,11 @@ func main() {
 	}
 
 	cfg := &appConfig{
-		messenger:   messenger,
-		cbClientFn:  factory,
-		models:      models,
-		sensorTypes: sensorTypes,
+		messenger:      messenger,
+		cbClientFn:     factory,
+		models:         models,
+		sensorTypes:    sensorTypes,
+		defaultContext: flags[defaultContextUrl],
 	}
 
 	runner, err := initialize(ctx, flags, cfg)
@@ -158,13 +160,13 @@ func registerHandlers(svcCfg *appConfig) error {
 
 	// things
 	dynamicThings := thingsApp.NewDynamicThingTransformer(svcCfg.models)
-	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamicThings)); err != nil {
+	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamicThings, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
 	}
 
 	// measurements
 	dynamicMeasurements := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
-	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements)); err != nil {
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
 
@@ -191,6 +193,7 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
 	flags[deviceMgmtUrl] = envOrDef(ctx, "DEV_MGMT_URL", flags[deviceMgmtUrl])
+	flags[defaultContextUrl] = envOrDef(ctx, "DEFAULT_CONTEXT_URL", flags[defaultContextUrl])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {

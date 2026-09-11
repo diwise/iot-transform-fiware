@@ -41,6 +41,7 @@ func TestDefaultFlags(t *testing.T) {
 		logLevel:           "debug",
 		modelsDir:          "/opt/diwise/config/models",
 		deviceMgmtUrl:      "http://iot-device-mgmt",
+		defaultContextUrl:  "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
 	}
 
 	is.Equal(len(flags), len(expected))

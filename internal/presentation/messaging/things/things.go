@@ -16,7 +16,7 @@ import (
 
 // NewDynamicThingTopicMessageHandler hanterar samtliga saktyper med den
 // konfigurationsstyrda motorn.
-func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appthings.DynamicThingTransformer) messaging.TopicMessageHandler {
+func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appthings.DynamicThingTransformer, defaultContext string) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) error {
 		log := l.With("content_type", itm.ContentType())
 
@@ -55,7 +55,7 @@ func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCl
 			return err
 		}
 
-		if err := applyTransformWrites(ctx, cbClient, writes); err != nil {
+		if err := applyTransformWrites(ctx, cbClient, writes, defaultContext); err != nil {
 			log.Error("failed to write entity", "err", err.Error())
 			return err
 		}
@@ -65,17 +65,22 @@ func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCl
 	}
 }
 
-func applyTransformWrites(ctx context.Context, cbClient client.ContextBrokerClient, writes []transform.EntityWrite) error {
+func applyTransformWrites(ctx context.Context, cbClient client.ContextBrokerClient, writes []transform.EntityWrite, defaultContext string) error {
 	for _, w := range writes {
+		entityContext := w.Context
+		if entityContext == "" {
+			entityContext = defaultContext
+		}
+
 		if w.Create {
-			err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
+			err := contextbroker.CreateNewEntityWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
 			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
 				return fmt.Errorf("failed to create entity %s: %w", w.EntityID, err)
 			}
 			continue
 		}
 
-		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, w.Context, w.Props); err != nil {
+		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
 			return fmt.Errorf("failed to merge or create entity %s: %w", w.EntityID, err)
 		}
 	}

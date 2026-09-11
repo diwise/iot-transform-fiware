@@ -33,7 +33,7 @@ func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) m
 		}},
 	}}
 
-	return things.NewDynamicThingTopicMessageHandler(cbClientFn, appthings.NewDynamicThingTransformer(rules))
+	return things.NewDynamicThingTopicMessageHandler(cbClientFn, appthings.NewDynamicThingTransformer(rules), "")
 }
 
 // FINAL-001: readiness-stubben rapporterar alltid OK utan att röra

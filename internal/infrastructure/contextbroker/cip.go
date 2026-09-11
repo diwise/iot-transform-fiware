@@ -122,6 +122,12 @@ func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 	return createNewEntity(ctx, cbClient, id, typeName, "", properties)
 }
 
+// CreateNewEntityWithContext skapar en entitet med den angivna JSON-LD-
+// contexten. Tom contextURL ger bibliotekets default-context.
+func CreateNewEntityWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
+	return createNewEntity(ctx, cbClient, id, typeName, contextURL, properties)
+}
+
 func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	if contextURL != "" {
 		properties = append(properties, entities.Context([]string{contextURL}))

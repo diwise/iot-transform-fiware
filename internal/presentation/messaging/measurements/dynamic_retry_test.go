@@ -61,7 +61,7 @@ func TestDynamicBrokerErrorIsPropagated(t *testing.T) {
 	want := errors.New("broker down")
 	dynamic := appmeasurements.NewDynamicTransformer(dynamicRule(), nil)
 
-	err := transformObservation(context.Background(), dynamic, dynamicObservation(time.Now().UTC()), errClient{err: want})
+	err := transformObservation(context.Background(), dynamic, dynamicObservation(time.Now().UTC()), errClient{err: want}, "")
 	is.True(errors.Is(err, want))
 }
 
@@ -73,6 +73,6 @@ func TestDynamicNoMatchIsSkipped(t *testing.T) {
 	observation := dynamicObservation(time.Now().UTC())
 	observation.Pack_[0].StringValue = "urn:oma:lwm2m:ext:9999"
 
-	err := transformObservation(context.Background(), dynamic, observation, errClient{err: errors.New("should not be called")})
+	err := transformObservation(context.Background(), dynamic, observation, errClient{err: errors.New("should not be called")}, "")
 	is.True(errors.Is(err, transform.ErrNoMatchingRule))
 }

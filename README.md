@@ -107,6 +107,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
 | `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases och valideras vid start |
 | `DEV_MGMT_URL` | `http://iot-device-mgmt` | Anvands for att sla upp enhets sensortyp (med TTL-cache) |
+| `DEFAULT_CONTEXT_URL` | diwise default-context | JSON-LD-context som fallback nar en entitet inte anger `context` |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
 | `RABBITMQ_PORT` | `5672` |  |
 | `RABBITMQ_VHOST` | `/` |  |

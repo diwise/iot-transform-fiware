@@ -23,12 +23,12 @@ import (
 )
 
 // NewDynamicMeasurementTopicMessageHandler använder den konfigurationsstyrda
-// motorn.
-func NewDynamicMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer) messaging.TopicMessageHandler {
-	return newMeasurementTopicMessageHandler(cbClientFn, dynamic)
+// motorn. defaultContext används för entiteter som inte anger en egen context.
+func NewDynamicMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer, defaultContext string) messaging.TopicMessageHandler {
+	return newMeasurementTopicMessageHandler(cbClientFn, dynamic, defaultContext)
 }
 
-func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer) messaging.TopicMessageHandler {
+func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer, defaultContext string) messaging.TopicMessageHandler {
 
 	log := logging.GetFromContext(context.Background())
 
@@ -110,7 +110,7 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			// Brokerfel propageras så att rapporten kan återlevereras.
 			// NGSI-LD merge/create är idempotent, så en retry konvergerar.
 			// Meddelanden utan relevanta egenskaper ackas (skip).
-			err = transformObservation(octx, dynamic, observation, cbClient)
+			err = transformObservation(octx, dynamic, observation, cbClient, defaultContext)
 			if err != nil {
 				if errors.Is(err, apptransform.ErrNoMatchingRule) {
 					olog.Debug("no matching rule for measurement")
@@ -133,22 +133,27 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 
 // transformObservation kör den konfigurationsstyrda motorn och skriver
 // entiteterna mot brokern.
-func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient, defaultContext string) error {
 	writes, err := dynamic.Transform(ctx, observation)
 	if err != nil {
 		return err
 	}
 
 	for _, w := range writes {
+		entityContext := w.Context
+		if entityContext == "" {
+			entityContext = defaultContext
+		}
+
 		if w.Create {
-			err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
+			err := contextbroker.CreateNewEntityWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
 			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
 				return err
 			}
 			continue
 		}
 
-		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, w.Context, w.Props); err != nil {
+		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
 			return err
 		}
 	}

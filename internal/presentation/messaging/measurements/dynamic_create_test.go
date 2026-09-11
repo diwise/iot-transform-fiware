@@ -43,7 +43,7 @@ func TestDynamicWritesInOrderAndHandlesCreate(t *testing.T) {
 	dynamic := appmeasurements.NewDynamicTransformer(rules, nil)
 	cb := &captureClient{}
 
-	err := transformObservation(context.Background(), dynamic, dynamicObservation(time.Now().UTC()), cb)
+	err := transformObservation(context.Background(), dynamic, dynamicObservation(time.Now().UTC()), cb, "")
 	is.NoErr(err)
 	is.Equal(cb.calls, []string{"create:urn:ngsi-ld:First:x", "merge:urn:ngsi-ld:Second:x"})
 }

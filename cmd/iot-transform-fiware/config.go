@@ -25,6 +25,7 @@ const (
 
 	modelsDir
 	deviceMgmtUrl
+	defaultContextUrl
 )
 
 type appConfig struct {
@@ -36,6 +37,9 @@ type appConfig struct {
 
 	// sensorTypes slår upp enhets sensortyp.
 	sensorTypes devicemanagement.SensorTypeResolver
+
+	// defaultContext används för entiteter som inte anger en egen context.
+	defaultContext string
 }
 
 var onstarting = servicerunner.OnStarting[appConfig]

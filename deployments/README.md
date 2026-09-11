@@ -28,6 +28,7 @@ docker run --rm \
 | --- | --- |
 | `MODELS_DIR` | Katalog med YAML-modeller (lexikografisk ordning) |
 | `DEV_MGMT_URL` | Sensortyp-uppslag med TTL-cache |
+| `DEFAULT_CONTEXT_URL` | JSON-LD-context som fallback när en entitet inte anger `context` |
 | `NGSI_CB_URL`, `OAUTH2_*` | Context-broker och OAuth2 |
 | `RABBITMQ_*` | Se `messaging.LoadConfiguration` |
 
