@@ -40,7 +40,7 @@ func TestDefaultFlags(t *testing.T) {
 		oauth2InsecureURL:  "true",
 		logLevel:           "debug",
 		modelsDir:          "/opt/diwise/config/models",
-		deviceMgmtUrl:      "http://device-management",
+		deviceMgmtUrl:      "http://iot-device-mgmt",
 	}
 
 	is.Equal(len(flags), len(expected))

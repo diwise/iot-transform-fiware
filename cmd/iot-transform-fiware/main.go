@@ -48,7 +48,7 @@ func defaultFlags() flagMap {
 		logLevel: "debug",
 
 		modelsDir:     "/opt/diwise/config/models",
-		deviceMgmtUrl: "http://device-management",
+		deviceMgmtUrl: "http://iot-device-mgmt",
 	}
 }
 
@@ -190,7 +190,7 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
-	flags[deviceMgmtUrl] = envOrDef(ctx, "DEVICE_MGMT_URL", flags[deviceMgmtUrl])
+	flags[deviceMgmtUrl] = envOrDef(ctx, "DEV_MGMT_URL", flags[deviceMgmtUrl])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {

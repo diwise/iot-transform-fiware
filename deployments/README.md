@@ -27,7 +27,7 @@ docker run --rm \
 | Variabel | Notering |
 | --- | --- |
 | `MODELS_DIR` | Katalog med YAML-modeller (lexikografisk ordning) |
-| `DEVICE_MGMT_URL` | Sensortyp-uppslag med TTL-cache |
+| `DEV_MGMT_URL` | Sensortyp-uppslag med TTL-cache |
 | `NGSI_CB_URL`, `OAUTH2_*` | Context-broker och OAuth2 |
 | `RABBITMQ_*` | Se `messaging.LoadConfiguration` |
 

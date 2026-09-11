@@ -106,7 +106,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `OAUTH2_REALM_INSECURE` | `true` | Endast exakt `true` stanger av TLS-verifiering |
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
 | `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases och valideras vid start |
-| `DEVICE_MGMT_URL` | `http://device-management` | Anvands for att sla upp enhets sensortyp (med TTL-cache) |
+| `DEV_MGMT_URL` | `http://iot-device-mgmt` | Anvands for att sla upp enhets sensortyp (med TTL-cache) |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
 | `RABBITMQ_PORT` | `5672` |  |
 | `RABBITMQ_VHOST` | `/` |  |
