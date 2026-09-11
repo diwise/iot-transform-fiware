@@ -52,6 +52,10 @@ func LoadModelsDir(dir string) ([]transform.Rule, error) {
 		rules = append(rules, r...)
 	}
 
+	if err := transform.Validate(rules); err != nil {
+		return nil, err
+	}
+
 	return rules, nil
 }
 

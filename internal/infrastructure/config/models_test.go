@@ -23,7 +23,7 @@ func TestLoadModelsDirUsesLexicographicOrder(t *testing.T) {
 	is := is.New(t)
 
 	dir := t.TempDir()
-	model := "rules:\n  - match: { kind: thing, type: %s }\n    entities: []\n"
+	model := "rules:\n  - match: { kind: thing, type: %s }\n    entities:\n      - id: urn:ngsi-ld:Thing:x\n        type: Thing\n        properties: []\n"
 	is.NoErr(os.WriteFile(filepath.Join(dir, "a-first.yaml"), []byte(fmt.Sprintf(model, "First")), 0o644))
 	is.NoErr(os.WriteFile(filepath.Join(dir, "b-second.yaml"), []byte(fmt.Sprintf(model, "Second")), 0o644))
 	is.NoErr(os.WriteFile(filepath.Join(dir, "ignored.txt"), []byte("not yaml"), 0o644))
