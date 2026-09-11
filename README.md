@@ -85,7 +85,9 @@ Testing is best done using unit tests. For integration testing the preferred way
  - `loglevel` - Set the log level (overrides `LOG_LEVEL`)
 
 ## Configuration files
-none
+Modeller for den dynamiska motorn lases fran `MODELS_DIR`
+(`/opt/diwise/config/models`) i lexikografisk filnamnsordning nar
+`DYNAMIC_MODELS=true`. Exempel finns i `deployments/models/`.
 
 ## Faktisk konfiguration (kod ar facit, HARM-002)
 Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt via `messaging.LoadConfiguration`.
