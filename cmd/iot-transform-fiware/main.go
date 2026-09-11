@@ -10,6 +10,7 @@ import (
 	"time"
 
 	measurementsApp "github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	thingsApp "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/config"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
@@ -192,9 +193,17 @@ func registerHandlers(svcCfg *appConfig) error {
 		{"desk", things.NewDeskTopicMessageHandler, desk},
 	}
 
-	for _, h := range thingHandlers {
-		if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(cbClientFn), h.filter); err != nil {
-			return fmt.Errorf("failed to register %s handler: %w", h.name, err)
+	if len(svcCfg.models) > 0 {
+		dynamic := thingsApp.NewDynamicThingTransformer(svcCfg.models)
+		handler := things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamic)
+		if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, handler); err != nil {
+			return fmt.Errorf("failed to register dynamic thing handler: %w", err)
+		}
+	} else {
+		for _, h := range thingHandlers {
+			if err := messenger.RegisterTopicMessageHandlerWithFilter(ThingUpdatedTopic, h.handler(cbClientFn), h.filter); err != nil {
+				return fmt.Errorf("failed to register %s handler: %w", h.name, err)
+			}
 		}
 	}
 

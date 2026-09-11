@@ -1,0 +1,9 @@
+rules:
+  - match: { kind: thing, type: Container }
+    entities:
+      - id: "urn:ngsi-ld:{{type}}:{{nameOrID}}"
+        type: "{{type}}"
+        properties:
+          - { target: fillingLevel, type: Number, field: percent, observedAt: header }
+          - { target: location, type: Geo, field: location }
+          - { target: dateObserved, type: DateTime, timestamp: true }
