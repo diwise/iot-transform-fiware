@@ -111,6 +111,7 @@ type Property struct {
 	Type       PropertyType `yaml:"type"`
 	Unit       string       `yaml:"unit,omitempty"`
 	ObservedAt ObservedAt   `yaml:"observedAt,omitempty"`
+	ObservedBy string       `yaml:"observedBy,omitempty"`
 	When       When         `yaml:"when,omitempty"`
 	Required   bool         `yaml:"required,omitempty"`
 

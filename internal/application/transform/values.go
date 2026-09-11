@@ -59,7 +59,7 @@ func buildProperty(p Property, m Measurement) (entities.EntityDecoratorFunc, err
 	}
 
 	if p.Timestamp {
-		return decorate(p, m.Timestamp.UTC().Format(rfc3339), "")
+		return decorate(p, m.Timestamp.UTC().Format(rfc3339), "", "")
 	}
 
 	r, ok := m.findRecord(p)
@@ -80,7 +80,19 @@ func buildProperty(p Property, m Measurement) (entities.EntityDecoratorFunc, err
 		return nil, err
 	}
 
-	return decorate(p, raw, observationTime(p, m, r))
+	observedBy, err := renderObservedBy(p, m)
+	if err != nil {
+		return nil, err
+	}
+
+	return decorate(p, raw, observationTime(p, m, r), observedBy)
+}
+
+func renderObservedBy(p Property, m Measurement) (string, error) {
+	if p.ObservedBy == "" {
+		return "", nil
+	}
+	return renderTemplate(p.ObservedBy, m.templateVars(), nil)
 }
 
 // rawValue returnerar postens nativa värde. Typomvandling till propertyns
@@ -101,19 +113,22 @@ func rawValue(p Property, r Record) (any, error) {
 	}
 }
 
-func decorate(p Property, raw any, observedAt string) (entities.EntityDecoratorFunc, error) {
+func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
 	switch p.Type {
 	case TypeNumber:
 		v, ok := toFloat(raw)
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected number", p.Target)
 		}
-		opts := make([]properties.NumberPropertyDecoratorFunc, 0, 2)
+		opts := make([]properties.NumberPropertyDecoratorFunc, 0, 3)
 		if p.Unit != "" {
 			opts = append(opts, properties.UnitCode(p.Unit))
 		}
 		if observedAt != "" {
 			opts = append(opts, properties.ObservedAt(observedAt))
+		}
+		if observedBy != "" {
+			opts = append(opts, properties.ObservedBy(observedBy))
 		}
 		return decorators.Number(p.Target, v, opts...), nil
 	case TypeText:
@@ -325,7 +340,12 @@ func buildDerived(p Property, m Measurement) (entities.EntityDecoratorFunc, erro
 		return nil, nil
 	}
 
-	return decorate(p, raw, observationTime(p, m, Record{}))
+	observedBy, err := renderObservedBy(p, m)
+	if err != nil {
+		return nil, err
+	}
+
+	return decorate(p, raw, observationTime(p, m, Record{}), observedBy)
 }
 
 func deriveValue(fn string, values []any) (any, error) {

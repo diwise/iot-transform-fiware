@@ -146,6 +146,12 @@ func (p Property) validate() error {
 		}
 	}
 
+	if p.ObservedBy != "" {
+		if err := validateTemplate(p.ObservedBy); err != nil {
+			return err
+		}
+	}
+
 	if p.Type == TypeStructured {
 		if len(p.Subproperties) == 0 {
 			return errors.New("a structured property must declare subproperties")
