@@ -1,0 +1,9 @@
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3324" }
+    entities:
+      - id: "urn:ngsi-ld:NoiseLevelObserved:{{deviceID}}"
+        type: NoiseLevelObserved
+        properties:
+          - { target: noiseLevel, type: Number, resource: "5700", observedAt: header }
+          - { target: location, type: Geo, latlon: true }
+          - { target: dateObserved, type: DateTime, timestamp: true }

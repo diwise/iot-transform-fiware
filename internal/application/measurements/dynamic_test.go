@@ -89,4 +89,48 @@ func TestWeatherObservedMatchesDynamicEngine(t *testing.T) {
 	is.Equal(dynamicJSON, staticJSON)
 }
 
+func noisePack(ts time.Time) senml.Pack {
+	return senml.Pack{
+		{Name: "dev-1/0", StringValue: "urn:oma:lwm2m:ext:3324", Time: float64(ts.Unix())},
+		{Name: "dev-1/5700", Value: ptr(55.0)},
+		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/tenant", StringValue: "default"},
+	}
+}
+
+const noiseRules = `
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3324" }
+    entities:
+      - id: "urn:ngsi-ld:NoiseLevelObserved:{{deviceID}}"
+        type: NoiseLevelObserved
+        properties:
+          - { target: noiseLevel, type: Number, resource: "5700", observedAt: header }
+          - { target: location, type: Geo, latlon: true }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+`
+
+func TestNoiseLevelObservedMatchesDynamicEngine(t *testing.T) {
+	is := is.New(t)
+
+	ts := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	msg := events.MessageAccepted{Pack_: noisePack(ts), Timestamp: ts}
+
+	writer := &captureWriter{}
+	is.NoErr(NoiseLevelObserved(context.Background(), msg, nil, writer))
+	staticJSON := marshalEntity(t, writer.id, writer.typeName, writer.props)
+
+	rules, err := config.ParseModel([]byte(noiseRules))
+	is.NoErr(err)
+	is.NoErr(transform.Validate(rules))
+
+	writes, err := NewDynamicTransformer(rules, nil).Transform(context.Background(), msg)
+	is.NoErr(err)
+	is.Equal(len(writes), 1)
+	dynamicJSON := marshalEntity(t, writes[0].EntityID, writes[0].TypeName, writes[0].Props)
+
+	is.Equal(dynamicJSON, staticJSON)
+}
+
 func ptr(f float64) *float64 { return &f }
