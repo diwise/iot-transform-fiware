@@ -220,4 +220,21 @@ func TestValidateRejectsUnitOnNonNumber(t *testing.T) {
 	is.NoErr(Validate([]Rule{r}))
 }
 
+func TestValidateTemplateVariables(t *testing.T) {
+	is := is.New(t)
+
+	r := validRule()
+	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{deviceID}}-{{safeURI(name)}}"
+	is.NoErr(Validate([]Rule{r}))
+
+	r = validRule()
+	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{bogus}}"
+	is.True(Validate([]Rule{r}) != nil)
+
+	r = validRule()
+	r.Entities[0].Properties[0].Type = TypeRelationship
+	r.Entities[0].Properties[0].Source = Source{Value: "urn:ngsi-ld:X:{{safeURI(nope)}}"}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
 func ptr(f float64) *float64 { return &f }

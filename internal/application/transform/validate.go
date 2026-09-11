@@ -106,6 +106,9 @@ func (e Entity) validate() error {
 	if e.Type == "" {
 		return errors.New("entity.type is required")
 	}
+	if err := validateTemplate(e.ID); err != nil {
+		return fmt.Errorf("entity.id: %w", err)
+	}
 
 	for i, p := range e.Properties {
 		if err := p.validate(); err != nil {
@@ -135,6 +138,12 @@ func (p Property) validate() error {
 
 	if p.Unit != "" && p.Type != TypeNumber && p.Type != TypeNumberArray {
 		return fmt.Errorf("unit is only valid for Number and NumberArray properties")
+	}
+
+	if p.Value != "" {
+		if err := validateTemplate(p.Value); err != nil {
+			return err
+		}
 	}
 
 	if p.Type == TypeStructured {
