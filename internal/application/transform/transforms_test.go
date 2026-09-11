@@ -151,6 +151,38 @@ func TestDeriveFirstPresent(t *testing.T) {
 	is.True(strings.Contains(renderFirst(t, m, r), `"value":5`))
 }
 
+func TestWhenPresentSkipsDerivedWithoutSources(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+	r := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"})
+	r.Entities[0].Properties[0].When = WhenPresent
+
+	writes, err := NewEngine([]Rule{r}).Transform(m)
+	is.NoErr(err)
+	is.Equal(len(writes[0].Props), 0)
+}
+
+func TestDeriveWithoutWhenWritesZeroForEmptySources(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+	r := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"})
+	is.True(strings.Contains(renderFirst(t, m, r), `"value":0`))
+}
+
+func TestWhenPresentOnMissingScalarIsSkipped(t *testing.T) {
+	is := is.New(t)
+
+	x := testMeasurement()
+	r := transformRule(TypeNumber, Source{Resource: "missing"})
+	r.Entities[0].Properties[0].When = WhenPresent
+
+	writes, err := NewEngine([]Rule{r}).Transform(x)
+	is.NoErr(err)
+	is.Equal(len(writes[0].Props), 0)
+}
+
 func TestDeriveMissingOptionalIsSkipped(t *testing.T) {
 	is := is.New(t)
 

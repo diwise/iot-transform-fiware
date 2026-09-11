@@ -367,6 +367,16 @@ func buildDerived(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 		values = append(values, rv.value)
 	}
 
+	// when: present innebär att en deriverad property bara skrivs om minst en
+	// källa fanns. Utan when skrivs funktionens resultat även för tomma källor
+	// (t.ex. anyTrue -> 0).
+	if p.When == WhenPresent && len(values) == 0 {
+		if p.Required {
+			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+		}
+		return nil, nil
+	}
+
 	raw, err := deriveValue(p.Derive.Fn, values)
 	if err != nil {
 		return nil, fmt.Errorf("property %s: %w", p.Target, err)
