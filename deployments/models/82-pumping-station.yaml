@@ -1,0 +1,10 @@
+# SewagePumpingStation (diwise-specifik typ).
+rules:
+  - match: { kind: thing, type: PumpingStation }
+    entities:
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{nameOrID}}"
+        type: SewagePumpingStation
+        properties:
+          - { target: dateObserved, type: DateTime, field: observedAt }
+          - { target: status, type: Text, field: pumpingObserved, observedAt: "field:pumpingObservedAt", transform: [{ op: boolToOnOff }] }
+          - { target: location, type: Geo, field: location }

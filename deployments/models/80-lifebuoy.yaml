@@ -1,0 +1,10 @@
+# Lifebuoy (diwise-specifik typ).
+rules:
+  - match: { kind: thing, type: Lifebuoy }
+    entities:
+      - id: "urn:ngsi-ld:Lifebuoy:{{nameOrID}}"
+        type: Lifebuoy
+        properties:
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+          - { target: status, type: Text, field: presence, observedAt: header, transform: [{ op: boolToOnOff }] }
+          - { target: location, type: Geo, field: location }
