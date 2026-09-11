@@ -100,7 +100,11 @@ func (p Property) validate() error {
 		return errors.New("subproperties are only valid for structured properties")
 	}
 
-	return p.validateSource()
+	if err := p.validateSource(); err != nil {
+		return err
+	}
+
+	return p.validateFunctions()
 }
 
 var validObservedAt = map[ObservedAt]bool{

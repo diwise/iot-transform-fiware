@@ -89,3 +89,60 @@ func TestValidateRejectsSubpropertiesOnScalar(t *testing.T) {
 	}
 	is.True(Validate([]Rule{r}) != nil)
 }
+
+func TestValidateRejectsUnknownTransformOp(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: "explode"}}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
+func TestValidateRejectsTransformValueRequirements(t *testing.T) {
+	is := is.New(t)
+
+	r := validRule()
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply}}
+	is.True(Validate([]Rule{r}) != nil) // multiply kräver value
+
+	r = validRule()
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpFloor, Value: ptr(1.0)}}
+	is.True(Validate([]Rule{r}) != nil) // floor får inte ha value
+
+	r = validRule()
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply, Value: ptr(2.0)}}
+	is.NoErr(Validate([]Rule{r}))
+}
+
+func TestValidateRejectsUnknownDeriveFn(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Entities[0].Properties[0].Source = Source{}
+	r.Entities[0].Properties[0].Derive = &Derive{Fn: "magic", Of: []Source{{Resource: "a"}}}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
+func TestValidateRejectsDeriveWithoutSources(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Entities[0].Properties[0].Source = Source{}
+	r.Entities[0].Properties[0].Derive = &Derive{Fn: FnSum}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
+func TestValidateRejectsTransformAndDeriveCombined(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Entities[0].Properties[0].Derive = &Derive{Fn: FnSum, Of: []Source{{Resource: "temperature"}}}
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpFloor}}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
+func TestValidateAcceptsDerive(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Entities[0].Properties[0].Source = Source{}
+	r.Entities[0].Properties[0].Derive = &Derive{Fn: FnFirstPresent, Of: []Source{{Resource: "a"}, {Resource: "b"}}}
+	is.NoErr(Validate([]Rule{r}))
+}
+
+func ptr(f float64) *float64 { return &f }
