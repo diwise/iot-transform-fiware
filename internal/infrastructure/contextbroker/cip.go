@@ -64,13 +64,19 @@ func (EntityWriter) MergeOrCreate(ctx context.Context, cbClient client.ContextBr
 }
 
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
+	return MergeOrCreateWithContext(ctx, cbClient, id, typeName, "", properties)
+}
+
+// MergeOrCreateWithContext är som MergeOrCreate men använder den angivna
+// JSON-LD-contexten när entiteten skapas. Tom contextURL ger default-context.
+func MergeOrCreateWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	unlock := locks.lock(id)
 	defer unlock()
 
 	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
 	ctx = logging.NewContextWithLogger(ctx, log)
 
-	err := mergeEntity(ctx, cbClient, id, properties)
+	err := mergeEntityWithContext(ctx, cbClient, id, contextURL, properties)
 	if err != nil && !errors.Is(err, errEntityNotFound) {
 		return err
 	}
@@ -80,11 +86,11 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 		return nil
 	}
 
-	err = CreateNewEntity(ctx, cbClient, id, typeName, properties)
+	err = createNewEntity(ctx, cbClient, id, typeName, contextURL, properties)
 	if err != nil {
 		if errors.Is(err, ErrEntityAlreadyExists) {
 			log.Warn("entity already exists, try merging again...")
-			return mergeEntity(ctx, cbClient, id, properties)
+			return mergeEntityWithContext(ctx, cbClient, id, contextURL, properties)
 		}
 
 		return err
@@ -121,7 +127,15 @@ func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id 
 var ErrEntityAlreadyExists = errors.New("entity already exists")
 
 func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	properties = append(properties, entities.DefaultContext())
+	return createNewEntity(ctx, cbClient, id, typeName, "", properties)
+}
+
+func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
+	if contextURL != "" {
+		properties = append(properties, entities.Context([]string{contextURL}))
+	} else {
+		properties = append(properties, entities.DefaultContext())
+	}
 
 	entity, err := entities.New(id, typeName, properties...)
 	if err != nil {
@@ -143,7 +157,15 @@ func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 var errEntityNotFound = errors.New("entity not found")
 
 func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, properties []entities.EntityDecoratorFunc) error {
+	return mergeEntityWithContext(ctx, cbClient, id, "", properties)
+}
+
+func mergeEntityWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	log := logging.GetFromContext(ctx)
+
+	if contextURL != "" {
+		properties = append(properties, entities.Context([]string{contextURL}))
+	}
 
 	fragment, err := entities.NewFragment(properties...)
 	if err != nil {
