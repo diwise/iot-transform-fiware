@@ -145,4 +145,19 @@ func TestValidateAcceptsDerive(t *testing.T) {
 	is.NoErr(Validate([]Rule{r}))
 }
 
+func TestValidateRejectsConflictingEntityTypes(t *testing.T) {
+	is := is.New(t)
+
+	a := validRule()
+	b := validRule()
+	b.Entities[0].Type = "Other"
+
+	is.True(Validate([]Rule{a, b}) != nil)
+}
+
+func TestValidateAcceptsSameEntityWithSameType(t *testing.T) {
+	is := is.New(t)
+	is.NoErr(Validate([]Rule{validRule(), validRule()}))
+}
+
 func ptr(f float64) *float64 { return &f }

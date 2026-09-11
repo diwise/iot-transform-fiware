@@ -20,11 +20,21 @@ var validPropertyTypes = map[PropertyType]bool{
 
 // Validate kör samtliga valideringar på en ordnad regellista.
 func Validate(rules []Rule) error {
+	types := map[string]string{}
+
 	for i, r := range rules {
 		if err := r.validate(); err != nil {
 			return fmt.Errorf("rule %d: %w", i, err)
 		}
+
+		for _, e := range r.Entities {
+			if known, ok := types[e.ID]; ok && known != e.Type {
+				return fmt.Errorf("entity %q has conflicting types %q and %q", e.ID, known, e.Type)
+			}
+			types[e.ID] = e.Type
+		}
 	}
+
 	return nil
 }
 
