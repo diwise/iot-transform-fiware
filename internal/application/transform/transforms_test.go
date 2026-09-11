@@ -89,6 +89,90 @@ func TestSafeURITransform(t *testing.T) {
 	is.True(strings.Contains(renderFirst(t, x, r), `"value":"a%20b%2Fc"`))
 }
 
+func deriveRule(typ PropertyType, fn string, required bool, sources ...Source) Rule {
+	return Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
+		ID: "urn:ngsi-ld:T:x", Type: "T",
+		Properties: []Property{{Target: "v", Type: typ, Required: required, Derive: &Derive{Fn: fn, Of: sources}}},
+	}}}
+}
+
+func derivedMeasurement() Measurement {
+	m := testMeasurement()
+	m.Records = []Record{
+		{Name: "a", Value: ptr(2)},
+		{Name: "b", Value: ptr(5)},
+		{Name: "flag", Bool: boolptrForTransform(true)},
+	}
+	return m
+}
+
+func TestDeriveNumericFunctions(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+
+	cases := []struct {
+		fn   string
+		want string
+	}{
+		{FnSum, `"value":7`},
+		{FnMin, `"value":2`},
+		{FnMax, `"value":5`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.fn, func(t *testing.T) {
+			is := is.New(t)
+			r := deriveRule(TypeNumber, tc.fn, false, Source{Resource: "a"}, Source{Resource: "b"})
+			is.True(strings.Contains(renderFirst(t, m, r), tc.want))
+		})
+	}
+}
+
+func TestDeriveBooleanFunctionsAsNumbers(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+
+	any := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "flag"}, Source{Resource: "missing"})
+	is.True(strings.Contains(renderFirst(t, m, any), `"value":1`))
+
+	all := deriveRule(TypeNumber, FnAllTrue, false, Source{Resource: "flag"})
+	is.True(strings.Contains(renderFirst(t, m, all), `"value":1`))
+
+	none := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"})
+	is.True(strings.Contains(renderFirst(t, m, none), `"value":0`))
+}
+
+func TestDeriveFirstPresent(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+	r := deriveRule(TypeNumber, FnFirstPresent, false, Source{Resource: "missing"}, Source{Resource: "b"})
+	is.True(strings.Contains(renderFirst(t, m, r), `"value":5`))
+}
+
+func TestDeriveMissingOptionalIsSkipped(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+	r := deriveRule(TypeNumber, FnSum, false, Source{Resource: "missing"})
+
+	writes, err := NewEngine([]Rule{r}).Transform(m)
+	is.NoErr(err)
+	is.Equal(len(writes[0].Props), 0)
+}
+
+func TestDeriveMissingRequiredSkipsEntity(t *testing.T) {
+	is := is.New(t)
+
+	m := derivedMeasurement()
+	r := deriveRule(TypeNumber, FnSum, true, Source{Resource: "missing"})
+
+	writes, err := NewEngine([]Rule{r}).Transform(m)
+	is.NoErr(err)
+	is.Equal(len(writes), 0)
+}
+
 func TestDivideByZeroFails(t *testing.T) {
 	is := is.New(t)
 

@@ -281,9 +281,90 @@ func (m Measurement) findByRecordName(name string) (Record, bool) {
 	return Record{}, false
 }
 
-// buildDerived fylls i av deriveringsfunktionerna.
+// buildDerived kombinerar flera källor med en namngiven funktion.
 func buildDerived(p Property, m Measurement) (entities.EntityDecoratorFunc, error) {
-	return nil, fmt.Errorf("property %s: derive is not implemented yet", p.Target)
+	values := make([]any, 0, len(p.Derive.Of))
+
+	for _, s := range p.Derive.Of {
+		r, ok := m.findRecord(Property{Source: s})
+		if !ok {
+			continue
+		}
+		v, err := rawValue(p, r)
+		if err != nil {
+			continue
+		}
+		values = append(values, v)
+	}
+
+	raw, err := deriveValue(p.Derive.Fn, values)
+	if err != nil {
+		return nil, fmt.Errorf("property %s: %w", p.Target, err)
+	}
+
+	if raw == nil {
+		if p.Required {
+			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+		}
+		return nil, nil
+	}
+
+	return decorate(p, raw, observationTime(p, m, Record{}))
+}
+
+func deriveValue(fn string, values []any) (any, error) {
+	switch fn {
+	case FnAnyTrue:
+		for _, v := range values {
+			if b, ok := toBool(v); ok && b {
+				return true, nil
+			}
+		}
+		return false, nil
+	case FnAllTrue:
+		if len(values) == 0 {
+			return false, nil
+		}
+		for _, v := range values {
+			if b, ok := toBool(v); ok && !b {
+				return false, nil
+			}
+		}
+		return true, nil
+	case FnSum, FnMin, FnMax:
+		nums := make([]float64, 0, len(values))
+		for _, v := range values {
+			if f, ok := toFloat(v); ok {
+				nums = append(nums, f)
+			}
+		}
+		if len(nums) == 0 {
+			return nil, nil
+		}
+		result := nums[0]
+		for _, f := range nums[1:] {
+			switch fn {
+			case FnSum:
+				result += f
+			case FnMin:
+				if f < result {
+					result = f
+				}
+			case FnMax:
+				if f > result {
+					result = f
+				}
+			}
+		}
+		return result, nil
+	case FnCoalesce, FnFirstPresent:
+		if len(values) == 0 {
+			return nil, nil
+		}
+		return values[0], nil
+	default:
+		return nil, fmt.Errorf("unknown derive fn %q", fn)
+	}
 }
 
 const rfc3339 = "2006-01-02T15:04:05Z07:00"
