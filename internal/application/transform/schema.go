@@ -92,6 +92,7 @@ type Source struct {
 	LatLon    bool   `yaml:"latlon,omitempty"`
 	Timestamp bool   `yaml:"timestamp,omitempty"`
 	Value     string `yaml:"value,omitempty"`
+	Prefix    string `yaml:"prefix,omitempty"`
 }
 
 // Transform är ett namngivet steg som appliceras på ett enskilt värde.

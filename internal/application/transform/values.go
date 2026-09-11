@@ -17,25 +17,36 @@ import (
 // buildProperty skapar dekoratören för en property. Saknad källa ger
 // (nil, nil) för valfria properties och ErrRequiredSourceMissing för
 // required.
-func buildProperty(p Property, in Input) (entities.EntityDecoratorFunc, error) {
+func buildProperty(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
 	if p.Derive != nil {
 		return buildDerived(p, in)
 	}
 
 	if p.Type == TypeStructured {
-		return buildStructured(p, in)
+		return buildStructured(p, in, ids)
 	}
 
-	if p.Const != nil {
+	if p.Const != nil || p.Value != "" {
+		raw := p.Const
+		if p.Value != "" {
+			rendered, err := renderTemplate(p.Value, in.Variables(), ids)
+			if err != nil {
+				return nil, err
+			}
+			raw = rendered
+		}
+
+		raw, err := applyTransforms(p, raw)
+		if err != nil {
+			return nil, err
+		}
+
 		observedBy, err := renderObservedBy(p, in)
 		if err != nil {
 			return nil, err
 		}
-		raw, err := applyTransforms(p, p.Const)
-		if err != nil {
-			return nil, err
-		}
-		return decorate(p, raw, observationTime(p, in, resolvedValue{}), observedBy)
+
+		return decorate(p, applyPrefix(p, raw), observationTime(p, in, resolvedValue{}), observedBy)
 	}
 
 	if p.LatLon {
@@ -74,7 +85,32 @@ func buildProperty(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 		return nil, err
 	}
 
-	return decorate(p, raw, observationTime(p, in, rv), observedBy)
+	return decorate(p, applyPrefix(p, raw), observationTime(p, in, rv), observedBy)
+}
+
+// applyPrefix prependar en sträng till ett skalärt värde eller till varje
+// element i en lista (t.ex. "urn:ngsi-ld:Device:").
+func applyPrefix(p Property, raw any) any {
+	if p.Prefix == "" {
+		return raw
+	}
+
+	switch x := raw.(type) {
+	case string:
+		return p.Prefix + x
+	case []any:
+		out := make([]any, len(x))
+		for i, v := range x {
+			if s, ok := v.(string); ok {
+				out[i] = p.Prefix + s
+			} else {
+				out[i] = v
+			}
+		}
+		return out
+	default:
+		return raw
+	}
 }
 
 func renderObservedBy(p Property, in Input) (string, error) {
@@ -186,11 +222,11 @@ func relationshipDecorator(name, value string) entities.EntityDecoratorFunc {
 
 // buildStructured bygger en NGSI-LD-property vars värde som ett objekt av
 // delproperties.
-func buildStructured(p Property, in Input) (entities.EntityDecoratorFunc, error) {
+func buildStructured(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
 	obj := map[string]any{}
 
 	for _, sp := range p.Subproperties {
-		val, found, err := resolveSubValue(sp, in)
+		val, found, err := resolveSubValue(sp, in, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +242,7 @@ func buildStructured(p Property, in Input) (entities.EntityDecoratorFunc, error)
 			return nil, err
 		}
 
-		obj[sp.Target] = val
+		obj[sp.Target] = applyPrefix(sp, val)
 	}
 
 	if len(obj) == 0 && p.Required {
@@ -216,9 +252,16 @@ func buildStructured(p Property, in Input) (entities.EntityDecoratorFunc, error)
 	return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: obj}), nil
 }
 
-func resolveSubValue(p Property, in Input) (any, bool, error) {
+func resolveSubValue(p Property, in Input, ids map[string]string) (any, bool, error) {
 	if p.Const != nil {
 		return p.Const, true, nil
+	}
+	if p.Value != "" {
+		rendered, err := renderTemplate(p.Value, in.Variables(), ids)
+		if err != nil {
+			return nil, false, err
+		}
+		return rendered, true, nil
 	}
 	if p.LatLon {
 		lat, lon, ok := in.LatLon()

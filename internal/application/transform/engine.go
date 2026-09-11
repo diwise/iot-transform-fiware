@@ -95,7 +95,7 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
 		}
 
-		props, err := entityProps(ent, in)
+		props, err := entityProps(ent, in, ids)
 		if err != nil {
 			if errors.Is(err, ErrRequiredSourceMissing) {
 				continue
@@ -115,11 +115,11 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 	return writes, nil
 }
 
-func entityProps(ent Entity, in Input) ([]entities.EntityDecoratorFunc, error) {
+func entityProps(ent Entity, in Input, ids map[string]string) ([]entities.EntityDecoratorFunc, error) {
 	props := make([]entities.EntityDecoratorFunc, 0, len(ent.Properties))
 
 	for _, p := range ent.Properties {
-		dec, err := buildProperty(p, in)
+		dec, err := buildProperty(p, in, ids)
 		if err != nil {
 			return nil, err
 		}
