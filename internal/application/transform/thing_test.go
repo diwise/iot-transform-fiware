@@ -66,6 +66,47 @@ func TestMeasurementDoesNotMatchThingRule(t *testing.T) {
 	is.True(err == ErrNoMatchingRule)
 }
 
+func thingRule(id, typ, subType, tenant string) Rule {
+	return Rule{
+		Match:    Match{Kind: KindThing, Type: typ, SubType: subType, Tenant: tenant},
+		Entities: []Entity{{ID: id, Type: "Thing"}},
+	}
+}
+
+func TestThingPrecedenceTypeOverSubTypeOverTenant(t *testing.T) {
+	is := is.New(t)
+
+	th := testThing()
+	th.SubType = "WasteContainer"
+
+	byTenant := thingRule("urn:ngsi-ld:Thing:tenant", "", "", "default")
+	bySubType := thingRule("urn:ngsi-ld:Thing:sub", "", "WasteContainer", "")
+	byType := thingRule("urn:ngsi-ld:Thing:type", "Container", "", "")
+
+	writes, err := NewEngine([]Rule{byTenant, bySubType, byType}).Transform(th)
+	is.NoErr(err)
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:type")
+}
+
+func TestThingTieBreaksByConfigOrder(t *testing.T) {
+	is := is.New(t)
+
+	first := thingRule("urn:ngsi-ld:Thing:first", "Container", "", "")
+	second := thingRule("urn:ngsi-ld:Thing:second", "Container", "", "")
+
+	writes, err := NewEngine([]Rule{first, second}).Transform(testThing())
+	is.NoErr(err)
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:first")
+}
+
+func TestThingTenantMustMatch(t *testing.T) {
+	is := is.New(t)
+
+	rule := thingRule("urn:ngsi-ld:Thing:x", "Container", "", "other")
+	_, err := NewEngine([]Rule{rule}).Transform(testThing())
+	is.True(err == ErrNoMatchingRule)
+}
+
 func TestThingUuidVariable(t *testing.T) {
 	is := is.New(t)
 
