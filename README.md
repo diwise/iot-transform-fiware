@@ -100,6 +100,8 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `OAUTH2_CLIENT_SECRET` | (tom) |  |
 | `OAUTH2_REALM_INSECURE` | `true` | Endast exakt `true` stanger av TLS-verifiering |
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
+| `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases i lexikografisk ordning |
+| `DYNAMIC_MODELS` | `false` | `true` aktiverar den dynamiska motorn och laddar/validerar modellerna vid start; `false` anvander den statiska motorn. Endast exakt `true` slar pa |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
 | `RABBITMQ_PORT` | `5672` |  |
 | `RABBITMQ_VHOST` | `/` |  |

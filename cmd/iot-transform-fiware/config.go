@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
@@ -20,11 +21,18 @@ const (
 	oauth2InsecureURL
 
 	logLevel
+
+	modelsDir
+	dynamicEngine
 )
 
 type appConfig struct {
 	messenger  messaging.MsgContext
 	cbClientFn contextbroker.ContextBrokerClientFactoryFunc
+
+	// models är den inlästa och validerade regellistan. Tom när den statiska
+	// motorn används (DYNAMIC_MODELS=false).
+	models []transform.Rule
 }
 
 var onstarting = servicerunner.OnStarting[appConfig]

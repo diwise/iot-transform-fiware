@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/config"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
@@ -41,7 +43,26 @@ func defaultFlags() flagMap {
 		oauth2InsecureURL:  "true",
 
 		logLevel: "debug",
+
+		modelsDir:     "/opt/diwise/config/models",
+		dynamicEngine: "false",
 	}
+}
+
+// loadModels läser och validerar modellkonfigurationen när den dynamiska
+// motorn är aktiverad. Med den statiska motorn (default) returneras inga
+// regler.
+func loadModels(flags flagMap) ([]transform.Rule, error) {
+	if flags[dynamicEngine] != "true" {
+		return nil, nil
+	}
+
+	rules, err := config.LoadModelsDir(flags[modelsDir])
+	if err != nil {
+		return nil, fmt.Errorf("failed to load models from %s: %w", flags[modelsDir], err)
+	}
+
+	return rules, nil
 }
 
 const (
@@ -67,9 +88,13 @@ func main() {
 
 	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags))
 
+	models, err := loadModels(flags)
+	exitIf(err, logger, "failed to load model configuration")
+
 	cfg := &appConfig{
 		messenger:  messenger,
 		cbClientFn: factory,
+		models:     models,
 	}
 
 	runner, err := initialize(ctx, flags, cfg)
@@ -187,6 +212,8 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[oauth2ClientSecret] = envOrDef(ctx, "OAUTH2_CLIENT_SECRET", flags[oauth2ClientSecret])
 	flags[oauth2InsecureURL] = envOrDef(ctx, "OAUTH2_REALM_INSECURE", flags[oauth2InsecureURL])
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
+	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
+	flags[dynamicEngine] = envOrDef(ctx, "DYNAMIC_MODELS", flags[dynamicEngine])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {
