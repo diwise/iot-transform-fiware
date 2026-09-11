@@ -22,7 +22,11 @@ WORKDIR /opt/diwise
 
 COPY --from=builder --chown=1001 /app/cmd/iot-transform-fiware/iot-transform-fiware /opt/diwise
 
-RUN chown 1001 /opt/diwise
+# Bakade standardmodeller. En mount på MODELS_DIR ersätter dem vid drift.
+COPY --chown=1001 deployments/models /opt/diwise/config/models
+ENV MODELS_DIR=/opt/diwise/config/models
+
+RUN chown -R 1001 /opt/diwise
 
 EXPOSE 8000
 USER 1001
