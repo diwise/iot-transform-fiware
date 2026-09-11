@@ -3,8 +3,11 @@ package transform
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+var entityRefRe = regexp.MustCompile(`\{\{entities\.([A-Za-z0-9_-]+)\.id\}\}`)
 
 var validPropertyTypes = map[PropertyType]bool{
 	TypeNumber:       true,
@@ -54,6 +57,42 @@ func (r Rule) validate() error {
 	for i, e := range r.Entities {
 		if err := e.validate(); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
+		}
+	}
+
+	return r.validateReferences()
+}
+
+// validateReferences kontrollerar att {{entities.<namn>.id}} pekar på en
+// deklarerad entitet i samma regel och att en create-entitet skapas innan den
+// refereras.
+func (r Rule) validateReferences() error {
+	index := map[string]int{}
+	for i, e := range r.Entities {
+		if e.Name == "" {
+			continue
+		}
+		if _, dup := index[e.Name]; dup {
+			return fmt.Errorf("duplicate entity name %q", e.Name)
+		}
+		index[e.Name] = i
+	}
+
+	for i, e := range r.Entities {
+		refs := entityRefRe.FindAllStringSubmatch(e.ID, -1)
+		for _, p := range e.Properties {
+			refs = append(refs, entityRefRe.FindAllStringSubmatch(p.Value, -1)...)
+		}
+
+		for _, m := range refs {
+			name := m[1]
+			j, ok := index[name]
+			if !ok {
+				return fmt.Errorf("entity %d references unknown entity %q", i, name)
+			}
+			if r.Entities[j].Create && j > i {
+				return fmt.Errorf("entity %q is created after it is referenced by entity %d", name, i)
+			}
 		}
 	}
 

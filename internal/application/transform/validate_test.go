@@ -160,4 +160,51 @@ func TestValidateAcceptsSameEntityWithSameType(t *testing.T) {
 	is.NoErr(Validate([]Rule{validRule(), validRule()}))
 }
 
+func TestValidateRejectsUnknownEntityReference(t *testing.T) {
+	is := is.New(t)
+
+	r := validRule()
+	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{entities.missing.id}}"
+	r.Entities[0].Name = "thing"
+
+	is.True(Validate([]Rule{r}) != nil)
+}
+
+func TestValidateRejectsCreateEntityReferencedTooEarly(t *testing.T) {
+	is := is.New(t)
+
+	ref := validEntity()
+	ref.Name = "building"
+	ref.Create = true
+	ref.Properties[0] = Property{
+		Target: "refBuilding",
+		Type:   TypeRelationship,
+		Source: Source{Value: "urn:ngsi-ld:Building:{{entities.building.id}}"},
+	}
+
+	referrer := validEntity()
+	referrer.ID = "urn:ngsi-ld:Thing:{{entities.building.id}}"
+	referrer.Name = "thing"
+
+	// building skapas efter att thing refererar till den.
+	r := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{referrer, ref}}
+	is.True(Validate([]Rule{r}) != nil)
+
+	// korrekt ordning: building först.
+	r2 := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{ref, referrer}}
+	is.NoErr(Validate([]Rule{r2}))
+}
+
+func TestValidateRejectsDuplicateEntityName(t *testing.T) {
+	is := is.New(t)
+
+	a := validEntity()
+	a.Name = "same"
+	b := validEntity()
+	b.Name = "same"
+
+	r := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{a, b}}
+	is.True(Validate([]Rule{r}) != nil)
+}
+
 func ptr(f float64) *float64 { return &f }
