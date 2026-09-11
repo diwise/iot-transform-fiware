@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -406,3 +407,14 @@ const waterConsumptionJson string = `
 	"timestamp":"2025-01-15T08:29:52.83583502Z"
 }`
 */
+
+// Utebliven temperatur ska ge ErrNoRelevantProperties (tyst skip), inte ett
+// vanligt fel som loggas som Error.
+func TestThatWeatherObservedRequiresTemperature(t *testing.T) {
+	is := is.New(t)
+
+	msg := iotcore.NewMessageAccepted(senml.Pack{}, base("urn:oma:lwm2m:ext:3303", "deviceID", time.Now().UTC()))
+
+	err := WeatherObserved(context.Background(), *msg, &client.ContextBrokerClientMock{}, stubBroker{})
+	is.True(errors.Is(err, ErrNoRelevantProperties))
+}

@@ -63,6 +63,8 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return messaging.Permanent(err)
 		}
 
+		var errs []error
+
 		// Varje objektobservation transformeras för sig med sin egen
 		// typ: packet partitioneras i enobservations-meddelanden med
 		// delad packmetadata så att befintliga transformers fungerar
@@ -106,12 +108,13 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			cbClient, err := cbClientFn(tenant)
 			if err != nil {
 				olog.Error("failed to create context broker client", "err", err.Error())
+				errs = append(errs, err)
 				continue
 			}
 
-			// Bevarad semantik: transformeringsfel loggas och ackas.
-			// Klassificering till Temporary/Permanent kräver verifierad
-			// idempotens mot context broker.
+			// Brokerfel propageras så att rapporten kan återlevereras.
+			// NGSI-LD merge/create är idempotent, så en retry konvergerar.
+			// Meddelanden utan relevanta egenskaper ackas (skip).
 			err = transformer(octx, observation, cbClient, contextbroker.EntityWriter{})
 			if err != nil {
 				if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
@@ -120,7 +123,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 				}
 
 				olog.Error("transform failed", "err", err.Error())
-
+				errs = append(errs, err)
 				continue
 			}
 
@@ -128,7 +131,8 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 
 			olog.Debug("measurement handled successfully")
 		}
-		return nil
+
+		return errors.Join(errs...)
 	}
 }
 

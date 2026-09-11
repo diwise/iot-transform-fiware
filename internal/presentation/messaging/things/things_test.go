@@ -2,6 +2,7 @@ package things
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -303,3 +304,33 @@ const pointOfInterestJson = `{
   "tenant": "default",
   "timestamp": "2026-03-23T16:21:34.397588165Z"
 }`
+
+// Tom tenant ska hoppas över utan brokeranrop.
+func TestContainerHandlerSkipsEmptyTenant(t *testing.T) {
+	is := is.New(t)
+
+	called := false
+	handler := NewContainerTopicMessageHandler(func(string) (client.ContextBrokerClient, error) {
+		called = true
+		return nil, nil
+	})
+
+	body := `{"id":"x","type":"Container","thing":{"id":"x","type":"Container","subType":"WasteContainer","name":"n","location":{"latitude":0,"longitude":0},"percent":50,"tenant":""},"tenant":"","timestamp":"2024-01-01T00:00:00Z"}`
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(body) }, ContentTypeFunc: func() string { return "application/vnd.diwise.container+json" }}
+
+	is.NoErr(handler(context.Background(), itm, slog.Default()))
+	is.True(!called)
+}
+
+// Brokerfel ska propageras (retry), inte sväljas.
+func TestContainerHandlerReturnsBrokerError(t *testing.T) {
+	is := is.New(t)
+
+	handler := NewContainerTopicMessageHandler(func(string) (client.ContextBrokerClient, error) {
+		return nil, errors.New("context broker unavailable")
+	})
+
+	itm := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(wastecontainerJson) }, ContentTypeFunc: func() string { return "application/vnd.diwise.container+json" }}
+
+	is.True(handler(context.Background(), itm, slog.Default()) != nil)
+}

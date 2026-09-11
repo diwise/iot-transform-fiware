@@ -31,6 +31,23 @@ func TestReadinessStubsAlwaysOK(t *testing.T) {
 	is.Equal(status, "ok")
 }
 
+// Nedstängningen ska ge messenger en egen deadline så att en blockerad
+// leverans inte håller stoppet obegränsat.
+func TestShutdownMessengerSuppliesDeadline(t *testing.T) {
+	is := is.New(t)
+
+	var hasDeadline bool
+	messenger := &messaging.MsgContextMock{
+		ShutdownFunc: func(ctx context.Context) error {
+			_, hasDeadline = ctx.Deadline()
+			return nil
+		},
+	}
+
+	is.NoErr(shutdownMessenger(context.Background(), messenger))
+	is.True(hasDeadline)
+}
+
 // BASE-001: handler registration failures must propagate instead of
 // being silently ignored at startup.
 func TestRegisterHandlersPropagatesError(t *testing.T) {

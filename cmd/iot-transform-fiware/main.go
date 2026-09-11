@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
@@ -23,6 +24,10 @@ import (
 )
 
 const serviceName string = "iot-transform-fiware"
+
+// shutdownTimeout är en egen övre gräns för att stoppa inflöde och dränera
+// pågående arbete. Runnerns shutdown-hook får ingen egen timeout.
+const shutdownTimeout = 10 * time.Second
 
 func defaultFlags() flagMap {
 	return flagMap{
@@ -93,13 +98,22 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 			return registerHandlers(svcCfg.messenger, svcCfg.cbClientFn)
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
-			if err := svcCfg.messenger.Shutdown(ctx); err != nil {
+			if err := shutdownMessenger(ctx, svcCfg.messenger); err != nil {
 				logging.GetFromContext(ctx).Debug("failed to shut down messenger", "err", err.Error())
 			}
 			return nil
 		}))
 
 	return runner, nil
+}
+
+// shutdownMessenger stoppar inflöde och dränerar pågående arbete inom en egen
+// budget, oberoende av en redan avbruten stoppsignal.
+func shutdownMessenger(ctx context.Context, messenger messaging.MsgContext) error {
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+	defer cancel()
+
+	return messenger.Shutdown(shutdownCtx)
 }
 
 // readinessProbes returns the named readiness stubs. Per harmonization

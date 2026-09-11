@@ -62,6 +62,11 @@ func NewContainerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClien
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformContainer(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
@@ -70,12 +75,12 @@ func NewContainerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClien
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("container handled successfully")
@@ -95,6 +100,11 @@ func NewLifebuoyTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClient
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformLifebuoy(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
@@ -103,12 +113,12 @@ func NewLifebuoyTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClient
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("lifebuoy handled successfully")
@@ -128,6 +138,11 @@ func NewDeskTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformDesk(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
@@ -136,12 +151,12 @@ func NewDeskTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to write entity", slog.String("type_name", writes[0].TypeName), "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("desk handled successfully")
@@ -166,6 +181,11 @@ func NewPointOfInterestTopicMessageHandler(cbClientFn contextbroker.ContextBroke
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformPointOfInterest(m.Thing)
 		last := writes[len(writes)-1]
 
@@ -175,12 +195,12 @@ func NewPointOfInterestTopicMessageHandler(cbClientFn contextbroker.ContextBroke
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("could not merge or create point of interest", "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("point of interest handled successfully")
@@ -200,6 +220,11 @@ func NewPumpingstationTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformPumpingStation(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
@@ -208,12 +233,12 @@ func NewPumpingstationTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to merge or create SewagePumpingStation", slog.String("type_name", "SewagePumpingStation"), "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("pumpingstation handled handled successfully")
@@ -232,6 +257,11 @@ func NewRoomTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformRoom(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant))
@@ -240,12 +270,12 @@ func NewRoomTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFact
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to write entity", "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("room handled handled successfully")
@@ -265,6 +295,11 @@ func NewSewerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFac
 			return messaging.Permanent(err)
 		}
 
+		if m.Thing.Tenant == "" {
+			log.Debug("message contains no tenant, skipping")
+			return nil
+		}
+
 		writes := appthings.TransformSewer(m.Thing)
 
 		log = log.With(slog.String("entity_id", writes[0].EntityID), slog.String("type_name", writes[0].TypeName), slog.String("tenant", m.Thing.Tenant), slog.String("action", m.Thing.LastAction))
@@ -273,12 +308,12 @@ func NewSewerTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFac
 		cbClient, err := cbClientFn(m.Thing.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return nil
+			return err
 		}
 
 		if err := applyWrites(ctx, cbClient, writes); err != nil {
 			log.Error("failed to merge or create Sewer", "err", err.Error())
-			return nil
+			return err
 		}
 
 		log.Debug("sewer handled handled successfully")

@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -106,4 +107,33 @@ func TestScopeRejectsMalformedPermanently(t *testing.T) {
 	err := handler(context.Background(), msg, slog.Default())
 	is.True(err != nil)
 	is.True(messaging.IsPermanent(err))
+}
+
+// Brokerfel ska propageras (retry), inte sväljas.
+func TestBrokerErrorIsPropagated(t *testing.T) {
+	is := is.New(t)
+
+	cbClient := &clienttest.ContextBrokerClientMock{
+		MergeEntityFunc: func(ctx context.Context, entityID string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+			return nil, errors.New("context broker unavailable")
+		},
+	}
+
+	factory := func(tenant string) (client.ContextBrokerClient, error) { return cbClient, nil }
+
+	body := `{"pack":[
+		{"bn":"dev1/3303/","bt":1720000000,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},
+		{"n":"5700","u":"Cel","v":21.5},
+		{"bn":"dev1/","n":"env","vs":"air"},
+		{"bn":"dev1/","n":"tenant","vs":"acme"}
+	],"timestamp":"2024-07-03T09:46:40Z"}`
+
+	msg := &messaging.IncomingTopicMessageMock{
+		BodyFunc:        func() []byte { return []byte(body) },
+		TopicNameFunc:   func() string { return "message.accepted" },
+		ContentTypeFunc: func() string { return "application/vnd.oma.lwm2m+json" },
+	}
+
+	handler := NewMeasurementTopicMessageHandler(factory)
+	is.True(handler(context.Background(), msg, slog.Default()) != nil)
 }

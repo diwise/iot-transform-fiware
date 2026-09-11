@@ -420,7 +420,7 @@ func WeatherObserved(ctx context.Context, msg events.MessageAccepted, cbClient c
 	const SensorValue int = 5700
 	temp, ok := msg.Pack().GetValue(finder(msg, TemperatureURN, SensorValue))
 	if !ok {
-		return fmt.Errorf("no temperature property was found in message from %s, ignoring", msg.DeviceID())
+		return ErrNoRelevantProperties
 	}
 
 	properties = append(properties,
