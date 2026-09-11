@@ -207,4 +207,17 @@ func TestValidateRejectsDuplicateEntityName(t *testing.T) {
 	is.True(Validate([]Rule{r}) != nil)
 }
 
+func TestValidateRejectsUnitOnNonNumber(t *testing.T) {
+	is := is.New(t)
+
+	r := validRule()
+	r.Entities[0].Properties[0].Type = TypeText
+	r.Entities[0].Properties[0].Unit = "Cel"
+	is.True(Validate([]Rule{r}) != nil)
+
+	r = validRule()
+	r.Entities[0].Properties[0].Unit = "Cel"
+	is.NoErr(Validate([]Rule{r}))
+}
+
 func ptr(f float64) *float64 { return &f }

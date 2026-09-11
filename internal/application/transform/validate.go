@@ -133,6 +133,10 @@ func (p Property) validate() error {
 		return fmt.Errorf("unknown when %q", p.When)
 	}
 
+	if p.Unit != "" && p.Type != TypeNumber && p.Type != TypeNumberArray {
+		return fmt.Errorf("unit is only valid for Number and NumberArray properties")
+	}
+
 	if p.Type == TypeStructured {
 		if len(p.Subproperties) == 0 {
 			return errors.New("a structured property must declare subproperties")
