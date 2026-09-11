@@ -160,6 +160,9 @@ func (p Property) validate() error {
 			return errors.New("a structured property must declare subproperties")
 		}
 		for i, sp := range p.Subproperties {
+			if sp.Type == TypeStructured {
+				return fmt.Errorf("subproperty %d (%s): structured may not be nested", i, sp.Target)
+			}
 			if err := sp.validate(); err != nil {
 				return fmt.Errorf("subproperty %d (%s): %w", i, sp.Target, err)
 			}

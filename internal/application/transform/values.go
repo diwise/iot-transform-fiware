@@ -22,6 +22,22 @@ func buildProperty(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 		return buildDerived(p, in)
 	}
 
+	if p.Type == TypeStructured {
+		return buildStructured(p, in)
+	}
+
+	if p.Const != nil {
+		observedBy, err := renderObservedBy(p, in)
+		if err != nil {
+			return nil, err
+		}
+		raw, err := applyTransforms(p, p.Const)
+		if err != nil {
+			return nil, err
+		}
+		return decorate(p, raw, observationTime(p, in, resolvedValue{}), observedBy)
+	}
+
 	if p.LatLon {
 		lat, lon, ok := in.LatLon()
 		if !ok {
@@ -101,11 +117,7 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected boolean", p.Target)
 		}
-		prop, err := properties.UnmarshalP(map[string]any{"type": "Property", "value": b})
-		if err != nil {
-			return nil, err
-		}
-		return entities.P(p.Target, prop), nil
+		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b}), nil
 	case TypeDateTime:
 		s, ok := toString(raw)
 		if !ok {
@@ -119,11 +131,42 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		}
 		return decorators.Location(lat, lon), nil
 	case TypeRelationship:
+		if arr, ok := raw.([]any); ok {
+			objects := make([]string, 0, len(arr))
+			for _, v := range arr {
+				if s, ok := toString(v); ok {
+					objects = append(objects, s)
+				}
+			}
+			return entities.R(p.Target, relationships.NewMultiObjectRelationship(objects)), nil
+		}
 		s, ok := toString(raw)
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
 		}
 		return relationshipDecorator(p.Target, s), nil
+	case TypeTextArray:
+		ss, ok := toStringSlice(raw)
+		if !ok {
+			return nil, fmt.Errorf("property %s: expected a list of text", p.Target)
+		}
+		tlp := properties.NewTextListProperty(ss)
+		if observedAt != "" {
+			tlp.ObservedAt_ = &observedAt
+		}
+		return entities.P(p.Target, tlp), nil
+	case TypeNumberArray:
+		fs, ok := toFloatSlice(raw)
+		if !ok {
+			return nil, fmt.Errorf("property %s: expected a list of numbers", p.Target)
+		}
+		values := make([]any, len(fs))
+		for i, f := range fs {
+			values[i] = f
+		}
+		return entities.P(p.Target, &genericProperty{
+			Type_: "Property", Value_: values, UnitCode: p.Unit, ObservedAt: observedAt,
+		}), nil
 	default:
 		return nil, fmt.Errorf("property %s: type %q is not supported yet", p.Target, p.Type)
 	}
@@ -139,6 +182,109 @@ func textDecorator(name, value string, opts ...properties.TextPropertyDecoratorF
 
 func relationshipDecorator(name, value string) entities.EntityDecoratorFunc {
 	return entities.R(name, relationships.NewSingleObjectRelationship(value))
+}
+
+// buildStructured bygger en NGSI-LD-property vars värde som ett objekt av
+// delproperties.
+func buildStructured(p Property, in Input) (entities.EntityDecoratorFunc, error) {
+	obj := map[string]any{}
+
+	for _, sp := range p.Subproperties {
+		val, found, err := resolveSubValue(sp, in)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			if sp.Required {
+				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+			}
+			continue
+		}
+
+		val, err = applyTransforms(sp, val)
+		if err != nil {
+			return nil, err
+		}
+
+		obj[sp.Target] = val
+	}
+
+	if len(obj) == 0 && p.Required {
+		return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+	}
+
+	return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: obj}), nil
+}
+
+func resolveSubValue(p Property, in Input) (any, bool, error) {
+	if p.Const != nil {
+		return p.Const, true, nil
+	}
+	if p.LatLon {
+		lat, lon, ok := in.LatLon()
+		if !ok {
+			return nil, false, nil
+		}
+		return map[string]any{"latitude": lat, "longitude": lon}, true, nil
+	}
+	if p.Timestamp {
+		return in.MessageTime().UTC().Format(rfc3339), true, nil
+	}
+
+	rv, err := in.Resolve(p)
+	if err != nil {
+		return nil, false, err
+	}
+	return rv.value, rv.found, nil
+}
+
+// genericProperty täcker NGSI-LD-properties som biblioteket saknar
+// färdiga konstruktorer för (bool, array av tal, strukturerade värden).
+type genericProperty struct {
+	Type_      string `json:"type"`
+	Value_     any    `json:"value"`
+	ObservedAt string `json:"observedAt,omitempty"`
+	UnitCode   string `json:"unitCode,omitempty"`
+}
+
+func (g *genericProperty) Type() string { return g.Type_ }
+
+func (g *genericProperty) Value() any { return g.Value_ }
+
+func toStringSlice(v any) ([]string, bool) {
+	switch x := v.(type) {
+	case []string:
+		return x, true
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, e := range x {
+			s, ok := toString(e)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+func toFloatSlice(v any) ([]float64, bool) {
+	switch x := v.(type) {
+	case []float64:
+		return x, true
+	case []any:
+		out := make([]float64, 0, len(x))
+		for _, e := range x {
+			f, ok := toFloat(e)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, f)
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 // applyTransforms kör transformstegen i ordning. Ett steg kan byta typ
