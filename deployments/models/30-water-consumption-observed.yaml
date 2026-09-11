@@ -1,3 +1,5 @@
+# WaterConsumptionObserved (dataModel.WaterConsumption). required: id, type.
+# waterConsumption är en kumulativ volym i kubikmeter (MTQ).
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3424" }
     entities:
@@ -25,11 +27,6 @@ rules:
           - target: waterConsumption
             type: Number
             resource: "1"
-            required: true
-            unit: LTR
+            unit: MTQ
             observedAt: record
             observedBy: "urn:ngsi-ld:Device:{{deviceID}}"
-            transform:
-              - { op: add, value: 0.0005 }
-              - { op: multiply, value: 1000 }
-              - { op: floor }
