@@ -41,6 +41,7 @@ func TestDefaultFlags(t *testing.T) {
 		logLevel:           "debug",
 		modelsDir:          "/opt/diwise/config/models",
 		dynamicEngine:      "false",
+		deviceMgmtUrl:      "http://device-management",
 	}
 
 	is.Equal(len(flags), len(expected))

@@ -102,6 +102,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
 | `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases i lexikografisk ordning |
 | `DYNAMIC_MODELS` | `false` | `true` aktiverar den dynamiska motorn och laddar/validerar modellerna vid start; `false` anvander den statiska motorn. Endast exakt `true` slar pa |
+| `DEVICE_MGMT_URL` | `http://device-management` | Anvands for att sla upp enhets sensortyp (med TTL-cache) nar den dynamiska motorn ar aktiv |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
 | `RABBITMQ_PORT` | `5672` |  |
 | `RABBITMQ_VHOST` | `/` |  |

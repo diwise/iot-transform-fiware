@@ -48,6 +48,20 @@ func buildProperty(p Property, m Measurement) (entities.EntityDecoratorFunc, err
 		return buildDerived(p, m)
 	}
 
+	if p.LatLon {
+		if !m.HasLatLon {
+			if p.Required {
+				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+			}
+			return nil, nil
+		}
+		return decorators.Location(m.Lat, m.Lon), nil
+	}
+
+	if p.Timestamp {
+		return decorate(p, m.Timestamp.UTC().Format(rfc3339), "")
+	}
+
 	r, ok := m.findRecord(p)
 	if !ok {
 		if p.Required {
@@ -251,6 +265,8 @@ func applyTransform(t Transform, raw any) (any, error) {
 // observedAt: header (default), record, message eller field:<namn>.
 func observationTime(p Property, m Measurement, r Record) string {
 	switch p.ObservedAt {
+	case ObservedAtNone:
+		return ""
 	case ObservedAtRecord:
 		if r.HasTime {
 			return r.Time.UTC().Format(rfc3339)

@@ -63,7 +63,7 @@ func TestRegisterHandlersPropagatesError(t *testing.T) {
 		},
 	}
 
-	err := registerHandlers(messenger, func(string) (client.ContextBrokerClient, error) { return nil, nil })
+	err := registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (client.ContextBrokerClient, error) { return nil, nil }})
 	is.True(err != nil)
 	is.True(errors.Is(err, want))
 }
@@ -82,7 +82,7 @@ func TestRegisterHandlersRegistersAllHandlers(t *testing.T) {
 		},
 	}
 
-	is.NoErr(registerHandlers(messenger, func(string) (client.ContextBrokerClient, error) { return nil, nil }))
+	is.NoErr(registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (client.ContextBrokerClient, error) { return nil, nil }}))
 
 	filtered := messenger.RegisterTopicMessageHandlerWithFilterCalls()
 	is.Equal(len(filtered), 9)

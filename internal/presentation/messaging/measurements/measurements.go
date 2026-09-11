@@ -10,8 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-core/pkg/messaging/events"
 	appmeasurements "github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	apptransform "github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/senml"
@@ -21,7 +23,18 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
+// NewMeasurementTopicMessageHandler använder den statiska motorn.
 func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
+	return newMeasurementTopicMessageHandler(cbClientFn, nil)
+}
+
+// NewDynamicMeasurementTopicMessageHandler använder den konfigurationsstyrda
+// motorn.
+func NewDynamicMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer) messaging.TopicMessageHandler {
+	return newMeasurementTopicMessageHandler(cbClientFn, dynamic)
+}
+
+func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer) messaging.TopicMessageHandler {
 
 	log := logging.GetFromContext(context.Background())
 
@@ -78,18 +91,6 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 				Timestamp: messageAccepted.Timestamp,
 			}
 
-			measurementType := getMeasurementType(observation)
-			if measurementType == "" {
-				log.Debug("unable to determine measurement type from message, skipping")
-				continue
-			}
-
-			transformer := appmeasurements.TransformerFor(measurementType)
-			if transformer == nil {
-				log.Debug("no transformer for measurement type, skipping", "measurement_type", measurementType)
-				continue
-			}
-
 			deviceID := observation.DeviceID()
 			if deviceID == "" {
 				log.Debug("device id is missing in message, skipping")
@@ -102,7 +103,7 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 				continue
 			}
 
-			olog := log.With(slog.String("device_id", deviceID), slog.String("tenant", tenant), slog.String("measurement_type", measurementType))
+			olog := log.With(slog.String("device_id", deviceID), slog.String("tenant", tenant))
 			octx := logging.NewContextWithLogger(ctx, olog)
 
 			cbClient, err := cbClientFn(tenant)
@@ -115,10 +116,15 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			// Brokerfel propageras så att rapporten kan återlevereras.
 			// NGSI-LD merge/create är idempotent, så en retry konvergerar.
 			// Meddelanden utan relevanta egenskaper ackas (skip).
-			err = transformer(octx, observation, cbClient, contextbroker.EntityWriter{})
+			err = transformObservation(octx, dynamic, observation, cbClient)
 			if err != nil {
 				if errors.Is(err, appmeasurements.ErrNoRelevantProperties) {
 					olog.Debug("message did not contain any relevant properties")
+					continue
+				}
+
+				if errors.Is(err, apptransform.ErrNoMatchingRule) {
+					olog.Debug("no matching rule for measurement")
 					continue
 				}
 
@@ -134,6 +140,37 @@ func NewMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 
 		return errors.Join(errs...)
 	}
+}
+
+// transformObservation väljer dynamisk motor när en sådan är konfigurerad,
+// annars den statiska transformers-tabellen.
+func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient) error {
+	if dynamic != nil {
+		writes, err := dynamic.Transform(ctx, observation)
+		if err != nil {
+			return err
+		}
+
+		for _, w := range writes {
+			if err := contextbroker.MergeOrCreate(ctx, cbClient, w.EntityID, w.TypeName, w.Props); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	measurementType := getMeasurementType(observation)
+	if measurementType == "" {
+		return appmeasurements.ErrNoRelevantProperties
+	}
+
+	transformer := appmeasurements.TransformerFor(measurementType)
+	if transformer == nil {
+		return appmeasurements.ErrNoRelevantProperties
+	}
+
+	return transformer(ctx, observation, cbClient, contextbroker.EntityWriter{})
 }
 
 // findHeader matchar objektheaders på kort eller fullständigt namn.

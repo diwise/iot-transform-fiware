@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
@@ -24,6 +25,7 @@ const (
 
 	modelsDir
 	dynamicEngine
+	deviceMgmtUrl
 )
 
 type appConfig struct {
@@ -33,6 +35,9 @@ type appConfig struct {
 	// models är den inlästa och validerade regellistan. Tom när den statiska
 	// motorn används (DYNAMIC_MODELS=false).
 	models []transform.Rule
+
+	// sensorTypes slår upp enhets sensortyp för den dynamiska motorn.
+	sensorTypes devicemanagement.SensorTypeResolver
 }
 
 var onstarting = servicerunner.OnStarting[appConfig]

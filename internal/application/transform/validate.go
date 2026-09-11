@@ -173,6 +173,7 @@ var validObservedAt = map[ObservedAt]bool{
 	ObservedAtHeader:  true,
 	ObservedAtRecord:  true,
 	ObservedAtMessage: true,
+	ObservedAtNone:    true,
 }
 
 // validateSource säkerställer att exakt en primär värdkälla är angiven.
@@ -191,6 +192,9 @@ func (p Property) validateSource() error {
 		primary++
 	}
 	if p.LatLon {
+		primary++
+	}
+	if p.Timestamp {
 		primary++
 	}
 	if p.Value != "" {

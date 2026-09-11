@@ -34,6 +34,7 @@ const (
 	ObservedAtHeader  ObservedAt = "header"  // objektets bastid (dagens beteende)
 	ObservedAtRecord  ObservedAt = "record"  // recordens egen t
 	ObservedAtMessage ObservedAt = "message" // meddelandets timestamp
+	ObservedAtNone    ObservedAt = "none"    // ingen observedAt sätts
 )
 
 // When styr om en property skrivs.
@@ -81,14 +82,15 @@ type Entity struct {
 
 // Source beskriver var ett värde hämtas. Exakt en källa ska vara satt.
 type Source struct {
-	Resource string `yaml:"resource,omitempty"`
-	Object   string `yaml:"object,omitempty"`
-	Env      string `yaml:"env,omitempty"`
-	Name     string `yaml:"name,omitempty"`
-	Field    string `yaml:"field,omitempty"`
-	Const    any    `yaml:"const,omitempty"`
-	LatLon   bool   `yaml:"latlon,omitempty"`
-	Value    string `yaml:"value,omitempty"`
+	Resource  string `yaml:"resource,omitempty"`
+	Object    string `yaml:"object,omitempty"`
+	Env       string `yaml:"env,omitempty"`
+	Name      string `yaml:"name,omitempty"`
+	Field     string `yaml:"field,omitempty"`
+	Const     any    `yaml:"const,omitempty"`
+	LatLon    bool   `yaml:"latlon,omitempty"`
+	Timestamp bool   `yaml:"timestamp,omitempty"`
+	Value     string `yaml:"value,omitempty"`
 }
 
 // Transform är ett namngivet steg som appliceras på ett enskilt värde.

@@ -1,0 +1,12 @@
+# Exempelmodell för WeatherObserved. Katalogen monteras till
+# /opt/diwise/config/models och läses i lexikografisk filnamnsordning.
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3303", env: air }
+    entities:
+      - id: "urn:ngsi-ld:WeatherObserved:{{deviceID}}"
+        type: WeatherObserved
+        properties:
+          - { target: temperature, type: Number, resource: "5700", observedAt: header }
+          - { target: source, type: Text, name: source, observedAt: none }
+          - { target: location, type: Geo, latlon: true }
+          - { target: dateObserved, type: DateTime, timestamp: true }

@@ -38,7 +38,7 @@ func TestContentTypeFiltersMatchExactly(t *testing.T) {
 		},
 	}
 
-	is.NoErr(registerHandlers(messenger, nil))
+	is.NoErr(registerHandlers(&appConfig{messenger: messenger}))
 
 	filtered := messenger.RegisterTopicMessageHandlerWithFilterCalls()
 	is.Equal(len(filtered), 9)

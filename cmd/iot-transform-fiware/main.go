@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	measurementsApp "github.com/diwise/iot-transform-fiware/internal/application/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/config"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
 
@@ -46,6 +48,7 @@ func defaultFlags() flagMap {
 
 		modelsDir:     "/opt/diwise/config/models",
 		dynamicEngine: "false",
+		deviceMgmtUrl: "http://device-management",
 	}
 }
 
@@ -91,10 +94,16 @@ func main() {
 	models, err := loadModels(flags)
 	exitIf(err, logger, "failed to load model configuration")
 
+	var sensorTypes devicemanagement.SensorTypeResolver
+	if len(models) > 0 && flags[deviceMgmtUrl] != "" {
+		sensorTypes = devicemanagement.New(flags[deviceMgmtUrl], nil, devicemanagement.DefaultTTL)
+	}
+
 	cfg := &appConfig{
-		messenger:  messenger,
-		cbClientFn: factory,
-		models:     models,
+		messenger:   messenger,
+		cbClientFn:  factory,
+		models:      models,
+		sensorTypes: sensorTypes,
 	}
 
 	runner, err := initialize(ctx, flags, cfg)
@@ -120,7 +129,7 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 				return fmt.Errorf("failed to start messenger: %w", err)
 			}
 
-			return registerHandlers(svcCfg.messenger, svcCfg.cbClientFn)
+			return registerHandlers(svcCfg)
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
 			if err := shutdownMessenger(ctx, svcCfg.messenger); err != nil {
@@ -149,7 +158,10 @@ func readinessProbes() map[string]k8shandlers.ServiceProber {
 	}
 }
 
-func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.ContextBrokerClientFactoryFunc) error {
+func registerHandlers(svcCfg *appConfig) error {
+	messenger := svcCfg.messenger
+	cbClientFn := svcCfg.cbClientFn
+
 	var (
 		building        = messaging.MatchContentType("application/vnd.diwise.building+json")
 		container       = messaging.MatchContentType("application/vnd.diwise.container+json")
@@ -187,7 +199,13 @@ func registerHandlers(messenger messaging.MsgContext, cbClientFn contextbroker.C
 	}
 
 	// measurements
-	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewMeasurementTopicMessageHandler(cbClientFn)); err != nil {
+	measurementHandler := measurements.NewMeasurementTopicMessageHandler(cbClientFn)
+	if len(svcCfg.models) > 0 {
+		dynamic := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
+		measurementHandler = measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamic)
+	}
+
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurementHandler); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
 
@@ -214,6 +232,7 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[logLevel] = envOrDef(ctx, "LOG_LEVEL", flags[logLevel])
 	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
 	flags[dynamicEngine] = envOrDef(ctx, "DYNAMIC_MODELS", flags[dynamicEngine])
+	flags[deviceMgmtUrl] = envOrDef(ctx, "DEVICE_MGMT_URL", flags[deviceMgmtUrl])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {
