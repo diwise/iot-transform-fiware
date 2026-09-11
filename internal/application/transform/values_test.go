@@ -48,6 +48,29 @@ func TestBuildNumberFromResource(t *testing.T) {
 	is.True(strings.Contains(b, `"unitCode":"Cel"`))
 }
 
+func TestUnitBecomesUnitCode(t *testing.T) {
+	is := is.New(t)
+
+	m := testMeasurement()
+	m.Records = []Record{{Name: "5700", Value: ptr(7)}}
+
+	withUnit := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
+		ID: "urn:ngsi-ld:T:x", Type: "T",
+		Properties: []Property{{Target: "v", Type: TypeNumber, Source: Source{Resource: "5700"}, Unit: "KPA"}},
+	}}}
+	writes, err := NewEngine([]Rule{withUnit}).Transform(m)
+	is.NoErr(err)
+	is.True(strings.Contains(marshalWrite(t, writes[0]), `"unitCode":"KPA"`))
+
+	withoutUnit := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
+		ID: "urn:ngsi-ld:T:x", Type: "T",
+		Properties: []Property{{Target: "v", Type: TypeNumber, Source: Source{Resource: "5700"}}},
+	}}}
+	writes, err = NewEngine([]Rule{withoutUnit}).Transform(m)
+	is.NoErr(err)
+	is.True(!strings.Contains(marshalWrite(t, writes[0]), `unitCode`))
+}
+
 func TestBuildTextFromMetadata(t *testing.T) {
 	is := is.New(t)
 
