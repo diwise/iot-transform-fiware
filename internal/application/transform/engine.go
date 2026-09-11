@@ -76,12 +76,11 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		return nil, ErrNoMatchingRule
 	}
 
-	vars := in.Variables()
 	ids := map[string]string{}
 	writes := make([]EntityWrite, 0, len(rule.Entities))
 
 	for _, ent := range rule.Entities {
-		id, err := renderTemplate(ent.ID, vars, ids)
+		id, err := renderTemplate(ent.ID, in, ids)
 		if err != nil {
 			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
 		}
@@ -90,7 +89,7 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 			ids[ent.Name] = id
 		}
 
-		typeName, err := renderTemplate(ent.Type, vars, ids)
+		typeName, err := renderTemplate(ent.Type, in, ids)
 		if err != nil {
 			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
 		}
@@ -197,10 +196,10 @@ func (mm Match) score() int {
 	if mm.Object != "" {
 		s++
 	}
-	if mm.Type != "" {
+	if mm.SubType != "" {
 		s += 4
 	}
-	if mm.SubType != "" {
+	if mm.Type != "" {
 		s += 2
 	}
 	if mm.Tenant != "" {
@@ -209,9 +208,11 @@ func (mm Match) score() int {
 	return s
 }
 
-// renderTemplate ersätter {{variabel}}, {{safeURI(variabel)}} och
-// {{entities.<namn>.id}} i en mall.
-func renderTemplate(tpl string, vars, entities map[string]string) (string, error) {
+// renderTemplate ersätter uttryck i en mall: {{variabel}},
+// {{entities.<namn>.id}}, {{field:<väg>}}, {{safeURI(<uttryck>)}} och
+// {{firstPresent(<uttryck>, …)}}.
+func renderTemplate(tpl string, in Input, entities map[string]string) (string, error) {
+	vars := in.Variables()
 	var firstErr error
 
 	out := templateExprRe.ReplaceAllStringFunc(tpl, func(match string) string {
@@ -221,27 +222,9 @@ func renderTemplate(tpl string, vars, entities map[string]string) (string, error
 
 		expr := strings.TrimSpace(templateExprRe.FindStringSubmatch(match)[1])
 
-		if mm := entityRefExpr.FindStringSubmatch(expr); mm != nil {
-			id, ok := entities[mm[1]]
-			if !ok {
-				firstErr = fmt.Errorf("unknown entity %q", mm[1])
-				return ""
-			}
-			return id
-		}
-
-		if mm := safeURIExpr.FindStringSubmatch(expr); mm != nil {
-			v, ok := vars[mm[1]]
-			if !ok {
-				firstErr = fmt.Errorf("unknown template variable %q", mm[1])
-				return ""
-			}
-			return url.PathEscape(strings.TrimSpace(v))
-		}
-
-		v, ok := vars[expr]
-		if !ok {
-			firstErr = fmt.Errorf("unknown template variable %q", expr)
+		v, err := resolveExpr(expr, vars, in, entities)
+		if err != nil {
+			firstErr = err
 			return ""
 		}
 		return v
@@ -252,4 +235,75 @@ func renderTemplate(tpl string, vars, entities map[string]string) (string, error
 	}
 
 	return out, nil
+}
+
+func resolveExpr(expr string, vars map[string]string, in Input, entities map[string]string) (string, error) {
+	expr = strings.TrimSpace(expr)
+
+	if mm := entityRefExpr.FindStringSubmatch(expr); mm != nil {
+		id, ok := entities[mm[1]]
+		if !ok {
+			return "", fmt.Errorf("unknown entity %q", mm[1])
+		}
+		return id, nil
+	}
+
+	if strings.HasPrefix(expr, "field:") {
+		path := strings.TrimPrefix(expr, "field:")
+		v, ok := in.ResolvePath(path)
+		if !ok {
+			return "", fmt.Errorf("unknown field %q", path)
+		}
+		return stringify(v), nil
+	}
+
+	if inner, ok := funcArg(expr, "safeURI"); ok {
+		v, err := resolveExpr(inner, vars, in, entities)
+		if err != nil {
+			return "", err
+		}
+		return url.PathEscape(strings.TrimSpace(v)), nil
+	}
+
+	if inner, ok := funcArg(expr, "firstPresent"); ok {
+		for _, arg := range splitArgs(inner) {
+			v, err := resolveExpr(arg, vars, in, entities)
+			if err != nil {
+				return "", err
+			}
+			if v != "" {
+				return v, nil
+			}
+		}
+		return "", nil
+	}
+
+	v, ok := vars[expr]
+	if !ok {
+		return "", fmt.Errorf("unknown template variable %q", expr)
+	}
+	return v, nil
+}
+
+func funcArg(expr, name string) (string, bool) {
+	prefix := name + "("
+	if strings.HasPrefix(expr, prefix) && strings.HasSuffix(expr, ")") {
+		return expr[len(prefix) : len(expr)-1], true
+	}
+	return "", false
+}
+
+func splitArgs(s string) []string {
+	parts := strings.Split(s, ",")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+	}
+	return parts
+}
+
+func stringify(v any) string {
+	if s, ok := toString(v); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }

@@ -141,6 +141,10 @@ func lookupPath(root map[string]any, path string) (any, bool) {
 		}
 	}
 
+	if cur == nil {
+		return nil, false
+	}
+
 	return cur, true
 }
 

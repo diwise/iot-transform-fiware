@@ -47,30 +47,46 @@ func KnownTemplateVariables() []string {
 var (
 	templateExprRe = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
 	entityRefExpr  = regexp.MustCompile(`^entities\.([A-Za-z0-9_-]+)\.id$`)
-	safeURIExpr    = regexp.MustCompile(`^safeURI\(\s*([A-Za-z0-9_]+)\s*\)$`)
 )
 
 // validateTemplate kontrollerar att alla {{...}}-uttryck använder kända
-// variabler eller entities-referenser.
+// variabler, field-vägar, entities-referenser eller hjälpfunktioner.
 func validateTemplate(s string) error {
 	for _, m := range templateExprRe.FindAllStringSubmatch(s, -1) {
-		expr := strings.TrimSpace(m[1])
-
-		if entityRefExpr.MatchString(expr) {
-			continue
-		}
-
-		if mm := safeURIExpr.FindStringSubmatch(expr); mm != nil {
-			if !knownTemplateVariables[mm[1]] {
-				return fmt.Errorf("unknown template variable %q in safeURI", mm[1])
-			}
-			continue
-		}
-
-		if !knownTemplateVariables[expr] {
-			return fmt.Errorf("unknown template variable %q", expr)
+		if err := validateExpr(strings.TrimSpace(m[1])); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
+func validateExpr(expr string) error {
+	if entityRefExpr.MatchString(expr) {
+		return nil
+	}
+
+	if strings.HasPrefix(expr, "field:") {
+		if strings.TrimSpace(strings.TrimPrefix(expr, "field:")) == "" {
+			return fmt.Errorf("empty field path in template")
+		}
+		return nil
+	}
+
+	if inner, ok := funcArg(expr, "safeURI"); ok {
+		return validateExpr(inner)
+	}
+
+	if inner, ok := funcArg(expr, "firstPresent"); ok {
+		for _, arg := range splitArgs(inner) {
+			if err := validateExpr(arg); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if !knownTemplateVariables[expr] {
+		return fmt.Errorf("unknown template variable %q", expr)
+	}
 	return nil
 }

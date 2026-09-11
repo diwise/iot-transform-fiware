@@ -29,7 +29,7 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 	if p.Const != nil || p.Value != "" {
 		raw := p.Const
 		if p.Value != "" {
-			rendered, err := renderTemplate(p.Value, in.Variables(), ids)
+			rendered, err := renderTemplate(p.Value, in, ids)
 			if err != nil {
 				return nil, err
 			}
@@ -117,7 +117,7 @@ func renderObservedBy(p Property, in Input) (string, error) {
 	if p.ObservedBy == "" {
 		return "", nil
 	}
-	return renderTemplate(p.ObservedBy, in.Variables(), nil)
+	return renderTemplate(p.ObservedBy, in, nil)
 }
 
 func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
@@ -257,7 +257,7 @@ func resolveSubValue(p Property, in Input, ids map[string]string) (any, bool, er
 		return p.Const, true, nil
 	}
 	if p.Value != "" {
-		rendered, err := renderTemplate(p.Value, in.Variables(), ids)
+		rendered, err := renderTemplate(p.Value, in, ids)
 		if err != nil {
 			return nil, false, err
 		}

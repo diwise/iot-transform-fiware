@@ -73,7 +73,7 @@ func thingRule(id, typ, subType, tenant string) Rule {
 	}
 }
 
-func TestThingPrecedenceTypeOverSubTypeOverTenant(t *testing.T) {
+func TestThingPrecedenceSubTypeOverTypeOverTenant(t *testing.T) {
 	is := is.New(t)
 
 	th := testThing()
@@ -85,7 +85,7 @@ func TestThingPrecedenceTypeOverSubTypeOverTenant(t *testing.T) {
 
 	writes, err := NewEngine([]Rule{byTenant, bySubType, byType}).Transform(th)
 	is.NoErr(err)
-	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:type")
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:sub")
 }
 
 func TestThingTieBreaksByConfigOrder(t *testing.T) {
