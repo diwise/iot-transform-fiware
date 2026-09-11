@@ -71,13 +71,20 @@ func NewOAuth2Client(ctx context.Context, tokenURL, clientID, clientSecret strin
 		return nil
 	}
 
-	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
-	if insecureURL {
-		baseTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	httpTransport := http.DefaultTransport
+	if trans, ok := httpTransport.(*http.Transport); ok {
+		cloned := trans.Clone()
+		if insecureURL {
+			if cloned.TLSClientConfig == nil {
+				cloned.TLSClientConfig = &tls.Config{}
+			}
+			cloned.TLSClientConfig.InsecureSkipVerify = true
+		}
+		httpTransport = cloned
 	}
 
 	tokenClient := &http.Client{
-		Transport: otelhttp.NewTransport(baseTransport),
+		Transport: otelhttp.NewTransport(httpTransport),
 		Timeout:   10 * time.Second,
 	}
 

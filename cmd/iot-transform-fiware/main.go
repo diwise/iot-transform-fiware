@@ -65,7 +65,6 @@ func loadModels(flags flagMap) ([]transform.Rule, error) {
 
 const (
 	ThingUpdatedTopic    string = "thing.updated"
-	FunctionUpdatedTopic string = "function.updated"
 	MessageAcceptedTopic string = "message.accepted"
 )
 

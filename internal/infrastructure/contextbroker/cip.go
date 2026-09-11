@@ -55,12 +55,8 @@ func newKeyedLocks() *keyedLocks {
 
 var locks = newKeyedLocks()
 
-func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	return MergeOrCreateWithContext(ctx, cbClient, id, typeName, "", properties)
-}
-
-// MergeOrCreateWithContext är som MergeOrCreate men använder den angivna
-// JSON-LD-contexten när entiteten skapas. Tom contextURL ger default-context.
+// MergeOrCreateWithContext skapar eller mergar en entitet med den angivna
+// JSON-LD-contexten. Tom contextURL ger bibliotekets default-context.
 func MergeOrCreateWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	unlock := locks.lock(id)
 	defer unlock()
@@ -93,34 +89,7 @@ func MergeOrCreateWithContext(ctx context.Context, cbClient client.ContextBroker
 	return nil
 }
 
-/*func CreateIfNotExists(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	unlock := locks.lock(id)
-	defer unlock()
-
-	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
-	ctx = logging.NewContextWithLogger(ctx, log)
-
-	exists := checkIfEntityExists(ctx, cbClient, id)
-	if !exists {
-		log.Info("entity does not exist")
-		err := CreateNewEntity(ctx, cbClient, id, typeName, properties)
-		if err != nil {
-			return err
-		}
-
-		log.Info("entity created")
-	}
-
-	log.Info("entity already exists, will not attempt to create")
-
-	return nil
-}*/
-
 var ErrEntityAlreadyExists = errors.New("entity already exists")
-
-func CreateNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	return createNewEntity(ctx, cbClient, id, typeName, "", properties)
-}
 
 // CreateNewEntityWithContext skapar en entitet med den angivna JSON-LD-
 // contexten. Tom contextURL ger bibliotekets default-context.
@@ -154,10 +123,6 @@ func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 
 var errEntityNotFound = errors.New("entity not found")
 
-func mergeEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, properties []entities.EntityDecoratorFunc) error {
-	return mergeEntityWithContext(ctx, cbClient, id, "", properties)
-}
-
 func mergeEntityWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	log := logging.GetFromContext(ctx)
 
@@ -185,23 +150,3 @@ func mergeEntityWithContext(ctx context.Context, cbClient client.ContextBrokerCl
 
 	return nil
 }
-
-/*func checkIfEntityExists(ctx context.Context, cbClient client.ContextBrokerClient, id string) bool {
-	log := logging.GetFromContext(ctx)
-
-	result, err := cbClient.RetrieveEntity(ctx, id, map[string][]string{"Content-Type": {"application/ld+json"}, "Link": {`<https://raw.githubusercontent.com/diwise/context-broker/main/assets/jsonldcontexts/default-context.jsonld>; rel=\"http://www.w3.org/ns/json-ld#context\"; type=\"application/ld+json\"`}})
-	if err != nil && errors.Is(err, ngsilderrors.ErrNotFound) {
-		log.Info(fmt.Sprintf("entity with id %s does not exist", id))
-		return false
-	} else if err != nil {
-		log.Error("failed to retrieve entity", "err", err.Error())
-		return true
-	}
-
-	if result != nil && result.ID() == id {
-		log.Info(fmt.Sprintf("entity with id %s exists", id))
-		return true
-	}
-
-	return false
-}*/

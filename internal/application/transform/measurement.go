@@ -56,6 +56,15 @@ func (m Measurement) Variables() map[string]string {
 	}
 }
 
+func (m Measurement) HasResource(name string) bool {
+	for _, r := range m.Records {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (m Measurement) MatchInfo() MatchInfo {
 	return MatchInfo{
 		Device:     m.DeviceID,
@@ -104,6 +113,10 @@ func (m Measurement) ResolvePath(path string) (any, bool) {
 
 // findRecord slår upp en post för en property.
 func (m Measurement) findRecord(p Property) (Record, bool) {
+	if p.Env != "" && p.Env != m.Env {
+		return Record{}, false
+	}
+
 	for _, r := range m.Records {
 		switch {
 		case p.Resource != "":

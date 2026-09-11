@@ -41,6 +41,8 @@ func (t Thing) LatLon() (float64, float64, bool) {
 	return 0, 0, false
 }
 
+func (t Thing) HasResource(string) bool { return false }
+
 func (t Thing) MatchInfo() MatchInfo {
 	return MatchInfo{
 		Tenant:  t.Tenant,

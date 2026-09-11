@@ -52,6 +52,10 @@ func LoadModelsDir(dir string) ([]transform.Rule, error) {
 		rules = append(rules, r...)
 	}
 
+	if len(rules) == 0 {
+		return nil, fmt.Errorf("no model rules found in %s", dir)
+	}
+
 	if err := transform.Validate(rules); err != nil {
 		return nil, err
 	}

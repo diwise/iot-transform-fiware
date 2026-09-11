@@ -149,7 +149,6 @@ internal/presentation/messaging/{measurements,things}
 
 - Tjansten saknar publik server (ingen `servicePort`); API-tjanster ska ha separat publik server pa `SERVICE_PORT`.
 - Presentation far importera bade `internal/application` och `internal/infrastructure`; `internal/application` far inte importera `internal/infrastructure`.
-- `FunctionUpdatedTopic`-konstanten i `cmd` ar deklarerad men oanvand lamnad kvarstand.
 
 # Links
 [iot-transform-fiware](https://diwise.github.io/) on diwise.github.io

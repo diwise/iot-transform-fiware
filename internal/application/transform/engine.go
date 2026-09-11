@@ -27,7 +27,13 @@ type Input interface {
 	ResolveTime(path string) (time.Time, bool)
 	// ResolvePath slår upp ett värde via en JSON-väg/namn (arrayer, Structured).
 	ResolvePath(path string) (any, bool)
+	// HasResource anger om indatat innehåller en resurs med angivet namn.
+	HasResource(name string) bool
 }
+
+// errExprNotFound markerar att ett template-uttryck saknas (t.ex. ett
+// field-värde). firstPresent behandlar det som tomt och går vidare.
+var errExprNotFound = errors.New("template expression not found")
 
 // MatchInfo är de fält en regel kan matcha mot, oavsett indatatyp.
 type MatchInfo struct {
@@ -141,7 +147,7 @@ func (e *Engine) match(in Input) (Rule, bool) {
 	bestScore := -1
 
 	for i, r := range e.rules {
-		if r.Match.Kind != kind || !r.Match.matches(info) {
+		if r.Match.Kind != kind || !r.Match.matches(in, info) {
 			continue
 		}
 
@@ -157,7 +163,10 @@ func (e *Engine) match(in Input) (Rule, bool) {
 	return e.rules[best], true
 }
 
-func (mm Match) matches(info MatchInfo) bool {
+func (mm Match) matches(in Input, info MatchInfo) bool {
+	if mm.Resource != "" && !in.HasResource(mm.Resource) {
+		return false
+	}
 	if mm.Device != "" && mm.Device != info.Device {
 		return false
 	}
@@ -194,6 +203,9 @@ func (mm Match) score() int {
 		s += 2
 	}
 	if mm.Object != "" {
+		s++
+	}
+	if mm.Resource != "" {
 		s++
 	}
 	if mm.SubType != "" {
@@ -252,7 +264,7 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		path := strings.TrimPrefix(expr, "field:")
 		v, ok := in.ResolvePath(path)
 		if !ok {
-			return "", fmt.Errorf("unknown field %q", path)
+			return "", fmt.Errorf("%w: field %q", errExprNotFound, path)
 		}
 		return stringify(v), nil
 	}
@@ -269,6 +281,9 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		for _, arg := range splitArgs(inner) {
 			v, err := resolveExpr(arg, vars, in, entities)
 			if err != nil {
+				if errors.Is(err, errExprNotFound) {
+					continue
+				}
 				return "", err
 			}
 			if v != "" {

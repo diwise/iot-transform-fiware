@@ -50,6 +50,10 @@ func (r Rule) validate() error {
 		return fmt.Errorf("match.object %q must be a URN", r.Match.Object)
 	}
 
+	if err := r.Match.validateForKind(); err != nil {
+		return err
+	}
+
 	if len(r.Entities) == 0 {
 		return errors.New("rule must declare at least one entity")
 	}
@@ -99,6 +103,22 @@ func (r Rule) validateReferences() error {
 	return nil
 }
 
+// validateForKind avvisar matchningsfält som inte gäller för regelns kind, så
+// att en felskrivning inte tyst gör att regeln aldrig matchar.
+func (mm Match) validateForKind() error {
+	switch mm.Kind {
+	case KindMeasurement:
+		if mm.Type != "" || mm.SubType != "" {
+			return errors.New("match.type/subType is only valid for things")
+		}
+	case KindThing:
+		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
+			return errors.New("match.port/sensorType/object/resource/env is only valid for measurements")
+		}
+	}
+	return nil
+}
+
 func (e Entity) validate() error {
 	if e.ID == "" {
 		return errors.New("entity.id is required")
@@ -141,6 +161,10 @@ func (p Property) validate() error {
 
 	if p.Unit != "" && p.Type != TypeNumber && p.Type != TypeNumberArray {
 		return fmt.Errorf("unit is only valid for Number and NumberArray properties")
+	}
+
+	if p.ObservedBy != "" && p.Type != TypeNumber {
+		return fmt.Errorf("observedBy is only valid for Number properties")
 	}
 
 	if p.Value != "" {

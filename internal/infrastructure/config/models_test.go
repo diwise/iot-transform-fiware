@@ -66,6 +66,14 @@ func TestLoadModelsDirPropagatesValidationError(t *testing.T) {
 	is.True(err != nil)
 }
 
+// En tom katalog (inga regler) ska ge fel i stället för en tyst tom motor.
+func TestLoadModelsDirRejectsEmptyDir(t *testing.T) {
+	is := is.New(t)
+
+	_, err := LoadModelsDir(t.TempDir())
+	is.True(err != nil)
+}
+
 // En fil med okänt fält ska ge fel via LoadModelsDir.
 func TestLoadModelsDirRejectsUnknownField(t *testing.T) {
 	is := is.New(t)

@@ -550,6 +550,10 @@ func toString(v any) (string, bool) {
 		return x, true
 	case float64:
 		return strconv.FormatFloat(x, 'f', -1, 64), true
+	case int:
+		return strconv.Itoa(x), true
+	case int64:
+		return strconv.FormatInt(x, 10), true
 	case bool:
 		return strconv.FormatBool(x), true
 	}
@@ -561,6 +565,10 @@ func toBool(v any) (bool, bool) {
 	case bool:
 		return x, true
 	case float64:
+		return x != 0, true
+	case int:
+		return x != 0, true
+	case int64:
 		return x != 0, true
 	case string:
 		b, err := strconv.ParseBool(x)
