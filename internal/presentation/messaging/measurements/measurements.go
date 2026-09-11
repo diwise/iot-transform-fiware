@@ -152,6 +152,14 @@ func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicT
 		}
 
 		for _, w := range writes {
+			if w.Create {
+				err := contextbroker.CreateNewEntity(ctx, cbClient, w.EntityID, w.TypeName, w.Props)
+				if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
+					return err
+				}
+				continue
+			}
+
 			if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, w.Context, w.Props); err != nil {
 				return err
 			}
