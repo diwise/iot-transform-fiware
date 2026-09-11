@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/matryer/is"
@@ -97,6 +98,46 @@ func TestMissingOptionalSourceIsSkipped(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(len(writes), 1)
 	is.Equal(len(writes[0].Props), 0)
+}
+
+func TestObservedAtModes(t *testing.T) {
+	is := is.New(t)
+
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	headerTime := base.Add(2 * time.Minute)
+	recordTime := base.Add(5 * time.Minute)
+	fieldTime := base.Add(3 * time.Minute)
+
+	m := testMeasurement()
+	m.Timestamp = base
+	m.HeaderTime = headerTime
+	m.HasHeaderTime = true
+	m.Records = []Record{
+		{Name: "5700", Value: ptr(1.0), Time: recordTime, HasTime: true},
+		{Name: "obs", Time: fieldTime, HasTime: true},
+	}
+
+	ruleFor := func(oa ObservedAt) Rule {
+		return Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
+			ID: "urn:ngsi-ld:T:x", Type: "T",
+			Properties: []Property{{Target: "temperature", Type: TypeNumber, ObservedAt: oa, Source: Source{Resource: "5700"}}},
+		}}}
+	}
+
+	observedAtOf := func(oa ObservedAt) string {
+		writes, err := NewEngine([]Rule{ruleFor(oa)}).Transform(m)
+		is.NoErr(err)
+		b := marshalWrite(t, writes[0])
+		idx := strings.Index(b, `"observedAt":"`)
+		is.True(idx >= 0)
+		rest := b[idx+len(`"observedAt":"`):]
+		return rest[:strings.Index(rest, `"`)]
+	}
+
+	is.Equal(observedAtOf(ObservedAtHeader), headerTime.Format(time.RFC3339))
+	is.Equal(observedAtOf(ObservedAtRecord), recordTime.Format(time.RFC3339))
+	is.Equal(observedAtOf(ObservedAtMessage), base.Format(time.RFC3339))
+	is.Equal(observedAtOf(ObservedAt("field:obs")), fieldTime.Format(time.RFC3339))
 }
 
 func TestMissingRequiredSourceSkipsEntity(t *testing.T) {

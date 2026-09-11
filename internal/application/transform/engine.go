@@ -24,17 +24,19 @@ type Record struct {
 // Measurement är motorns normaliserade indata för en enskild
 // objektobservation (ett objekt ur ett SenML-pack).
 type Measurement struct {
-	DeviceID   string
-	SensorType string
-	Object     string
-	Env        string
-	Port       string
-	Tenant     string
-	Timestamp  time.Time
-	Lat        float64
-	Lon        float64
-	HasLatLon  bool
-	Records    []Record
+	DeviceID      string
+	SensorType    string
+	Object        string
+	Env           string
+	Port          string
+	Tenant        string
+	Timestamp     time.Time
+	HeaderTime    time.Time
+	HasHeaderTime bool
+	Lat           float64
+	Lon           float64
+	HasLatLon     bool
+	Records       []Record
 }
 
 // EntityWrite beskriver en entitet som ska skrivas, utan att utföra

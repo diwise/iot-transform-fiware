@@ -3,6 +3,7 @@ package transform
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
@@ -189,9 +190,38 @@ func applyTransforms(p Property, raw any) (any, error) {
 	return raw, nil
 }
 
-// observationTime är en platshållare som fylls i av observedAt-stegen.
+// observationTime bestämmer propertyns observationstid enligt
+// observedAt: header (default), record, message eller field:<namn>.
 func observationTime(p Property, m Measurement, r Record) string {
-	return m.Timestamp.UTC().Format(rfc3339)
+	switch p.ObservedAt {
+	case ObservedAtRecord:
+		if r.HasTime {
+			return r.Time.UTC().Format(rfc3339)
+		}
+		return ""
+	case ObservedAtMessage:
+		return m.Timestamp.UTC().Format(rfc3339)
+	case ObservedAtHeader, "":
+		if m.HasHeaderTime {
+			return m.HeaderTime.UTC().Format(rfc3339)
+		}
+		return m.Timestamp.UTC().Format(rfc3339)
+	default:
+		name := strings.TrimPrefix(string(p.ObservedAt), "field:")
+		if rec, ok := m.findByRecordName(name); ok && rec.HasTime {
+			return rec.Time.UTC().Format(rfc3339)
+		}
+		return ""
+	}
+}
+
+func (m Measurement) findByRecordName(name string) (Record, bool) {
+	for _, r := range m.Records {
+		if r.Name == name {
+			return r, true
+		}
+	}
+	return Record{}, false
 }
 
 // buildDerived fylls i av deriveringsfunktionerna.
