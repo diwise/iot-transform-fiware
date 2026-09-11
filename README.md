@@ -9,10 +9,9 @@ A service for handling core functionality in the IoT platform
 ```mermaid
 flowchart LR
     iot-core--rabbitMQ-->handler
-    transformer--http-->context-broker
-    subgraph iot-transform-fiware
-        handler-->transformer-registry-->transformer   
-    end 
+    handler-->engine
+    models[(MODELS_DIR YAML)]-->engine
+    engine--http-->context-broker
 ```
 
 ## Dependencies  
@@ -20,8 +19,12 @@ flowchart LR
  - [RabbitMQ](https://www.rabbitmq.com/)
  - [Context Broker](https://github.com/diwise/context-broker)
 
-## Transformers
-Transformers purpose is to transform measurements into [Smart Data Models](https://smartdatamodels.org/) (FIWARE). Additional transformers could easily be developed using the context-broker client api and [decorator functions](https://github.com/diwise/context-broker/blob/main/pkg/ngsild/types/entities/decorators/decorators.go). 
+## Modeller
+Tjansten ar helt konfigurationsstyrd: mappningen fran matvarden och saker till
+[Smart Data Models](https://smartdatamodels.org/) (FIWARE/NGSI-LD) beskrivs i
+YAML-filer som lases fran `MODELS_DIR`. Modellerna foljer NGSI-LD (`id` och
+`type` satts alltid) samt respektive datas `required`-lista; attributnamn foljer
+modellen. Exempel finns i `deployments/models/`.
 ### AirQualityObserved
 [Specification](https://github.com/smart-data-models/dataModel.Environment/blob/master/AirQualityObserved/doc/spec.md)
 
@@ -85,9 +88,9 @@ Testing is best done using unit tests. For integration testing the preferred way
  - `loglevel` - Set the log level (overrides `LOG_LEVEL`)
 
 ## Configuration files
-Modeller for den dynamiska motorn lases fran `MODELS_DIR`
-(`/opt/diwise/config/models`) i lexikografisk filnamnsordning nar
-`DYNAMIC_MODELS=true`. Exempel finns i `deployments/models/`.
+Modeller lases fran `MODELS_DIR` (`/opt/diwise/config/models`) i lexikografisk
+filnamnsordning vid start. Strikt avkodning och validering stoppar starten vid
+fel. Exempel finns i `deployments/models/`.
 
 ## Faktisk konfiguration (kod ar facit, HARM-002)
 Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt via `messaging.LoadConfiguration`.
@@ -102,9 +105,8 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `OAUTH2_CLIENT_SECRET` | (tom) |  |
 | `OAUTH2_REALM_INSECURE` | `true` | Endast exakt `true` stanger av TLS-verifiering |
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
-| `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases i lexikografisk ordning |
-| `DYNAMIC_MODELS` | `false` | `true` aktiverar den dynamiska motorn och laddar/validerar modellerna vid start; `false` anvander den statiska motorn. Endast exakt `true` slar pa |
-| `DEVICE_MGMT_URL` | `http://device-management` | Anvands for att sla upp enhets sensortyp (med TTL-cache) nar den dynamiska motorn ar aktiv |
+| `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases och valideras vid start |
+| `DEVICE_MGMT_URL` | `http://device-management` | Anvands for att sla upp enhets sensortyp (med TTL-cache) |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
 | `RABBITMQ_PORT` | `5672` |  |
 | `RABBITMQ_VHOST` | `/` |  |
@@ -115,7 +117,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 
 Health paths pa kontrollservern (`CONTROL_PORT`): `/health`, `/healthz`, `/livez`, `/readyz`, `/readyz/{check}`.
 
-Konsumerar `thing.updated` (filtrerat per content type) och `message.accepted`. Ingen `message.transformed` publiceras i nulaget.
+Konsumerar `thing.updated` och `message.accepted` (en handler per topic; matchning sker pa innehall). Ingen `message.transformed` publiceras i nulaget.
 
 Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) eftersom tjansten saknar publik server. Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober.
 
@@ -128,8 +130,8 @@ Slutstruktur:
 
 ```text
 cmd/iot-transform-fiware
-internal/application/{decorators,measurements,things}
-internal/infrastructure/contextbroker
+internal/application/{measurements,things,transform}
+internal/infrastructure/{config,contextbroker,devicemanagement}
 internal/presentation/messaging/{measurements,things}
 ```
 
@@ -139,7 +141,7 @@ internal/presentation/messaging/{measurements,things}
 - `servicerunner` med kontrollserver, liveness och namngivna readiness-stubbar som returnerar OK.
 - Felreturnerande `initialize` och felkontrollerad handlerregistrering; endast `main` avgor exitkod.
 - Outbound-adaptrar (context-broker-klient, OAuth-fabrik, merge/create) i `internal/infrastructure`.
-- Inkommande RabbitMQ-adaptrar i `internal/presentation/messaging`: envelopeavkodning och brokeranrop, med transformationer och applikationsagda portar (`TransformerFor`, `EntityWriter`) i `internal/application`.
+- Inkommande RabbitMQ-adaptrar i `internal/presentation/messaging`: envelopeavkodning och brokeranrop. Den konfigurationsstyrda motorn och domänmodellen ligger i `internal/application/transform`, medan `internal/infrastructure/config` laddar och validerar modellerna.
 - Karakteriseringstester for kontrakt, config och lifecycle; verifiering med `gofmt`, `go test ./...`, `go vet ./...`, `go build ./cmd/...` och Dockerbygge.
 
 ## Att inte kopiera

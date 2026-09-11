@@ -31,11 +31,10 @@ type appConfig struct {
 	messenger  messaging.MsgContext
 	cbClientFn contextbroker.ContextBrokerClientFactoryFunc
 
-	// models är den inlästa och validerade regellistan. Tom när den statiska
-	// motorn används (DYNAMIC_MODELS=false).
+	// models är den inlästa och validerade regellistan.
 	models []transform.Rule
 
-	// sensorTypes slår upp enhets sensortyp för den dynamiska motorn.
+	// sensorTypes slår upp enhets sensortyp.
 	sensorTypes devicemanagement.SensorTypeResolver
 }
 

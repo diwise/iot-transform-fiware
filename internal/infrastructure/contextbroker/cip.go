@@ -55,14 +55,6 @@ func newKeyedLocks() *keyedLocks {
 
 var locks = newKeyedLocks()
 
-// EntityWriter implements the application-owned persistence port
-// structurally, without importing application packages.
-type EntityWriter struct{}
-
-func (EntityWriter) MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
-	return MergeOrCreate(ctx, cbClient, id, typeName, properties)
-}
-
 func MergeOrCreate(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, properties []entities.EntityDecoratorFunc) error {
 	return MergeOrCreateWithContext(ctx, cbClient, id, typeName, "", properties)
 }
