@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
-	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
@@ -73,10 +71,11 @@ func pgTestModels(t *testing.T) *Models {
 			t.Fatalf("truncate %s: %v", st.ID, err)
 		}
 	}
-	return NewModels(store,
-		things.NewDynamicThingTransformer(nil),
-		measurements.NewDynamicTransformer(nil, nil),
-	)
+	m := NewModels(store, nil)
+	if err := m.Refresh(); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	return m
 }
 
 func testRule() transform.Rule {
@@ -238,7 +237,7 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 		ID: "r1", Type: "Room", TypeName: "Room", NameOrID: "r1",
 		Tenant: "t", Fields: map[string]any{"name": "n"},
 	}
-	writes, err := m.things.Transform(th)
+	writes, err := m.Snapshot().Things.Transform(th)
 	is.NoErr(err)
 	is.Equal(len(writes), 1)
 
@@ -247,7 +246,7 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 	rr = doModel(h.updateModel, http.MethodPut, created.ID, r, map[string]string{"If-Match": `"rev-1"`})
 	is.Equal(rr.Code, http.StatusOK)
 
-	_, err = m.things.Transform(th)
+	_, err = m.Snapshot().Things.Transform(th)
 	is.True(errors.Is(err, transform.ErrNoMatchingRule))
 
 	rr = doModel(h.deleteModel, http.MethodDelete, created.ID, nil, map[string]string{"If-Match": `"rev-2"`})

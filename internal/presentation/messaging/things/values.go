@@ -18,7 +18,7 @@ import (
 // och saknad regel skippas utan broker-kontakt, brokerfel propageras för
 // retry. Samma DynamicThingTransformer-instans återanvänds; händelsekällan
 // (match.event) skiljer gamla och nya regler åt så de aldrig korsaktiveras.
-func NewThingValuesTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appthings.DynamicThingTransformer, defaultContext string) messaging.TopicMessageHandler {
+func NewThingValuesTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, provider TransformerProvider, defaultContext string) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) error {
 		log := l.With("content_type", itm.ContentType())
 
@@ -33,7 +33,7 @@ func NewThingValuesTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return nil
 		}
 
-		writes, err := dynamic.Transform(th)
+		writes, err := provider.ThingsTransformer().Transform(th)
 		if err != nil {
 			if errors.Is(err, transform.ErrNoMatchingRule) {
 				log.Debug("no matching rule for thing values, skipping", "type", th.Type, "sub_type", th.SubType)

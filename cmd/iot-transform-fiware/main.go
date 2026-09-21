@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	measurementsApp "github.com/diwise/iot-transform-fiware/internal/application/measurements"
-	thingsApp "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
@@ -32,6 +30,11 @@ import (
 )
 
 const serviceName string = "iot-transform-fiware"
+
+// ruleSyncInterval är polling-intervallet för regelsynk mellan instanser.
+// Ändringar slår igenom utan omstart inom ett intervall; fel loggas och
+// nästa tick försöker igen.
+const ruleSyncInterval = 5 * time.Second
 
 // shutdownTimeout är en egen övre gräns för att stoppa inflöde och dränera
 // pågående arbete. Runnerns shutdown-hook får ingen egen timeout.
@@ -105,26 +108,24 @@ func main() {
 	if seeded.Added+seeded.Updated > 0 {
 		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "skipped", seeded.Skipped)
 	}
-	stored, err := ruleStore.ListRules()
-	exitIf(err, logger, "failed to list model rules")
-	dbRules := make([]transform.Rule, 0, len(stored))
-	for _, st := range stored {
-		dbRules = append(dbRules, st.Rule)
-	}
-
 	var sensorTypes devicemanagement.SensorTypeResolver
 	if flags[deviceMgmtUrl] != "" {
 		dmClient := devicemanagement.NewOAuth2Client(ctx, flags[oauth2TokenUrl], flags[oauth2ClientId], flags[oauth2ClientSecret], oauthInsecure(flags))
 		sensorTypes = devicemanagement.New(flags[deviceMgmtUrl], dmClient, devicemanagement.DefaultTTL)
 	}
 
+	models := api.NewModels(ruleStore, sensorTypes)
+	if err := models.Refresh(); err != nil {
+		exitIf(err, logger, "failed to build initial rule snapshot")
+	}
+	stopSync := models.RunSync(ctx, ruleSyncInterval, logger)
+	defer stopSync()
+
 	cfg := &appConfig{
 		messenger:      messenger,
 		cbClientFn:     factory,
 		ruleStore:      ruleStore,
-		thingsT:        thingsApp.NewDynamicThingTransformer(dbRules),
-		measT:          measurementsApp.NewDynamicTransformer(dbRules, sensorTypes),
-		models:         dbRules,
+		models:         models,
 		sensorTypes:    sensorTypes,
 		defaultContext: flags[defaultContextUrl],
 		thingsV1Values: thingsV1ValuesEnabled(flags),
@@ -153,7 +154,7 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig, policiesFile
 				defer policiesFile.Close()
 				logging.GetFromContext(ctx).Debug("register api handlers...")
 				return api.RegisterHandlers(ctx, handler,
-					api.NewModels(appCfg.ruleStore, appCfg.thingsT, appCfg.measT),
+					appCfg.models,
 					policiesFile, api.WithAccessObjectAuthorization(accessObjectEnabled(flags)))
 			}),
 		),
@@ -198,10 +199,9 @@ func registerHandlers(svcCfg *appConfig) error {
 	messenger := svcCfg.messenger
 	cbClientFn := svcCfg.cbClientFn
 
-	// things (transformatorerna byggda från lagrade regler i main;
-	// API-skrivningar laddar om dem atomärt via Reload)
-	dynamicThings := svcCfg.thingsT
-	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamicThings, svcCfg.defaultContext)); err != nil {
+	// things (snapshot-providern levererar aktuell motor per meddelande;
+	// API-skrivningar och polling-synk byter snapshot atomärt)
+	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
 	}
 
@@ -209,14 +209,13 @@ func registerHandlers(svcCfg *appConfig) error {
 	// Gatas av THINGS_V1_VALUES (exakt "true"); av som default så att
 	// cutover till nya kontrakt är ett explicit driftbeslut.
 	if svcCfg.thingsV1Values {
-		if err := messenger.RegisterTopicMessageHandler(ThingValuesV1Topic, things.NewThingValuesTopicMessageHandler(cbClientFn, dynamicThings, svcCfg.defaultContext)); err != nil {
+		if err := messenger.RegisterTopicMessageHandler(ThingValuesV1Topic, things.NewThingValuesTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
 			return fmt.Errorf("failed to register thing values handler: %w", err)
 		}
 	}
 
 	// measurements
-	dynamicMeasurements := svcCfg.measT
-	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements, svcCfg.defaultContext)); err != nil {
+	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
 

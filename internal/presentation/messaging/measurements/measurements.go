@@ -22,13 +22,19 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// NewDynamicMeasurementTopicMessageHandler använder den konfigurationsstyrda
-// motorn. defaultContext används för entiteter som inte anger en egen context.
-func NewDynamicMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer, defaultContext string) messaging.TopicMessageHandler {
-	return newMeasurementTopicMessageHandler(cbClientFn, dynamic, defaultContext)
+// TransformerProvider levererar aktuell snapshot-motor per meddelande så
+// att omladdade regler slår igenom utan omregistrering (TF-05).
+type TransformerProvider interface {
+	MeasurementsTransformer() *appmeasurements.DynamicTransformer
 }
 
-func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appmeasurements.DynamicTransformer, defaultContext string) messaging.TopicMessageHandler {
+// NewDynamicMeasurementTopicMessageHandler använder den konfigurationsstyrda
+// motorn. defaultContext används för entiteter som inte anger en egen context.
+func NewDynamicMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, provider TransformerProvider, defaultContext string) messaging.TopicMessageHandler {
+	return newMeasurementTopicMessageHandler(cbClientFn, provider, defaultContext)
+}
+
+func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, provider TransformerProvider, defaultContext string) messaging.TopicMessageHandler {
 
 	log := logging.GetFromContext(context.Background())
 
@@ -71,6 +77,10 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		}
 
 		var errs []error
+
+		// Snapshot per meddelande: alla objektobservationer i samma
+		// meddelande transformeras med samma regelversion (TF-05).
+		dynamic := provider.MeasurementsTransformer()
 
 		// Varje objektobservation transformeras för sig med sin egen
 		// typ: packet partitioneras i enobservations-meddelanden med

@@ -102,6 +102,14 @@ Skrivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
 andringar. `POST /models/preview` kor en inline-regel torrt mot en
 exempelhandelse (aldrig broker/persistens).
 
+## Regelsynk mellan instanser
+
+Varje mutation bumpar en global versionsraknare i samma transaktion.
+Instanser laggar regler + version i en oforanderlig snapshot som byts
+atomart (saker och matvarden ser aldrig olika versioner) och pollar
+versionen var 5:e sekund: alla instanser konvergerar utan omstart.
+Misslyckad omladdning ger 500 pa anropet men nasta synk laker.
+
 ## Auktoriseringsmodell (tenant-ägarskap)
 
 En regels ägare är dess `match.tenant`; tom tenant betyder global

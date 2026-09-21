@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
-	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
@@ -48,14 +48,18 @@ func WithAccessObjectAuthorization(enabled bool) RegisterOption {
 // samtidiga skrivningar så att DB-skrivning och omladdning alltid hör ihop;
 // krasch emellan läks vid omstart (snapshot byggs från DB).
 type Models struct {
-	mu           sync.Mutex
-	store        *rules.PgStore
-	things       *things.DynamicThingTransformer
-	measurements *measurements.DynamicTransformer
+	mu       sync.Mutex
+	store    RuleStore
+	resolver measurements.SensorTypeResolver
+	snap     atomic.Pointer[Snapshot]
 }
 
-func NewModels(store *rules.PgStore, things *things.DynamicThingTransformer, measurements *measurements.DynamicTransformer) *Models {
-	return &Models{store: store, things: things, measurements: measurements}
+func NewModels(store RuleStore, resolver measurements.SensorTypeResolver) *Models {
+	m := &Models{store: store, resolver: resolver}
+	empty := buildSnapshot(nil, resolver)
+	empty.Version = -1 // oladdad: första SyncOnce laddar alltid om
+	m.snap.Store(empty)
+	return m
 }
 
 // Model är API-kuvertet för en regel: identitet/livscykel utanför regeln
@@ -257,26 +261,9 @@ func requireIfMatch(r *http.Request) (int64, error) {
 	return rev, nil
 }
 
-// reload bygger om körningsmotorerna från lagret. Anropas under skrivlås
-// efter varje lyckad mutation; samtidiga meddelanden ser alltid en komplett
-// gammal eller ny uppsättning.
-func (m *Models) reload() error {
-	stored, err := m.store.ListRules()
-	if err != nil {
-		return err
-	}
-	rs := make([]transform.Rule, 0, len(stored))
-	for _, st := range stored {
-		rs = append(rs, st.Rule)
-	}
-	m.things.Reload(rs)
-	m.measurements.Reload(rs)
-	return nil
-}
-
-// mutate serialiserar skrivning + omladdning: DB-skrivning, sedan rebuild.
-// Misslyckad omladdning efter committad skrivning ger 500; nästa mutation
-// eller omstart läker (snapshot byggs alltid från DB).
+// mutate serialiserar skrivning + omladdning: DB-skrivning, sedan rebuild
+// av snapshoten. Misslyckad omladdning efter committad skrivning ger 500;
+// nästa synk läker (snapshot byggs alltid från DB).
 func (m *Models) mutate(fn func() (StoredResult, error)) (StoredResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -284,7 +271,7 @@ func (m *Models) mutate(fn func() (StoredResult, error)) (StoredResult, error) {
 	if err != nil {
 		return StoredResult{}, err
 	}
-	if err := m.reload(); err != nil {
+	if err := m.Refresh(); err != nil {
 		return StoredResult{}, err
 	}
 	return res, nil

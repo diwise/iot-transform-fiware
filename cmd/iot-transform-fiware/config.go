@@ -1,12 +1,10 @@
 package main
 
 import (
-	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
-	"github.com/diwise/iot-transform-fiware/internal/application/things"
-	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/api"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
@@ -51,13 +49,10 @@ type appConfig struct {
 	// ruleStore är regel­lagret (enda sanningen; YAML är seed).
 	ruleStore *rules.PgStore
 
-	// thingsT/measT är körningsmotorerna byggda från lagrade regler.
-	// Omladdning efter API-skrivning sker via Reload (atomisk).
-	thingsT *things.DynamicThingTransformer
-	measT   *measurements.DynamicTransformer
-
-	// models är den inlästa och validerade regellistan.
-	models []transform.Rule
+	// models äger regeluppsättningen: CRUD-snapshot, omladdning och
+	// synk mellan instanser. Meddelandehantering läser snapshot per
+	// meddelande via provider-metoderna.
+	models *api.Models
 
 	// sensorTypes slår upp enhets sensortyp.
 	sensorTypes devicemanagement.SensorTypeResolver

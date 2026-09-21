@@ -75,7 +75,7 @@ func pgTestRules(t *testing.T) *PgStore {
 	t.Cleanup(func() { s.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	for _, table := range []string{"transform_rules", "seed_tombstones"} {
+	for _, table := range []string{"transform_rules", "seed_tombstones", "rule_version"} {
 		if _, err := s.pool.Exec(ctx, `DELETE FROM `+table); err != nil {
 			t.Fatalf("truncate %s: %v", table, err)
 		}
@@ -522,5 +522,64 @@ func TestSeedTombstonePrune(t *testing.T) {
 	}
 	if res.Added != 1 {
 		t.Fatalf("reseed a=%+v, want 1 added (tombstone pruned)", res)
+	}
+}
+
+// TF-05: global versionsräknare bumpas av varje mutation, inte av no-ops.
+func TestRuleVersionBumpsOnMutationOnly(t *testing.T) {
+	s := pgTestRules(t)
+
+	v, err := s.RuleVersion()
+	if err != nil {
+		t.Fatalf("version: %v", err)
+	}
+	if v != 0 {
+		t.Fatalf("version=%d, want 0 on fresh store", v)
+	}
+
+	stored, err := s.InsertRule(testRule())
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if v, _ := s.RuleVersion(); v != 1 {
+		t.Fatalf("version=%d, want 1 after insert", v)
+	}
+
+	r := testRule()
+	r.Match.Type = "Hall"
+	if _, err := s.UpdateRule(stored.ID, r, stored.Revision); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if v, _ := s.RuleVersion(); v != 2 {
+		t.Fatalf("version=%d, want 2 after update", v)
+	}
+
+	if err := s.DeleteRule(stored.ID, 2); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if v, _ := s.RuleVersion(); v != 3 {
+		t.Fatalf("version=%d, want 3 after delete", v)
+	}
+
+	// Seed utan ändring bumpar inte.
+	res, err := s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if res.Added != 1 {
+		t.Fatalf("seed=%+v, want 1 added", res)
+	}
+	if v, _ := s.RuleVersion(); v != 4 {
+		t.Fatalf("version=%d, want 4 after seed insert", v)
+	}
+	res, err = s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
+	if err != nil {
+		t.Fatalf("reseed: %v", err)
+	}
+	if res.Added+res.Updated != 0 {
+		t.Fatalf("reseed=%+v, want no changes", res)
+	}
+	if v, _ := s.RuleVersion(); v != 4 {
+		t.Fatalf("version=%d, want still 4 after no-op seed", v)
 	}
 }

@@ -19,7 +19,7 @@ func TestThingValuesHandlerMalformedIsPermanent(t *testing.T) {
 
 	handler := NewThingValuesTopicMessageHandler(
 		func(string) (client.ContextBrokerClient, error) { return nil, nil },
-		appthings.NewDynamicThingTransformer([]transform.Rule{}),
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
 	itm := &messaging.IncomingTopicMessageMock{
@@ -43,7 +43,7 @@ func TestThingValuesHandlerSkipsEmptyTenant(t *testing.T) {
 			called = true
 			return nil, nil
 		},
-		appthings.NewDynamicThingTransformer([]transform.Rule{}),
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
 	body := `{"thingId":"x","tenant":"","thingType":"room","values":[]}`
@@ -66,7 +66,7 @@ func TestThingValuesHandlerSkipsWithoutRule(t *testing.T) {
 			called = true
 			return nil, nil
 		},
-		appthings.NewDynamicThingTransformer([]transform.Rule{}),
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
 	body := `{"thingId":"x","tenant":"t","thingType":"room","values":[]}`
@@ -87,10 +87,10 @@ func TestThingValuesHandlerReturnsBrokerError(t *testing.T) {
 		func(string) (client.ContextBrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
-		appthings.NewDynamicThingTransformer([]transform.Rule{{
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{{
 			Match:    transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
 			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{nameOrID}}", Type: "Thing"}},
-		}}),
+		}})},
 		"",
 	)
 	body := `{"thingId":"x","tenant":"t","thingType":"room","values":[]}`

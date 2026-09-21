@@ -205,6 +205,28 @@ func marshalRule(r transform.Rule) ([]byte, error) {
 	return raw, nil
 }
 
+// RuleVersion returnerar den globala versionsräknaren för regelregistret.
+// Saknad rad betyder version 0. Varje mutation bumpar den i samma
+// transaktion, så pollande instanser ser ändringar utan att missa.
+func (s *PgStore) RuleVersion() (int64, error) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var v int64
+	err := s.pool.QueryRow(ctx, `SELECT COALESCE((SELECT version FROM rule_version WHERE id=1), 0)`).Scan(&v)
+	if err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// bumpVersionTx ökar versionsräknaren. Måste anropas i samma transaktion
+// som mutationen den versionerar.
+func bumpVersionTx(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `INSERT INTO rule_version(id, version) VALUES(1, 1)
+		ON CONFLICT (id) DO UPDATE SET version = rule_version.version + 1`)
+	return err
+}
+
 // InsertRule lagrar en ny API-regel (källa api, revision 1) och returnerar
 // den med genererat UUID. Ogiltiga regler nekas före skrivning.
 func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
@@ -214,13 +236,24 @@ func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
 	}
 	ctx, cancel := s.ctx()
 	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return StoredRule{}, err
+	}
+	defer tx.Rollback(ctx)
 	var st StoredRule
 	var stored []byte
-	err = s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`INSERT INTO transform_rules(kind, rule, source) VALUES($1, $2, $3) RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, position, rule`,
 		string(r.Match.Kind), raw, SourceAPI).
 		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &stored)
 	if err != nil {
+		return StoredRule{}, err
+	}
+	if err := bumpVersionTx(ctx, tx); err != nil {
+		return StoredRule{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return StoredRule{}, err
 	}
 	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, stored)
@@ -236,9 +269,14 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 	}
 	ctx, cancel := s.ctx()
 	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return StoredRule{}, err
+	}
+	defer tx.Rollback(ctx)
 	var st StoredRule
 	var stored []byte
-	err = s.pool.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`UPDATE transform_rules SET kind=$1, rule=$2, source=$3, revision=revision+1, updated_at=now()
 		 WHERE id=$4 AND revision=$5
 		 RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, position, rule`,
@@ -246,12 +284,18 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &stored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
-		if qerr := s.pool.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
+		if qerr := tx.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
 			return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
 		}
 		return StoredRule{}, fmt.Errorf("%w: %s", ErrConflict, id)
 	}
 	if err != nil {
+		return StoredRule{}, err
+	}
+	if err := bumpVersionTx(ctx, tx); err != nil {
+		return StoredRule{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return StoredRule{}, err
 	}
 	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, stored)
@@ -288,6 +332,9 @@ func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO seed_tombstones(seed_key) VALUES($1) ON CONFLICT DO NOTHING`, *seedKey); err != nil {
 			return err
 		}
+	}
+	if err := bumpVersionTx(ctx, tx); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return err
@@ -392,6 +439,17 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 			continue
 		}
 		res.Updated++
+	}
+	// Versionsbump vid faktisk ändring (TF-05): pollande instanser laddar
+	// om. Egen sats utanför radtransaktionerna — monoton och konvergent;
+	// värsta fallet är en extra bump som nästa seed konstaterar onödig.
+	if res.Added+res.Updated > 0 {
+		ctx, cancel := s.ctx()
+		defer cancel()
+		if _, err := s.pool.Exec(ctx, `INSERT INTO rule_version(id, version) VALUES(1, 1)
+			ON CONFLICT (id) DO UPDATE SET version = rule_version.version + 1`); err != nil {
+			return res, fmt.Errorf("seed version bump: %w", err)
+		}
 	}
 	if len(entries) > 0 {
 		keys := make([]string, 0, len(entries))

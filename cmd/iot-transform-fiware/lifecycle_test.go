@@ -34,7 +34,16 @@ func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) m
 		}},
 	}}
 
-	return things.NewDynamicThingTopicMessageHandler(cbClientFn, appthings.NewDynamicThingTransformer(rules), "")
+	return things.NewDynamicThingTopicMessageHandler(cbClientFn, staticThingsProvider{appthings.NewDynamicThingTransformer(rules)}, "")
+}
+
+// staticThingsProvider levererar en fast motor till handler-tester.
+type staticThingsProvider struct {
+	t *appthings.DynamicThingTransformer
+}
+
+func (s staticThingsProvider) ThingsTransformer() *appthings.DynamicThingTransformer {
+	return s.t
 }
 
 // FINAL-001: readiness-stubben rapporterar alltid OK utan att röra

@@ -64,7 +64,16 @@ func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) mes
 		},
 	}
 
-	return NewDynamicMeasurementTopicMessageHandler(cbClientFn, appmeasurements.NewDynamicTransformer(rules, nil), "")
+	return NewDynamicMeasurementTopicMessageHandler(cbClientFn, staticMeasurementsProvider{appmeasurements.NewDynamicTransformer(rules, nil)}, "")
+}
+
+// staticMeasurementsProvider levererar en fast motor till handler-tester.
+type staticMeasurementsProvider struct {
+	t *appmeasurements.DynamicTransformer
+}
+
+func (s staticMeasurementsProvider) MeasurementsTransformer() *appmeasurements.DynamicTransformer {
+	return s.t
 }
 
 // Fas D: ett pack med två observationer (luftkvalitet + ljudnivå) ska ge en

@@ -12,6 +12,15 @@ import (
 	"github.com/matryer/is"
 )
 
+// staticThingsProvider levererar en fast motor till handler-tester.
+type staticThingsProvider struct {
+	t *appthings.DynamicThingTransformer
+}
+
+func (s staticThingsProvider) ThingsTransformer() *appthings.DynamicThingTransformer {
+	return s.t
+}
+
 // Tom tenant ska hoppas över utan brokeranrop även i dynamiskt läge.
 func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 	is := is.New(t)
@@ -22,7 +31,7 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 			called = true
 			return nil, nil
 		},
-		appthings.NewDynamicThingTransformer([]transform.Rule{}),
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
 
@@ -44,10 +53,10 @@ func TestDynamicThingHandlerReturnsBrokerError(t *testing.T) {
 		func(string) (client.ContextBrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
-		appthings.NewDynamicThingTransformer([]transform.Rule{{
+		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{{
 			Match:    transform.Match{Kind: transform.KindThing, Type: "Container"},
 			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{nameOrID}}", Type: "Thing"}},
-		}}),
+		}})},
 		"",
 	)
 

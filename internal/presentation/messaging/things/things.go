@@ -14,9 +14,15 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
+// TransformerProvider levererar aktuell snapshot-motor per meddelande så
+// att omladdade regler slår igenom utan omregistrering (TF-05).
+type TransformerProvider interface {
+	ThingsTransformer() *appthings.DynamicThingTransformer
+}
+
 // NewDynamicThingTopicMessageHandler hanterar samtliga saktyper med den
 // konfigurationsstyrda motorn.
-func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, dynamic *appthings.DynamicThingTransformer, defaultContext string) messaging.TopicMessageHandler {
+func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, provider TransformerProvider, defaultContext string) messaging.TopicMessageHandler {
 	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) error {
 		log := l.With("content_type", itm.ContentType())
 
@@ -31,7 +37,7 @@ func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCl
 			return nil
 		}
 
-		writes, err := dynamic.Transform(th)
+		writes, err := provider.ThingsTransformer().Transform(th)
 		if err != nil {
 			if errors.Is(err, transform.ErrNoMatchingRule) {
 				log.Debug("no matching rule for thing, skipping", "type", th.Type, "sub_type", th.SubType)
