@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -129,10 +130,57 @@ type handler struct {
 
 var errValidation = errors.New("invalid request")
 
+// errUnauthorized signals a missing or empty access context. The OPA
+// middleware normally rejects such requests first; handlers check again
+// so direct calls can never bypass tenant scoping.
+var errUnauthorized = errors.New("unauthorized")
+
+// errForbidden signals an authenticated request that must not affect the
+// target: a rule owned by another tenant, or a global rule. Global rules
+// (empty match.tenant) are administered via seed files, never via API.
+var errForbidden = errors.New("forbidden")
+
+// authorizedTenants resolves the tenants the caller holds scope for.
+// Ownership of a rule is derived from its match.tenant: a rule is visible
+// and mutable only within its owner tenant set. Empty match.tenant means
+// a global (seed-owned) rule: visible to all readers, mutable by none
+// via the API.
+func authorizedTenants(r *http.Request, scope auth.Scope) ([]string, error) {
+	authorized := auth.GetTenantsWithAllowedScopes(r.Context(), scope)
+	if len(authorized) == 0 {
+		return nil, errUnauthorized
+	}
+	return authorized, nil
+}
+
+// ruleVisible reports whether a stored rule may be disclosed to a caller
+// holding the given tenants: global rules are shared configuration,
+// tenant rules require ownership.
+func ruleVisible(rule transform.Rule, authorized []string) bool {
+	return rule.Match.Tenant == "" || slices.Contains(authorized, rule.Match.Tenant)
+}
+
+// requireRuleTenant enforces write ownership: the rule must declare a
+// non-empty tenant that the caller is authorized for. Global rules are
+// seed-administered and rejected here.
+func requireRuleTenant(rule transform.Rule, authorized []string) error {
+	if rule.Match.Tenant == "" {
+		return fmt.Errorf("%w: global rules are administered via seed files", errForbidden)
+	}
+	if !slices.Contains(authorized, rule.Match.Tenant) {
+		return fmt.Errorf("%w: rule tenant %q is outside authorized tenants", errForbidden, rule.Match.Tenant)
+	}
+	return nil
+}
+
 func writeAPIError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errValidation):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, errUnauthorized):
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+	case errors.Is(err, errForbidden):
+		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, rules.ErrNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, rules.ErrConflict):
@@ -248,6 +296,11 @@ type StoredResult struct {
 }
 
 func (h *handler) listModels(w http.ResponseWriter, r *http.Request) {
+	authorized, err := authorizedTenants(r, TransformRead)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	stored, err := h.models.store.ListRules()
 	if err != nil {
 		writeAPIError(w, err)
@@ -255,15 +308,27 @@ func (h *handler) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]Model, 0, len(stored))
 	for _, st := range stored {
+		if !ruleVisible(st.Rule, authorized) {
+			continue
+		}
 		out = append(out, toModel(st))
 	}
 	writeJSON(w, http.StatusOK, map[string][]Model{"models": out})
 }
 
 func (h *handler) getModel(w http.ResponseWriter, r *http.Request) {
+	authorized, err := authorizedTenants(r, TransformRead)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	st, err := h.models.store.GetRule(r.PathValue("id"))
 	if err != nil {
 		writeAPIError(w, err)
+		return
+	}
+	if !ruleVisible(st.Rule, authorized) {
+		writeAPIError(w, fmt.Errorf("%w: %s", rules.ErrNotFound, st.ID))
 		return
 	}
 	m := toModel(st)
@@ -274,6 +339,15 @@ func (h *handler) getModel(w http.ResponseWriter, r *http.Request) {
 func (h *handler) createModel(w http.ResponseWriter, r *http.Request) {
 	rule, err := decodeRule(r)
 	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	authorized, err := authorizedTenants(r, TransformCreate)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	if err := requireRuleTenant(rule, authorized); err != nil {
 		writeAPIError(w, err)
 		return
 	}
@@ -304,9 +378,25 @@ func (h *handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
+	authorized, err := authorizedTenants(r, TransformUpdate)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	if err := requireRuleTenant(rule, authorized); err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	id := r.PathValue("id")
 	res, err := h.models.mutate(func() (StoredResult, error) {
-		st, err := h.models.store.UpdateRule(id, rule, rev)
+		st, err := h.models.store.GetRule(id)
+		if err != nil {
+			return StoredResult{}, err
+		}
+		if !ruleVisible(st.Rule, authorized) {
+			return StoredResult{}, fmt.Errorf("%w: %s", rules.ErrNotFound, id)
+		}
+		st, err = h.models.store.UpdateRule(id, rule, rev)
 		if err != nil {
 			return StoredResult{}, err
 		}
@@ -327,10 +417,21 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
+	authorized, err := authorizedTenants(r, TransformDelete)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	id := r.PathValue("id")
 	_, err = h.models.mutate(func() (StoredResult, error) {
 		st, err := h.models.store.GetRule(id)
 		if err != nil {
+			return StoredResult{}, err
+		}
+		if !ruleVisible(st.Rule, authorized) {
+			return StoredResult{}, fmt.Errorf("%w: %s", rules.ErrNotFound, id)
+		}
+		if err := requireRuleTenant(st.Rule, authorized); err != nil {
 			return StoredResult{}, err
 		}
 		if st.Revision != rev {

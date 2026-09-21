@@ -15,6 +15,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
 	"github.com/matryer/is"
 )
 
@@ -58,7 +59,7 @@ func pgTestModels(t *testing.T) *Models {
 
 func testRule() transform.Rule {
 	return transform.Rule{
-		Match: transform.Match{Kind: transform.KindThing, Type: "Room"},
+		Match: transform.Match{Kind: transform.KindThing, Type: "Room", Tenant: "t"},
 		Entities: []transform.Entity{{
 			ID:   "urn:ngsi-ld:Room:{{nameOrID}}",
 			Type: "Room",
@@ -70,12 +71,32 @@ func testRule() transform.Rule {
 	}
 }
 
+// fullAccess ger samtliga scopes i angivna tenants (testmotsvarigheten
+// till en OPA-policy som beviljat allt).
+func fullAccess(tenants ...string) context.Context {
+	m := map[string]map[auth.Scope]struct{}{}
+	for _, t := range tenants {
+		m[t] = map[auth.Scope]struct{}{
+			TransformRead:   {},
+			TransformCreate: {},
+			TransformUpdate: {},
+			TransformDelete: {},
+		}
+	}
+	return auth.WithAccess(context.Background(), m)
+}
+
 func doModel(fn func(http.ResponseWriter, *http.Request), method, id string, body any, headers map[string]string) *httptest.ResponseRecorder {
+	return doModelAs(fn, method, id, body, headers, fullAccess("t"))
+}
+
+func doModelAs(fn func(http.ResponseWriter, *http.Request), method, id string, body any, headers map[string]string, ctx context.Context) *httptest.ResponseRecorder {
 	var buf bytes.Buffer
 	if body != nil {
 		_ = json.NewEncoder(&buf).Encode(body)
 	}
 	req := httptest.NewRequest(method, "/x", &buf)
+	req = req.WithContext(ctx)
 	if id != "" {
 		req.SetPathValue("id", id)
 	}
@@ -214,6 +235,100 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 	rr = doModel(h.listModels, http.MethodGet, "", nil, nil)
 	is.Equal(rr.Code, http.StatusOK)
 	is.True(strings.Contains(rr.Body.String(), `"models":[]`))
+}
+
+func TestModelsTenantIsolation(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	ctxA := fullAccess("a")
+
+	// Setup direkt i lagret (utan auktorisering): en global regel samt
+	// en regel per tenant. Lagret är tenant-okunnigt med flit; handlers
+	// upprätthåller ägarskapet som härleds ur match.tenant.
+	seed := func(tenant string) rules.StoredRule {
+		t.Helper()
+		r := testRule()
+		r.Match.Tenant = tenant
+		st, err := m.store.InsertRule(r)
+		if err != nil {
+			t.Fatalf("seed tenant %q: %v", tenant, err)
+		}
+		return st
+	}
+	global := seed("")
+	ruleA := seed("a")
+	ruleB := seed("b")
+
+	decodeList := func(t *testing.T, rr *httptest.ResponseRecorder) []Model {
+		t.Helper()
+		var list struct {
+			Models []Model `json:"models"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
+			t.Fatalf("decode list: %v (%s)", err, rr.Body.String())
+		}
+		return list.Models
+	}
+
+	// Listning som A: global + A syns, B döljs.
+	rr := doModelAs(h.listModels, http.MethodGet, "", nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusOK)
+	ids := map[string]bool{}
+	for _, mdl := range decodeList(t, rr) {
+		ids[mdl.ID] = true
+	}
+	is.True(ids[global.ID])
+	is.True(ids[ruleA.ID])
+	is.True(!ids[ruleB.ID])
+
+	// Direktläsning av B:s regel som A läcker inte existens.
+	rr = doModelAs(h.getModel, http.MethodGet, ruleB.ID, nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+
+	// Skrivning med B-tenant i bodyn som A ger 403 — oavsett om id:t
+	// finns (ingen skillnad mot okänt id: ingen existensläcka).
+	rb := testRule()
+	rb.Match.Tenant = "b"
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleB.ID, rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.updateModel, http.MethodPut, "00000000-0000-0000-0000-000000000000", rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	// Lagrad B-regel med A-tenant i bodyn: målet är osynligt -> 404.
+	ra := testRule()
+	ra.Match.Tenant = "a"
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleB.ID, ra, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+	rr = doModelAs(h.deleteModel, http.MethodDelete, ruleB.ID, nil, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+
+	// Globala regler är synliga men låsta för API-skrivning (seed-ägda).
+	rr = doModelAs(h.getModel, http.MethodGet, global.ID, nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusOK)
+	rg := testRule()
+	rg.Match.Tenant = ""
+	rr = doModelAs(h.updateModel, http.MethodPut, global.ID, rg, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.deleteModel, http.MethodDelete, global.ID, nil, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+
+	// Skapande kräver icke-tom tenant inom egna auktoriserade tenants.
+	rr = doModelAs(h.createModel, http.MethodPost, "", rb, nil, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rg = testRule()
+	rg.Match.Tenant = ""
+	rr = doModelAs(h.createModel, http.MethodPost, "", rg, nil, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.createModel, http.MethodPost, "", ra, nil, ctxA)
+	is.Equal(rr.Code, http.StatusCreated)
+
+	// Tenantbyte A->B i uppdatering nekas trots att den lagrade regeln är synlig.
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleA.ID, rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+
+	// Utan access-context: 401 på läsning.
+	rr = doModelAs(h.listModels, http.MethodGet, "", nil, nil, context.Background())
+	is.Equal(rr.Code, http.StatusUnauthorized)
 }
 
 func TestValidateModel(t *testing.T) {

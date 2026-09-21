@@ -102,6 +102,16 @@ Skrivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
 andringar. `POST /models/preview` kor en inline-regel torrt mot en
 exempelhandelse (aldrig broker/persistens).
 
+## Auktoriseringsmodell (tenant-ägarskap)
+
+En regels ägare är dess `match.tenant`; tom tenant betyder global
+(seed-ägd) regel. Läsning visar globala regler samt regler för egna
+auktoriserade tenants — övrigt ger 404 utan existensläcka. Skrivning
+kräver icke-tom tenant inom egna auktoriserade tenants; globala regler
+administreras via seed-filer och ger 403 via API. `match.tenant` är ett
+matchningsvillkor, inte i sig auktorisering — ägarskapet upprätthålls i
+handlers, lagret är tenant-okunnigt med flit.
+
 ## Configuration files
 Modeller seedas fran `MODELS_DIR` (`/opt/diwise/config/models`) i
 lexikografisk filnamnsordning vid start (stabil nyckel `<fil>#<index>`;

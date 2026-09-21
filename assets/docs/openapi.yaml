@@ -9,6 +9,11 @@ info:
     aldrig skriver över API-ändringar. All bodies är application/json;
     okända fält nekas. Skrivning kräver If-Match med revision ("rev-<n>");
     konflikt ger 409.
+    Ägarskap: en regel ägs av sin match.tenant. Läsning visar globala
+    regler (tom tenant) samt regler för egna auktoriserade tenants;
+    övrigt ger 404 utan existensläcka. Skrivning kräver icke-tom tenant
+    inom egna auktoriserade tenants; globala regler administreras via
+    seed-filer och ger 403 via API.
 paths:
   /models:
     get:
@@ -30,7 +35,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [Models]
-      summary: Skapa regel (UUID genereras, revision 1)
+      summary: Skapa regel (UUID genereras, revision 1; kräver icke-tom tenant inom egna tenants)
       requestBody:
         required: true
         content:
@@ -50,6 +55,7 @@ paths:
                 $ref: '#/components/schemas/Model'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /models/{id}:
     parameters:
       - name: id
@@ -94,6 +100,7 @@ paths:
                 $ref: '#/components/schemas/Model'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
     delete:
@@ -105,6 +112,7 @@ paths:
         '204': { description: Regel borttagen }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
   /models/validate:
@@ -206,6 +214,12 @@ components:
         application/json:
           schema:
             type: object
+    Forbidden:
+      description: Autentiserad men otillåten tenant eller global regel (administreras via seed)
+      content:
+        application/json:
+          schema:
+            type: object
     NotFound:
       description: Okänt id
       content:
@@ -254,7 +268,7 @@ components:
         env: { type: string }
         type: { type: string }
         subType: { type: string }
-        tenant: { type: string }
+        tenant: { type: string, description: Ägarskap för API-administration (tom = global seed-regel) }
         event: { type: string }
     Entity:
       type: object
