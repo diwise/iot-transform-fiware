@@ -50,86 +50,86 @@ const (
 
 // Model är innehållet i en konfigurationsfil.
 type Model struct {
-	Rules []Rule `yaml:"rules"`
+	Rules []Rule `yaml:"rules" json:"rules"`
 }
 
 // Rule matchar en källa och beskriver vilka entiteter som ska skrivas.
 type Rule struct {
-	Match    Match    `yaml:"match"`
-	Entities []Entity `yaml:"entities"`
+	Match    Match    `yaml:"match" json:"match"`
+	Entities []Entity `yaml:"entities" json:"entities"`
 }
 
 // Match beskriver vilka källor en regel gäller. Alla fält utom Kind är
 // valfria; tomt fält matchar allt.
 type Match struct {
-	Kind       Kind   `yaml:"kind"`
-	Device     string `yaml:"device,omitempty"`
-	Port       string `yaml:"port,omitempty"`
-	SensorType string `yaml:"sensorType,omitempty"`
-	Object     string `yaml:"object,omitempty"`
-	Resource   string `yaml:"resource,omitempty"`
-	Env        string `yaml:"env,omitempty"`
-	Type       string `yaml:"type,omitempty"`
-	SubType    string `yaml:"subType,omitempty"`
-	Tenant     string `yaml:"tenant,omitempty"`
+	Kind       Kind   `yaml:"kind" json:"kind"`
+	Device     string `yaml:"device,omitempty" json:"device,omitempty"`
+	Port       string `yaml:"port,omitempty" json:"port,omitempty"`
+	SensorType string `yaml:"sensorType,omitempty" json:"sensorType,omitempty"`
+	Object     string `yaml:"object,omitempty" json:"object,omitempty"`
+	Resource   string `yaml:"resource,omitempty" json:"resource,omitempty"`
+	Env        string `yaml:"env,omitempty" json:"env,omitempty"`
+	Type       string `yaml:"type,omitempty" json:"type,omitempty"`
+	SubType    string `yaml:"subType,omitempty" json:"subType,omitempty"`
+	Tenant     string `yaml:"tenant,omitempty" json:"tenant,omitempty"`
 	// Event avgränsar vilken händelsekälla regeln gäller (t.ex.
 	// "things.v1.values" för versionerade värdesevent). Tomt = den
 	// ursprungliga källan (thing.updated/mätvärden); satt värde matchar
 	// endast indata med samma tagg, så gamla och nya regler aldrig
 	// korsaktiveras.
-	Event string `yaml:"event,omitempty"`
+	Event string `yaml:"event,omitempty" json:"event,omitempty"`
 }
 
 // Entity beskriver en NGSI-LD-entitet som ska skrivas.
 type Entity struct {
-	Name       string     `yaml:"name,omitempty"`
-	ID         string     `yaml:"id"`
-	Type       string     `yaml:"type"`
-	Context    string     `yaml:"context,omitempty"`
-	Create     bool       `yaml:"create,omitempty"`
-	Properties []Property `yaml:"properties"`
+	Name       string     `yaml:"name,omitempty" json:"name,omitempty"`
+	ID         string     `yaml:"id" json:"id"`
+	Type       string     `yaml:"type" json:"type"`
+	Context    string     `yaml:"context,omitempty" json:"context,omitempty"`
+	Create     bool       `yaml:"create,omitempty" json:"create,omitempty"`
+	Properties []Property `yaml:"properties" json:"properties"`
 }
 
 // Source beskriver var ett värde hämtas. Exakt en källa ska vara satt.
 type Source struct {
-	Resource  string `yaml:"resource,omitempty"`
-	Object    string `yaml:"object,omitempty"`
-	Env       string `yaml:"env,omitempty"`
-	Name      string `yaml:"name,omitempty"`
-	Field     string `yaml:"field,omitempty"`
-	Ref       string `yaml:"ref,omitempty"`
-	Const     any    `yaml:"const,omitempty"`
-	LatLon    bool   `yaml:"latlon,omitempty"`
-	Timestamp bool   `yaml:"timestamp,omitempty"`
-	Value     string `yaml:"value,omitempty"`
-	Prefix    string `yaml:"prefix,omitempty"`
+	Resource  string `yaml:"resource,omitempty" json:"resource,omitempty"`
+	Object    string `yaml:"object,omitempty" json:"object,omitempty"`
+	Env       string `yaml:"env,omitempty" json:"env,omitempty"`
+	Name      string `yaml:"name,omitempty" json:"name,omitempty"`
+	Field     string `yaml:"field,omitempty" json:"field,omitempty"`
+	Ref       string `yaml:"ref,omitempty" json:"ref,omitempty"`
+	Const     any    `yaml:"const,omitempty" json:"const,omitempty"`
+	LatLon    bool   `yaml:"latlon,omitempty" json:"latlon,omitempty"`
+	Timestamp bool   `yaml:"timestamp,omitempty" json:"timestamp,omitempty"`
+	Value     string `yaml:"value,omitempty" json:"value,omitempty"`
+	Prefix    string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
 }
 
 // Transform är ett namngivet steg som appliceras på ett enskilt värde.
 type Transform struct {
-	Op    string   `yaml:"op"`
-	Value *float64 `yaml:"value,omitempty"`
+	Op    string   `yaml:"op" json:"op"`
+	Value *float64 `yaml:"value,omitempty" json:"value,omitempty"`
 }
 
 // Derive är en namngiven funktion över flera källor.
 type Derive struct {
-	Fn string   `yaml:"fn"`
-	Of []Source `yaml:"of"`
+	Fn string   `yaml:"fn" json:"fn"`
+	Of []Source `yaml:"of" json:"of"`
 }
 
 // Property beskriver ett NGSI-LD-attribut.
 type Property struct {
-	Target     string       `yaml:"target"`
-	Type       PropertyType `yaml:"type"`
-	Unit       string       `yaml:"unit,omitempty"`
-	ObservedAt ObservedAt   `yaml:"observedAt,omitempty"`
-	ObservedBy string       `yaml:"observedBy,omitempty"`
-	When       When         `yaml:"when,omitempty"`
-	Required   bool         `yaml:"required,omitempty"`
+	Target     string       `yaml:"target" json:"target"`
+	Type       PropertyType `yaml:"type" json:"type"`
+	Unit       string       `yaml:"unit,omitempty" json:"unit,omitempty"`
+	ObservedAt ObservedAt   `yaml:"observedAt,omitempty" json:"observedAt,omitempty"`
+	ObservedBy string       `yaml:"observedBy,omitempty" json:"observedBy,omitempty"`
+	When       When         `yaml:"when,omitempty" json:"when,omitempty"`
+	Required   bool         `yaml:"required,omitempty" json:"required,omitempty"`
 
 	Source `yaml:",inline"`
 
-	Transform     []Transform `yaml:"transform,omitempty"`
-	Derive        *Derive     `yaml:"derive,omitempty"`
-	Subproperties []Property  `yaml:"subproperties,omitempty"`
+	Transform     []Transform `yaml:"transform,omitempty" json:"transform,omitempty"`
+	Derive        *Derive     `yaml:"derive,omitempty" json:"derive,omitempty"`
+	Subproperties []Property  `yaml:"subproperties,omitempty" json:"subproperties,omitempty"`
 }
