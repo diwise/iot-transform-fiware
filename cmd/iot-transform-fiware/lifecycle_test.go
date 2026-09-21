@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,7 +92,12 @@ func TestInitializeRejectsEmptyContextBrokerURL(t *testing.T) {
 	flags := defaultFlags()
 	flags[contextbrokerUrl] = ""
 
-	_, err := initialize(context.Background(), flags, &appConfig{})
+	policies, err := os.CreateTemp("", "authz-*.rego")
+	is.NoErr(err)
+	defer policies.Close()
+	defer os.Remove(policies.Name())
+
+	_, err = initialize(context.Background(), flags, &appConfig{}, policies)
 	is.True(err != nil)
 }
 

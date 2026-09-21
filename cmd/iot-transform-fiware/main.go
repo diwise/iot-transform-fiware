@@ -5,16 +5,19 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	measurementsApp "github.com/diwise/iot-transform-fiware/internal/application/measurements"
 	thingsApp "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
-	"github.com/diwise/iot-transform-fiware/internal/infrastructure/config"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/api"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/things"
 
@@ -38,6 +41,7 @@ func defaultFlags() flagMap {
 	return flagMap{
 		listenAddress:    "0.0.0.0",
 		controlPort:      "8000",
+		servicePort:      "8080",
 		contextbrokerUrl: "http://context-broker",
 
 		oauth2ClientId:     "",
@@ -52,17 +56,17 @@ func defaultFlags() flagMap {
 		defaultContextUrl: "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
 
 		thingsV1Values: "false",
-	}
-}
 
-// loadModels läser och validerar modellkonfigurationen.
-func loadModels(flags flagMap) ([]transform.Rule, error) {
-	rules, err := config.LoadModelsDir(flags[modelsDir])
-	if err != nil {
-		return nil, fmt.Errorf("failed to load models from %s: %w", flags[modelsDir], err)
-	}
+		policiesFile:      "/opt/diwise/config/authz.rego",
+		authzAccessObject: "false",
 
-	return rules, nil
+		dbHost:     "",
+		dbUser:     "",
+		dbPassword: "",
+		dbPort:     "5432",
+		dbName:     "diwise",
+		dbSSLMode:  "disable",
+	}
 }
 
 const (
@@ -89,8 +93,24 @@ func main() {
 
 	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags))
 
-	models, err := loadModels(flags)
-	exitIf(err, logger, "failed to load model configuration")
+	policies, err := os.Open(flags[policiesFile])
+	exitIf(err, logger, "unable to open opa policy file")
+
+	// Reglerna lever i postgres (enda backend, som övriga tjänster);
+	// YAML-filerna är seed som läggs in idempotent vid start.
+	ruleStore, err := rules.NewPostgres(ctx, storageConfigFromFlags(flags))
+	exitIf(err, logger, "failed to connect to rule storage")
+	seeded, err := rules.SeedDir(ruleStore, flags[modelsDir])
+	exitIf(err, logger, "failed to seed model configuration")
+	if seeded.Added+seeded.Updated > 0 {
+		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "skipped", seeded.Skipped)
+	}
+	stored, err := ruleStore.ListRules()
+	exitIf(err, logger, "failed to list model rules")
+	dbRules := make([]transform.Rule, 0, len(stored))
+	for _, st := range stored {
+		dbRules = append(dbRules, st.Rule)
+	}
 
 	var sensorTypes devicemanagement.SensorTypeResolver
 	if flags[deviceMgmtUrl] != "" {
@@ -101,20 +121,23 @@ func main() {
 	cfg := &appConfig{
 		messenger:      messenger,
 		cbClientFn:     factory,
-		models:         models,
+		ruleStore:      ruleStore,
+		thingsT:        thingsApp.NewDynamicThingTransformer(dbRules),
+		measT:          measurementsApp.NewDynamicTransformer(dbRules, sensorTypes),
+		models:         dbRules,
 		sensorTypes:    sensorTypes,
 		defaultContext: flags[defaultContextUrl],
 		thingsV1Values: thingsV1ValuesEnabled(flags),
 	}
 
-	runner, err := initialize(ctx, flags, cfg)
+	runner, err := initialize(ctx, flags, cfg, policies)
 	exitIf(err, logger, "failed to initialize service runner")
 
 	err = runner.Run(ctx)
 	exitIf(err, logger, "failed to start service runner")
 }
 
-func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunner.Runner[appConfig], error) {
+func initialize(ctx context.Context, flags flagMap, cfg *appConfig, policiesFile *os.File) (servicerunner.Runner[appConfig], error) {
 	if flags[contextbrokerUrl] == "" {
 		return nil, fmt.Errorf("context broker URL is empty")
 	}
@@ -124,6 +147,15 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 	_, runner := servicerunner.New(ctx, *cfg,
 		webserver("control", listen(flags[listenAddress]), port(flags[controlPort]),
 			pprof(), liveness(func() error { return nil }), readiness(probes),
+		),
+		webserver("public", listen(flags[listenAddress]), port(flags[servicePort]), tracing(true),
+			muxinit(func(ctx context.Context, identifier string, port string, appCfg *appConfig, handler *http.ServeMux) error {
+				defer policiesFile.Close()
+				logging.GetFromContext(ctx).Debug("register api handlers...")
+				return api.RegisterHandlers(ctx, handler,
+					api.NewModels(appCfg.ruleStore, appCfg.thingsT, appCfg.measT),
+					policiesFile, api.WithAccessObjectAuthorization(accessObjectEnabled(flags)))
+			}),
 		),
 		onstarting(func(ctx context.Context, svcCfg *appConfig) error {
 			if err := svcCfg.messenger.Start(ctx); err != nil {
@@ -135,6 +167,9 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig) (servicerunn
 		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
 			if err := shutdownMessenger(ctx, svcCfg.messenger); err != nil {
 				logging.GetFromContext(ctx).Debug("failed to shut down messenger", "err", err.Error())
+			}
+			if svcCfg.ruleStore != nil {
+				svcCfg.ruleStore.Close()
 			}
 			return nil
 		}))
@@ -163,8 +198,9 @@ func registerHandlers(svcCfg *appConfig) error {
 	messenger := svcCfg.messenger
 	cbClientFn := svcCfg.cbClientFn
 
-	// things
-	dynamicThings := thingsApp.NewDynamicThingTransformer(svcCfg.models)
+	// things (transformatorerna byggda från lagrade regler i main;
+	// API-skrivningar laddar om dem atomärt via Reload)
+	dynamicThings := svcCfg.thingsT
 	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, dynamicThings, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
 	}
@@ -179,7 +215,7 @@ func registerHandlers(svcCfg *appConfig) error {
 	}
 
 	// measurements
-	dynamicMeasurements := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
+	dynamicMeasurements := svcCfg.measT
 	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements, svcCfg.defaultContext)); err != nil {
 		return fmt.Errorf("failed to register measurements handler: %w", err)
 	}
@@ -191,6 +227,20 @@ func registerHandlers(svcCfg *appConfig) error {
 // toggle. Only the exact string "true" disables verification.
 func oauthInsecure(flags flagMap) bool {
 	return flags[oauth2InsecureURL] == "true"
+}
+
+// storageConfigFromFlags builds the storage configuration explicitly
+// from cmd-owned flags (samma mönster som övriga tjänster).
+func storageConfigFromFlags(flags flagMap) rules.Config {
+	return rules.NewConfig(flags[dbHost], flags[dbUser], flags[dbPassword], flags[dbPort], flags[dbName], flags[dbSSLMode])
+}
+
+// accessObjectEnabled is the minimal production seam for the
+// access-object toggle, using strconv semantics: invalid values
+// silently keep the legacy tenants model.
+func accessObjectEnabled(flags flagMap) bool {
+	v, _ := strconv.ParseBool(flags[authzAccessObject])
+	return v
 }
 
 // thingsV1ValuesEnabled is the minimal production seam for the versioned
@@ -205,6 +255,7 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 
 	flags[listenAddress] = envOrDef(ctx, "LISTEN_ADDRESS", flags[listenAddress])
 	flags[controlPort] = envOrDef(ctx, "CONTROL_PORT", flags[controlPort])
+	flags[servicePort] = envOrDef(ctx, "SERVICE_PORT", flags[servicePort])
 	flags[contextbrokerUrl] = envOrDef(ctx, "NGSI_CB_URL", flags[contextbrokerUrl])
 	flags[oauth2TokenUrl] = envOrDef(ctx, "OAUTH2_TOKEN_URL", flags[oauth2TokenUrl])
 	flags[oauth2ClientId] = envOrDef(ctx, "OAUTH2_CLIENT_ID", flags[oauth2ClientId])
@@ -215,6 +266,15 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[deviceMgmtUrl] = envOrDef(ctx, "DEV_MGMT_URL", flags[deviceMgmtUrl])
 	flags[defaultContextUrl] = envOrDef(ctx, "DEFAULT_CONTEXT_URL", flags[defaultContextUrl])
 	flags[thingsV1Values] = envOrDef(ctx, "THINGS_V1_VALUES", flags[thingsV1Values])
+	flags[policiesFile] = envOrDef(ctx, "POLICIES_FILE", flags[policiesFile])
+	flags[authzAccessObject] = envOrDef(ctx, "AUTHZ_ACCESS_OBJECT_ENABLED", flags[authzAccessObject])
+
+	flags[dbHost] = envOrDef(ctx, "POSTGRES_HOST", flags[dbHost])
+	flags[dbPort] = envOrDef(ctx, "POSTGRES_PORT", flags[dbPort])
+	flags[dbName] = envOrDef(ctx, "POSTGRES_DBNAME", flags[dbName])
+	flags[dbUser] = envOrDef(ctx, "POSTGRES_USER", flags[dbUser])
+	flags[dbPassword] = envOrDef(ctx, "POSTGRES_PASSWORD", flags[dbPassword])
+	flags[dbSSLMode] = envOrDef(ctx, "POSTGRES_SSLMODE", flags[dbSSLMode])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {

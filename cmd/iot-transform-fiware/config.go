@@ -1,9 +1,12 @@
 package main
 
 import (
+	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/servicerunner"
 )
@@ -14,6 +17,7 @@ type flagMap map[flagType]string
 const (
 	listenAddress flagType = iota
 	controlPort
+	servicePort
 	contextbrokerUrl
 
 	oauth2ClientId
@@ -28,11 +32,29 @@ const (
 	defaultContextUrl
 
 	thingsV1Values
+
+	policiesFile
+	authzAccessObject
+
+	dbHost
+	dbUser
+	dbPassword
+	dbPort
+	dbName
+	dbSSLMode
 )
 
 type appConfig struct {
 	messenger  messaging.MsgContext
 	cbClientFn contextbroker.ContextBrokerClientFactoryFunc
+
+	// ruleStore är regel­lagret (enda sanningen; YAML är seed).
+	ruleStore *rules.PgStore
+
+	// thingsT/measT är körningsmotorerna byggda från lagrade regler.
+	// Omladdning efter API-skrivning sker via Reload (atomisk).
+	thingsT *things.DynamicThingTransformer
+	measT   *measurements.DynamicTransformer
 
 	// models är den inlästa och validerade regellistan.
 	models []transform.Rule
@@ -53,6 +75,8 @@ type appConfig struct {
 var onstarting = servicerunner.OnStarting[appConfig]
 var onshutdown = servicerunner.OnShutdown[appConfig]
 var webserver = servicerunner.WithHTTPServeMux[appConfig]
+var muxinit = servicerunner.OnMuxInit[appConfig]
+var tracing = servicerunner.WithTracing[appConfig]
 var listen = servicerunner.WithListenAddr[appConfig]
 var port = servicerunner.WithPort[appConfig]
 var pprof = servicerunner.WithPPROF[appConfig]

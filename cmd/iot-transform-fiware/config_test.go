@@ -33,6 +33,7 @@ func TestDefaultFlags(t *testing.T) {
 	expected := map[flagType]string{
 		listenAddress:      "0.0.0.0",
 		controlPort:        "8000",
+		servicePort:        "8080",
 		contextbrokerUrl:   "http://context-broker",
 		oauth2ClientId:     "",
 		oauth2ClientSecret: "",
@@ -43,6 +44,14 @@ func TestDefaultFlags(t *testing.T) {
 		deviceMgmtUrl:      "http://iot-device-mgmt",
 		defaultContextUrl:  "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
 		thingsV1Values:     "false",
+		policiesFile:       "/opt/diwise/config/authz.rego",
+		authzAccessObject:  "false",
+		dbHost:             "",
+		dbUser:             "",
+		dbPassword:         "",
+		dbPort:             "5432",
+		dbName:             "diwise",
+		dbSSLMode:          "disable",
 	}
 
 	is.Equal(len(flags), len(expected))
@@ -87,33 +96,49 @@ func TestCLIOverridesEnv(t *testing.T) {
 	is.Equal(flags[logLevel], "error")
 }
 
-// BASE-002: LISTEN_ADDRESS and CONTROL_PORT follow the same env
-// convention as the reference service. PILOT-003: the dead SERVICE_PORT
-// flag was removed since the service starts no public server; setting
-// the SERVICE_PORT env var no longer has any effect.
+// BASE-002: LISTEN_ADDRESS, CONTROL_PORT and SERVICE_PORT follow the same
+// env convention as the reference service. The public models API reversed
+// PILOT-003: SERVICE_PORT is effective again.
 func TestServerAddressFlagsConfigurable(t *testing.T) {
 	is := is.New(t)
 	withCleanFlags(t, []string{"iot-transform-fiware"})
 
 	t.Setenv("LISTEN_ADDRESS", "127.0.0.1")
 	t.Setenv("CONTROL_PORT", "9001")
+	t.Setenv("SERVICE_PORT", "9090")
 
 	_, flags := parseExternalConfig(context.Background(), defaultFlags())
 
 	is.Equal(flags[listenAddress], "127.0.0.1")
 	is.Equal(flags[controlPort], "9001")
+	is.Equal(flags[servicePort], "9090")
 }
 
-// PILOT-003: the dead SERVICE_PORT flag was removed since the service
-// starts no public server. Setting SERVICE_PORT must have no effect.
-func TestServicePortEnvIsIgnored(t *testing.T) {
+// Rule storage and policy flags follow env overrides.
+func TestStorageAndPolicyEnvOverrides(t *testing.T) {
 	is := is.New(t)
 	withCleanFlags(t, []string{"iot-transform-fiware"})
 
-	t.Setenv("SERVICE_PORT", "9090")
+	t.Setenv("POSTGRES_HOST", "pg")
+	t.Setenv("POSTGRES_DBNAME", "fiware")
+	t.Setenv("POLICIES_FILE", "/tmp/authz.rego")
+	t.Setenv("AUTHZ_ACCESS_OBJECT_ENABLED", "true")
 
 	_, flags := parseExternalConfig(context.Background(), defaultFlags())
-	is.Equal(flags, defaultFlags())
+
+	is.Equal(flags[dbHost], "pg")
+	is.Equal(flags[dbName], "fiware")
+	is.Equal(flags[policiesFile], "/tmp/authz.rego")
+	is.True(accessObjectEnabled(flags))
+}
+
+// AUTHZ_ACCESS_OBJECT_ENABLED uses strconv semantics: invalid values keep
+// the legacy tenants model.
+func TestAccessObjectEnabled(t *testing.T) {
+	is := is.New(t)
+	is.True(accessObjectEnabled(flagMap{authzAccessObject: "true"}))
+	is.True(!accessObjectEnabled(flagMap{authzAccessObject: "false"}))
+	is.True(!accessObjectEnabled(flagMap{authzAccessObject: "yes"}))
 }
 
 // HARM-004: locks log level parsing, including the silent debug fallback.
