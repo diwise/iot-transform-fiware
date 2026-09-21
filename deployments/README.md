@@ -31,6 +31,7 @@ docker run --rm \
 | `DEFAULT_CONTEXT_URL` | JSON-LD-context som fallback när en entitet inte anger `context` |
 | `NGSI_CB_URL`, `OAUTH2_*` | Context-broker och OAuth2 |
 | `RABBITMQ_*` | Se `messaging.LoadConfiguration` |
+| `THINGS_V1_VALUES` | Endast exakt `true` prenumererar pa `things.v1.values` (E7-cutover) |
 
 ## Rökprov utan RabbitMQ/context-broker
 
@@ -47,7 +48,11 @@ verifiera att
 - ett mätvärde på `message.accepted` och
 - en sak på `thing.updated`
 
-ger förväntade NGSI-LD-entiteter enligt modellerna.
+ger förväntade NGSI-LD-entiteter enligt modellerna. Med
+`THINGS_V1_VALUES=true` verifieras dessutom att ett versionerat
+värdesevent på `things.v1.values` (regler med `match.event`, t.ex.
+`90-room-things-v1.yaml`) ger förväntad entitet utan att
+`thing.updated`-vägen påverkas.
 
 ## Utrullningsordning
 
@@ -57,7 +62,10 @@ ger förväntade NGSI-LD-entiteter enligt modellerna.
    rullning så att versionerna inte glider isär. Tjänsten validerar modellerna
    vid start och vägrar starta vid fel.
 3. Rulla ut och verifiera `/health`/`/readyz` samt att `message.accepted` och
-   `thing.updated` ger förväntade entiteter i context-broker.
+   `thing.updated` ger förväntade entiteter i context-broker. Sätt
+   `THINGS_V1_VALUES=true` först vid cutover till versionerade kontrakt;
+   utan flaggan prenumereras `things.v1.values` aldrig (samma image kan
+   rulla före cutover; rollback av cutover är att slå av flaggan).
 
 Det finns ingen `DYNAMIC_MODELS`-flagga längre; den dynamiska motorn är den
 enda vägen.

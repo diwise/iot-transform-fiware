@@ -1,0 +1,17 @@
+# IndoorEnvironmentObserved från versionerade värdesevent (things.v1.values).
+# Gäller endast den nya källan (match.event); thing.updated-regeln i
+# 50-room.yaml rörs inte. Värden läses via values.<propertyId>.*-vägar
+# (egenskaps-ID:n innehåller punkt och citeras därför); konsumenttid är
+# max(values[].observedAt) (timestamp: true).
+# required: id, type, dateObserved, location.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: room }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}"
+        type: IndoorEnvironmentObserved
+        properties:
+          - { target: location, type: Geo, field: location, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: temperature, type: Number, field: values."temperature.average".value, observedAt: "field:values.\"temperature.average\".observedAt", required: true }
+          - { target: relativeHumidity, type: Number, field: values.humidity.value, observedAt: "field:values.humidity.observedAt" }
+          - { target: name, type: Text, field: name, observedAt: none }

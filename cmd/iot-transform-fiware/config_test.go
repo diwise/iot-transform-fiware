@@ -42,6 +42,7 @@ func TestDefaultFlags(t *testing.T) {
 		modelsDir:          "/opt/diwise/config/models",
 		deviceMgmtUrl:      "http://iot-device-mgmt",
 		defaultContextUrl:  "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
+		thingsV1Values:     "false",
 	}
 
 	is.Equal(len(flags), len(expected))
@@ -151,5 +152,32 @@ func TestOAuthInsecureInterpretation(t *testing.T) {
 
 			is.Equal(oauthInsecure(flags), tc.want)
 		})
+	}
+}
+
+// E7: THINGS_V1_VALUES gatar prenumerationen på versionerade värdesevent.
+// Endast exakt "true" slår på; default är av (explicit cutover-beslut).
+func TestThingsV1ValuesFlag(t *testing.T) {
+	is := is.New(t)
+	withCleanFlags(t, []string{"iot-transform-fiware"})
+
+	_, flags := parseExternalConfig(context.Background(), defaultFlags())
+	is.Equal(flags[thingsV1Values], "false")
+	is.True(!thingsV1ValuesEnabled(flags))
+
+	withCleanFlags(t, []string{"iot-transform-fiware"})
+	t.Setenv("THINGS_V1_VALUES", "true")
+	_, flags = parseExternalConfig(context.Background(), defaultFlags())
+	is.True(thingsV1ValuesEnabled(flags))
+}
+
+func TestThingsV1ValuesFlagRejectsLookalikes(t *testing.T) {
+	is := is.New(t)
+
+	for _, v := range []string{"TRUE", "1", "yes", " true"} {
+		withCleanFlags(t, []string{"iot-transform-fiware"})
+		t.Setenv("THINGS_V1_VALUES", v)
+		_, flags := parseExternalConfig(context.Background(), defaultFlags())
+		is.True(!thingsV1ValuesEnabled(flags))
 	}
 }

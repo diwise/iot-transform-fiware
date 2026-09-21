@@ -106,10 +106,17 @@ func (r Rule) validateReferences() error {
 // validateForKind avvisar matchningsfält som inte gäller för regelns kind, så
 // att en felskrivning inte tyst gör att regeln aldrig matchar.
 func (mm Match) validateForKind() error {
+	// Kända händelsekällor för versionerade event. Tomt = ursprunglig källa.
+	if mm.Event != "" && mm.Event != EventThingsV1Values {
+		return fmt.Errorf("unknown match.event %q", mm.Event)
+	}
 	switch mm.Kind {
 	case KindMeasurement:
 		if mm.Type != "" || mm.SubType != "" {
 			return errors.New("match.type/subType is only valid for things")
+		}
+		if mm.Event != "" {
+			return errors.New("match.event is only valid for things")
 		}
 	case KindThing:
 		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {

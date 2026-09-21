@@ -12,6 +12,10 @@ const (
 	KindThing       Kind = "thing"
 )
 
+// EventThingsV1Values taggar versionerade värdesevent (things.v1.values)
+// i match.event och motorns indata. Tom tagg = ursprunglig källa.
+const EventThingsV1Values = "things.v1.values"
+
 // PropertyType är den NGSI-LD-typ en property skrivs som.
 type PropertyType string
 
@@ -68,6 +72,12 @@ type Match struct {
 	Type       string `yaml:"type,omitempty"`
 	SubType    string `yaml:"subType,omitempty"`
 	Tenant     string `yaml:"tenant,omitempty"`
+	// Event avgränsar vilken händelsekälla regeln gäller (t.ex.
+	// "things.v1.values" för versionerade värdesevent). Tomt = den
+	// ursprungliga källan (thing.updated/mätvärden); satt värde matchar
+	// endast indata med samma tagg, så gamla och nya regler aldrig
+	// korsaktiveras.
+	Event string `yaml:"event,omitempty"`
 }
 
 // Entity beskriver en NGSI-LD-entitet som ska skrivas.

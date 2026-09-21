@@ -26,6 +26,8 @@ const (
 	modelsDir
 	deviceMgmtUrl
 	defaultContextUrl
+
+	thingsV1Values
 )
 
 type appConfig struct {
@@ -40,6 +42,12 @@ type appConfig struct {
 
 	// defaultContext används för entiteter som inte anger en egen context.
 	defaultContext string
+
+	// thingsV1Values slår på prenumerationen på versionerade värdesevent
+	// (things.v1.values). Av som default; sätts på vid cutover till nya
+	// kontrakt (E7). Samma motor och modeller återanvänds; händelsekällan
+	// (match.event) skiljer reglerna åt.
+	thingsV1Values bool
 }
 
 var onstarting = servicerunner.OnStarting[appConfig]

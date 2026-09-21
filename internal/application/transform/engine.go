@@ -45,6 +45,8 @@ type MatchInfo struct {
 	Tenant     string
 	Type       string
 	SubType    string
+	// Event taggar händelsekällan (tomt för ursprungliga källor).
+	Event string
 }
 
 // resolvedValue är resultatet av en värdekälleuppslagning.
@@ -189,6 +191,11 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 		return false
 	}
 	if mm.Tenant != "" && mm.Tenant != info.Tenant {
+		return false
+	}
+	// Händelsekälla måste stämma exakt; tomt matchar endast omärkt indata
+	// (ursprungliga källor), så gamla regler aldrig aktiveras av nya event.
+	if mm.Event != info.Event {
 		return false
 	}
 	return true

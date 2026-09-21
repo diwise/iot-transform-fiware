@@ -1,0 +1,18 @@
+# AgriGreenhouse från versionerade värdesevent (things.v1.values).
+# Gäller endast den nya källan (match.event). Värden läses via
+# values.<propertyId>.*-vägar; konsumenttid är max(values[].observedAt).
+# Lufttemperatur bor i AirQualityObserved från mätvärdet, inte här:
+# växthusentiteten bär co2/relativ fukt (primära inomhusklimatet).
+# Enhetsfrågan co2 (ppm från sensor, nominellt mg/L i modellen) är
+# medvetet olöst här: ingen tyst konvertering (strikt match), därför
+# sätts ingen unitCode tills beslut finns.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{nameOrID}}"
+        type: AgriGreenhouse
+        context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
+        properties:
+          - { target: co2, type: Number, field: values.co2.value, observedAt: "field:values.co2.observedAt", required: true }
+          - { target: relativeHumidity, type: Number, field: values.humidity.value, observedAt: "field:values.humidity.observedAt" }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }

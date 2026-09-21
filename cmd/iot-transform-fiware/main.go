@@ -50,6 +50,8 @@ func defaultFlags() flagMap {
 		modelsDir:         "/opt/diwise/config/models",
 		deviceMgmtUrl:     "http://iot-device-mgmt",
 		defaultContextUrl: "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
+
+		thingsV1Values: "false",
 	}
 }
 
@@ -66,6 +68,8 @@ func loadModels(flags flagMap) ([]transform.Rule, error) {
 const (
 	ThingUpdatedTopic    string = "thing.updated"
 	MessageAcceptedTopic string = "message.accepted"
+	// ThingValuesV1Topic bär versionerade värdesevent (things.v1.values).
+	ThingValuesV1Topic string = transform.EventThingsV1Values
 )
 
 func main() {
@@ -100,6 +104,7 @@ func main() {
 		models:         models,
 		sensorTypes:    sensorTypes,
 		defaultContext: flags[defaultContextUrl],
+		thingsV1Values: thingsV1ValuesEnabled(flags),
 	}
 
 	runner, err := initialize(ctx, flags, cfg)
@@ -164,6 +169,15 @@ func registerHandlers(svcCfg *appConfig) error {
 		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
 	}
 
+	// Versionerade värdesevent (E7): samma transformator, egen prenumeration.
+	// Gatas av THINGS_V1_VALUES (exakt "true"); av som default så att
+	// cutover till nya kontrakt är ett explicit driftbeslut.
+	if svcCfg.thingsV1Values {
+		if err := messenger.RegisterTopicMessageHandler(ThingValuesV1Topic, things.NewThingValuesTopicMessageHandler(cbClientFn, dynamicThings, svcCfg.defaultContext)); err != nil {
+			return fmt.Errorf("failed to register thing values handler: %w", err)
+		}
+	}
+
 	// measurements
 	dynamicMeasurements := measurementsApp.NewDynamicTransformer(svcCfg.models, svcCfg.sensorTypes)
 	if err := messenger.RegisterTopicMessageHandler(MessageAcceptedTopic, measurements.NewDynamicMeasurementTopicMessageHandler(cbClientFn, dynamicMeasurements, svcCfg.defaultContext)); err != nil {
@@ -177,6 +191,12 @@ func registerHandlers(svcCfg *appConfig) error {
 // toggle. Only the exact string "true" disables verification.
 func oauthInsecure(flags flagMap) bool {
 	return flags[oauth2InsecureURL] == "true"
+}
+
+// thingsV1ValuesEnabled is the minimal production seam for the versioned
+// values subscription. Only the exact string "true" enables it.
+func thingsV1ValuesEnabled(flags flagMap) bool {
+	return flags[thingsV1Values] == "true"
 }
 
 func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, flagMap) {
@@ -194,6 +214,7 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[modelsDir] = envOrDef(ctx, "MODELS_DIR", flags[modelsDir])
 	flags[deviceMgmtUrl] = envOrDef(ctx, "DEV_MGMT_URL", flags[deviceMgmtUrl])
 	flags[defaultContextUrl] = envOrDef(ctx, "DEFAULT_CONTEXT_URL", flags[defaultContextUrl])
+	flags[thingsV1Values] = envOrDef(ctx, "THINGS_V1_VALUES", flags[thingsV1Values])
 
 	apply := func(f flagType) func(string) error {
 		return func(value string) error {

@@ -22,6 +22,10 @@ type Thing struct {
 	TypeName string
 	NameOrID string
 
+	// Event taggar händelsekällan för matchning (tomt = ursprunglig
+	// thing.updated-källa; t.ex. "things.v1.values" för värdesevent).
+	Event string
+
 	ObservedAt time.Time
 	Fields     map[string]any
 }
@@ -48,6 +52,7 @@ func (t Thing) MatchInfo() MatchInfo {
 		Tenant:  t.Tenant,
 		Type:    t.Type,
 		SubType: t.SubType,
+		Event:   t.Event,
 	}
 }
 
@@ -116,11 +121,15 @@ func (t Thing) ResolvePath(path string) (any, bool) {
 }
 
 // lookupPath följer en dot-separerad väg med valfria [n]-index.
+// Nycklar som själva innehåller punkt citeras med dubbelfnutt
+// (t.ex. values."temperature.average".value); ociterade vägar beter sig
+// exakt som före (bakåtkompatibelt).
 func lookupPath(root map[string]any, path string) (any, bool) {
 	var cur any = root
 
-	for _, seg := range strings.Split(path, ".") {
+	for _, seg := range splitPath(path) {
 		name, idx, hasIdx := parseSegment(seg)
+		name = unquote(name)
 
 		if name != "" {
 			m, ok := cur.(map[string]any)
@@ -159,6 +168,35 @@ func parseSegment(seg string) (name string, idx int, hasIdx bool) {
 		return seg[:i], n, true
 	}
 	return seg, 0, false
+}
+
+// splitPath delar en field-väg på ociterade punkter; citerade avsnitt
+// behåller sina punkter (fnutten själva skalas av med unquote).
+func splitPath(path string) []string {
+	segs := []string{}
+	var cur strings.Builder
+	inQuotes := false
+	for _, r := range path {
+		switch {
+		case r == '"':
+			inQuotes = !inQuotes
+			cur.WriteRune(r)
+		case r == '.' && !inQuotes:
+			segs = append(segs, cur.String())
+			cur.Reset()
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	return append(segs, cur.String())
+}
+
+// unquote skalar av ett omslutande dubbelfnutt-par från ett vägsegment.
+func unquote(s string) string {
+	if len(s) >= 2 && strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
+		return s[1 : len(s)-1]
+	}
+	return s
 }
 
 func trailingSegment(s string) string {
