@@ -1,0 +1,319 @@
+package rules
+
+import (
+	"context"
+	"embed"
+	_ "embed"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"reflect"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+// queryTimeout gränsar varje enskild databasoperation (samma budget som
+// övriga tjänster).
+const queryTimeout = 5 * time.Second
+
+// Källor för en regelrad: seed (YAML-filer, får uppdateras av seed) eller
+// api (skapad/ändrad via API, seed rör den aldrig).
+const (
+	SourceSeed = "seed"
+	SourceAPI  = "api"
+)
+
+var (
+	ErrNotFound = errors.New("rule not found")
+	ErrConflict = errors.New("revision conflict")
+)
+
+// StoredRule är en persisterad regel med identitet och livscykel.
+type StoredRule struct {
+	ID       string
+	SeedKey  string
+	Kind     string
+	Rule     transform.Rule
+	Source   string
+	Revision int64
+}
+
+// SeedEntry är en regel från seed-filer med stabil nyckel (<fil>#<index>).
+type SeedEntry struct {
+	SeedKey string
+	Kind    string
+	Rule    transform.Rule
+}
+
+// SeedResult räknar seed-utfallet: nya rader, uppdaterade seed-rader och
+// överhoppade (oförändrade seed-rader + API-ägda rader).
+type SeedResult struct {
+	Added   int
+	Updated int
+	Skipped int
+}
+
+// PgStore persisterar transform-regler i PostgreSQL (enda backend,
+// samma mönster som övriga tjänster).
+type PgStore struct {
+	pool *pgxpool.Pool
+}
+
+// NewPostgres ansluter, verifierar nåbarhet (Ping) och applicerar
+// migrationer idempotent under ett advisory-lås.
+func NewPostgres(ctx context.Context, cfg Config) (*PgStore, error) {
+	poolCfg, err := pgxpool.ParseConfig(cfg.ConnStr())
+	if err != nil {
+		return nil, err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
+	if err != nil {
+		return nil, err
+	}
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := pool.Ping(timeoutCtx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	s := &PgStore{pool: pool}
+	if err := s.migrate(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Close stänger poolen.
+func (s *PgStore) Close() {
+	s.pool.Close()
+}
+
+func (s *PgStore) migrate(ctx context.Context) error {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(6193027748113459)`); err != nil {
+		return err
+	}
+	defer conn.Exec(ctx, `SELECT pg_advisory_unlock(6193027748113459)`)
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		sql, err := migrationsFS.ReadFile("migrations/" + name)
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Exec(ctx, string(sql)); err != nil {
+			return fmt.Errorf("rules: migration %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (s *PgStore) ctx() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), queryTimeout)
+}
+
+func scanRule(id, seedKey, kind, source string, revision int64, raw []byte) (StoredRule, error) {
+	var r transform.Rule
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return StoredRule{}, fmt.Errorf("rules: stored rule %s is not decodable: %w", id, err)
+	}
+	return StoredRule{ID: id, SeedKey: seedKey, Kind: kind, Rule: r, Source: source, Revision: revision}, nil
+}
+
+// ListRules returnerar alla regler sorterade på id (deterministiskt).
+func (s *PgStore) ListRules() ([]StoredRule, error) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, rule FROM transform_rules ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredRule
+	for rows.Next() {
+		var st StoredRule
+		var raw []byte
+		if err := rows.Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &raw); err != nil {
+			return nil, err
+		}
+		st, err = scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, raw)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, st)
+	}
+	if out == nil {
+		out = []StoredRule{}
+	}
+	return out, rows.Err()
+}
+
+// GetRule hämtar en regel på id.
+func (s *PgStore) GetRule(id string) (StoredRule, error) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var st StoredRule
+	var raw []byte
+	err := s.pool.QueryRow(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, rule FROM transform_rules WHERE id=$1`, id).
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if err != nil {
+		return StoredRule{}, err
+	}
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, raw)
+}
+
+func marshalRule(r transform.Rule) ([]byte, error) {
+	if err := transform.Validate([]transform.Rule{r}); err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return nil, fmt.Errorf("rules: rule is not encodable: %w", err)
+	}
+	return raw, nil
+}
+
+// InsertRule lagrar en ny API-regel (källa api, revision 1) och returnerar
+// den med genererat UUID. Ogiltiga regler nekas före skrivning.
+func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
+	raw, err := marshalRule(r)
+	if err != nil {
+		return StoredRule{}, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var st StoredRule
+	var stored []byte
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO transform_rules(kind, rule, source) VALUES($1, $2, $3) RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, rule`,
+		string(r.Match.Kind), raw, SourceAPI).
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &stored)
+	if err != nil {
+		return StoredRule{}, err
+	}
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, stored)
+}
+
+// UpdateRule ersätter en regel vid matchande revision (optimistisk låsning:
+// fel revision ger ErrConflict, okänt id ErrNotFound) och flippar källan
+// till api så att framtida seed aldrig skriver över manuella ändringar.
+func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (StoredRule, error) {
+	raw, err := marshalRule(r)
+	if err != nil {
+		return StoredRule{}, err
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var st StoredRule
+	var stored []byte
+	err = s.pool.QueryRow(ctx,
+		`UPDATE transform_rules SET kind=$1, rule=$2, source=$3, revision=revision+1, updated_at=now()
+		 WHERE id=$4 AND revision=$5
+		 RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, rule`,
+		string(r.Match.Kind), raw, SourceAPI, id, expectedRev).
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &stored)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var exists bool
+		if qerr := s.pool.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
+			return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
+		return StoredRule{}, fmt.Errorf("%w: %s", ErrConflict, id)
+	}
+	if err != nil {
+		return StoredRule{}, err
+	}
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, stored)
+}
+
+// DeleteRule tar bort en regel. Returnerar false när id:t saknas (idempotent).
+func (s *PgStore) DeleteRule(id string) (bool, error) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx, `DELETE FROM transform_rules WHERE id=$1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// SeedRules lägger in saknade seed-nycklar, uppdaterar ändrade seed-rader
+// och hoppar över oförändrade seed-rader samt API-ägda rader (aldrig
+// överskrivning av manuella ändringar). Ogiltiga seed-regler felar hela
+// seedningen (fail fast, samma som startup-validering idag).
+func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
+	var res SeedResult
+	for _, e := range entries {
+		raw, err := marshalRule(e.Rule)
+		if err != nil {
+			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
+		}
+		ctx, cancel := s.ctx()
+		var id, source string
+		var stored []byte
+		err = s.pool.QueryRow(ctx, `SELECT id::text, source, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
+			Scan(&id, &source, &stored)
+		cancel()
+		if errors.Is(err, pgx.ErrNoRows) {
+			ctx, cancel := s.ctx()
+			_, err = s.pool.Exec(ctx,
+				`INSERT INTO transform_rules(seed_key, kind, rule, source) VALUES($1, $2, $3, $4)`,
+				e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed)
+			cancel()
+			if err != nil {
+				return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
+			}
+			res.Added++
+			continue
+		}
+		if err != nil {
+			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
+		}
+		if source == SourceAPI {
+			res.Skipped++
+			continue
+		}
+		var cur transform.Rule
+		if err := json.Unmarshal(stored, &cur); err != nil {
+			return res, fmt.Errorf("seed %s: stored rule is not decodable: %w", e.SeedKey, err)
+		}
+		if reflect.DeepEqual(cur, e.Rule) {
+			res.Skipped++
+			continue
+		}
+		ctx2, cancel2 := s.ctx()
+		_, err = s.pool.Exec(ctx2,
+			`UPDATE transform_rules SET kind=$1, rule=$2, revision=revision+1, updated_at=now() WHERE id=$3`,
+			string(e.Rule.Match.Kind), raw, id)
+		cancel2()
+		if err != nil {
+			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
+		}
+		res.Updated++
+	}
+	return res, nil
+}
