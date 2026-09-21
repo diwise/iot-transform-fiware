@@ -28,7 +28,7 @@ ENV MODELS_DIR=/opt/diwise/config/models
 
 RUN chown -R 1001 /opt/diwise
 
-EXPOSE 8000
+EXPOSE 8000 8080
 USER 1001
 
 ENTRYPOINT ["/opt/diwise/iot-transform-fiware"]

@@ -1,0 +1,317 @@
+openapi: 3.0.3
+info:
+  title: iot-transform-fiware models API
+  version: v0
+  description: >-
+    CRUD, validering och torr förhandsgranskning av transform-regler.
+    Reglerna lagras i postgres (tabell transform_rules); YAML-filerna i
+    deployments/models är seed som läggs in idempotent vid start och
+    aldrig skriver över API-ändringar. All bodies är application/json;
+    okända fält nekas. Skrivning kräver If-Match med revision ("rev-<n>");
+    konflikt ger 409.
+paths:
+  /models:
+    get:
+      tags: [Models]
+      summary: Lista regler
+      responses:
+        '200':
+          description: Regler
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Model'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Models]
+      summary: Skapa regel (UUID genereras, revision 1)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '201':
+          description: Regel skapad (körningsmotorer omladdade)
+          headers:
+            ETag:
+              schema: { type: string }
+              description: Aktuell revision ("rev-<n>").
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /models/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Models]
+      summary: Hämta en regel
+      responses:
+        '200':
+          description: Regel
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Models]
+      summary: Ersätt regel (kräver If-Match, flippar källa till api)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '200':
+          description: Regel uppdaterad (körningsmotorer omladdade)
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Models]
+      summary: Ta bort regel (kräver If-Match, idempotent mot okänt id efter kontroll)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Regel borttagen }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /models/validate:
+    post:
+      tags: [Models]
+      summary: Validera regel utan att spara (samma regler som vid start)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '200':
+          description: Giltig regel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /models/preview:
+    post:
+      tags: [Models]
+      summary: Torr körning av inline-regel mot exempelhändelse
+      description: >-
+        Kör regeln mot en mätvärdes- ({pack, timestamp} + valfri sensorType
+        som kringgår device-management) eller sakhändelse (thing.updated-
+        eller things.v1.values-kuvert). Aldrig broker-kontakt, aldrig
+        persistens. Ingen matchning ger matched:false med tom lista.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule, event]
+              properties:
+                rule:
+                  $ref: '#/components/schemas/Rule'
+                event:
+                  type: object
+                  required: [kind, message]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [measurement, thing, things.v1.values]
+                    message:
+                      type: object
+                      description: Rått kuvert (mätarmeddelande eller sakuvert).
+                    sensorType:
+                      type: string
+                      description: Offline-override för mätvärden.
+      responses:
+        '200':
+          description: Entiteter (NGSI-LD-attribut utan id/type)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [matched, entities]
+                properties:
+                  matched: { type: boolean }
+                  entities:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, type, properties]
+                      properties:
+                        id: { type: string }
+                        type: { type: string }
+                        properties:
+                          type: object
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string }
+      description: Aktuell revision ("rev-<n>", se ETag).
+  responses:
+    BadRequest:
+      description: Ogiltig begäran (valideringsfel i klartext under error)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Unauthorized:
+      description: Saknad/ogiltig token eller scope
+      content:
+        application/json:
+          schema:
+            type: object
+    NotFound:
+      description: Okänt id
+      content:
+        application/json:
+          schema:
+            type: object
+    Conflict:
+      description: Revisionskonflikt (läs om + försök igen)
+      content:
+        application/json:
+          schema:
+            type: object
+  schemas:
+    Model:
+      type: object
+      description: Regelkuvert (identitet/livscykel; id finns aldrig i YAML).
+      required: [id, revision, source, kind, rule]
+      properties:
+        id: { type: string, format: uuid }
+        revision: { type: integer }
+        source: { type: string, enum: [seed, api] }
+        seedKey: { type: string }
+        kind: { type: string, enum: [measurement, thing] }
+        rule:
+          $ref: '#/components/schemas/Rule'
+    Rule:
+      type: object
+      required: [match, entities]
+      properties:
+        match:
+          $ref: '#/components/schemas/Match'
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+    Match:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [measurement, thing] }
+        device: { type: string }
+        port: { type: string }
+        sensorType: { type: string }
+        object: { type: string }
+        resource: { type: string }
+        env: { type: string }
+        type: { type: string }
+        subType: { type: string }
+        tenant: { type: string }
+        event: { type: string }
+    Entity:
+      type: object
+      required: [id, type, properties]
+      properties:
+        name: { type: string }
+        id: { type: string }
+        type: { type: string }
+        context: { type: string }
+        create: { type: boolean }
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/Property'
+    Property:
+      type: object
+      required: [target, type]
+      properties:
+        target: { type: string }
+        type:
+          type: string
+          enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured]
+        unit: { type: string }
+        observedAt: { type: string, enum: [header, record, message, none] }
+        observedBy: { type: string }
+        when: { type: string, enum: [present] }
+        required: { type: boolean }
+        resource: { type: string }
+        object: { type: string }
+        env: { type: string }
+        name: { type: string }
+        field: { type: string }
+        ref: { type: string }
+        const:
+          description: Konstant värde (valfri JSON-typ).
+        latlon: { type: boolean }
+        timestamp: { type: boolean }
+        value: { type: string }
+        prefix: { type: string }
+        transform:
+          type: array
+          items:
+            type: object
+            required: [op]
+            properties:
+              op: { type: string }
+              value: { type: number }
+        derive:
+          type: object
+          required: [fn, of]
+          properties:
+            fn: { type: string }
+            of:
+              type: array
+              items:
+                type: object
+        subproperties:
+          type: array
+          items:
+            $ref: '#/components/schemas/Property'

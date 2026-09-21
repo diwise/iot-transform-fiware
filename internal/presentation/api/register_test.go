@@ -311,3 +311,72 @@ func TestPreviewMeasurement(t *testing.T) {
 	is.True(out.Matched)
 	is.Equal(len(out.Entities), 1)
 }
+
+const muxAllowPolicy = `package example.authz
+default allow := false
+allow := {"tenants": ["t"]} if { input.token == "good" }
+`
+
+// Full varv genom mux + middleware + handler + lagring: fångar
+// route-krockar (panik) och scope-fel vid registrering.
+func TestRegisterHandlersRoundTrip(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+
+	mux := http.NewServeMux()
+	policies := strings.NewReader(muxAllowPolicy)
+	is.NoErr(RegisterHandlers(context.Background(), mux, m, policies))
+
+	do := func(method, path, token string, body any) *httptest.ResponseRecorder {
+		var buf bytes.Buffer
+		if body != nil {
+			_ = json.NewEncoder(&buf).Encode(body)
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := do(http.MethodPost, "/api/v0/models/validate", "good", testRule())
+	is.Equal(rr.Code, http.StatusOK)
+
+	rr = do(http.MethodPost, "/api/v0/models", "good", nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+
+	rr = do(http.MethodPost, "/api/v0/models", "good", testRule())
+	is.Equal(rr.Code, http.StatusCreated)
+	created := decodeModel(t, rr)
+
+	rr = do(http.MethodGet, "/api/v0/models", "good", nil)
+	is.Equal(rr.Code, http.StatusOK)
+
+	rr = do(http.MethodGet, "/api/v0/models/"+created.ID, "good", nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.Equal(rr.Header().Get("ETag"), `"rev-1"`)
+
+	rr = do(http.MethodGet, "/api/v0/models", "bad", nil)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+	rr = do(http.MethodGet, "/api/v0/models", "", nil)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+
+	preview := map[string]any{
+		"rule": testRule(),
+		"event": map[string]any{
+			"kind": "thing",
+			"message": map[string]any{
+				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
+				"tenant":    "t",
+				"timestamp": "2024-01-01T00:00:00Z",
+			},
+		},
+	}
+	rr = do(http.MethodPost, "/api/v0/models/preview", "good", preview)
+	is.Equal(rr.Code, http.StatusOK)
+}

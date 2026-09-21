@@ -10,7 +10,9 @@ A service for handling core functionality in the IoT platform
 flowchart LR
     iot-core--rabbitMQ-->handler
     handler-->engine
-    models[(MODELS_DIR YAML)]-->engine
+    seed[(MODELS_DIR YAML seed)]-->db[(transform_rules)]
+    api[models API]-->db
+    db-->engine
     engine--http-->context-broker
 ```
 
@@ -22,9 +24,11 @@ flowchart LR
 ## Modeller
 Tjansten ar helt konfigurationsstyrd: mappningen fran matvarden och saker till
 [Smart Data Models](https://smartdatamodels.org/) (FIWARE/NGSI-LD) beskrivs i
-YAML-filer som lases fran `MODELS_DIR`. Modellerna foljer NGSI-LD (`id` och
-`type` satts alltid) samt respektive datas `required`-lista; attributnamn foljer
-modellen. Exempel finns i `deployments/models/`.
+regler som lagras i postgres (tabell `transform_rules`). YAML-filerna i
+`deployments/models/` ar seed som laggs in idempotent vid start och aldrig
+skriver over API-andringar; varje API-skrivning laddar om korningsmotorerna
+atomart. Reglerna foljer NGSI-LD (`id` och `type` satts alltid) samt
+respektive datas `required`-lista; attributnamn foljer modellen.
 ### AirQualityObserved
 [Specification](https://github.com/smart-data-models/dataModel.Environment/blob/master/AirQualityObserved/doc/spec.md)
 
@@ -87,25 +91,47 @@ Testing is best done using unit tests. For integration testing the preferred way
 ## CLI flags
  - `loglevel` - Set the log level (overrides `LOG_LEVEL`)
 
+## Regel-API (`SERVICE_PORT`, OPA-skyddat)
+
+Publikt CRUD + validering + torr forhandsgranskning under `/api/v0/models`
+(kontrakt: `assets/docs/openapi.yaml`; kroppar ar `application/json`, okanda
+falt nekas). Scopes `transforms.read/create/update/delete`
+(`transforms.create` laggs till i compose-policyn; ovriga finns dar).
+Skrivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
+`PUT` flippar kallan till `api` sa att seed aldrig skriver over manuella
+andringar. `POST /models/preview` kor en inline-regel torrt mot en
+exempelhandelse (aldrig broker/persistens).
+
 ## Configuration files
-Modeller lases fran `MODELS_DIR` (`/opt/diwise/config/models`) i lexikografisk
-filnamnsordning vid start. Strikt avkodning och validering stoppar starten vid
-fel. Exempel finns i `deployments/models/`.
+Modeller seedas fran `MODELS_DIR` (`/opt/diwise/config/models`) i
+lexikografisk filnamnsordning vid start (stabil nyckel `<fil>#<index>`;
+redigerade seed-filer uppdaterar seed-rader, API-agda rader skippas).
+Strikt avkodning och validering stoppar starten vid fel. Exempel finns i
+`deployments/models/`.
 
 ## Faktisk konfiguration (kod ar facit, HARM-002)
 Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt via `messaging.LoadConfiguration`.
 
 | Variabel | Default | Notering |
 | --- | --- | --- |
-| `LISTEN_ADDRESS` | `0.0.0.0` | Galler kontrollservern |
+| `LISTEN_ADDRESS` | `0.0.0.0` | Galler bada servrarna |
 | `CONTROL_PORT` | `8000` | Kontrollserver: pprof, liveness, `rabbitmq`-stubb som returnerar OK |
+| `SERVICE_PORT` | `8080` | Publik server: regel-API:t (`/api/v0/models`, OPA-skyddat) |
 | `NGSI_CB_URL` | `http://context-broker` |  |
 | `OAUTH2_TOKEN_URL` | (tom) | Utan fullstandiga OAuth-uppgifter skapas context-broker-klient utan token |
 | `OAUTH2_CLIENT_ID` | (tom) |  |
 | `OAUTH2_CLIENT_SECRET` | (tom) |  |
 | `OAUTH2_REALM_INSECURE` | `true` | Endast exakt `true` stanger av TLS-verifiering |
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
-| `MODELS_DIR` | `/opt/diwise/config/models` | Katalog med YAML-modeller, lases och valideras vid start |
+| `MODELS_DIR` | `/opt/diwise/config/models` | YAML-seed, lases idempotent vid start (aldrig overskrivning av API-rader) |
+| `POLICIES_FILE` | `/opt/diwise/config/authz.rego` | OPA-policy for regel-API:t |
+| `AUTHZ_ACCESS_OBJECT_ENABLED` | `false` | `true` for access-objekt-modell (per-tenant scopes) |
+| `POSTGRES_HOST` | (tom, kravs) | Regel­lagring kraver PostgreSQL (enda backend) |
+| `POSTGRES_PORT` | `5432` |  |
+| `POSTGRES_DBNAME` | `diwise` |  |
+| `POSTGRES_USER` | (tom) |  |
+| `POSTGRES_PASSWORD` | (tom) |  |
+| `POSTGRES_SSLMODE` | `disable` |  |
 | `DEV_MGMT_URL` | `http://iot-device-mgmt` | Anvands for att sla upp enhets sensortyp (med TTL-cache) |
 | `DEFAULT_CONTEXT_URL` | diwise default-context | JSON-LD-context som fallback nar en entitet inte anger `context` |
 | `RABBITMQ_HOST` | (tom, kravs om inte avstangd) | Se `messaging.LoadConfiguration` |
@@ -121,9 +147,9 @@ Health paths pa kontrollservern (`CONTROL_PORT`): `/health`, `/healthz`, `/livez
 
 Konsumerar `thing.updated` och `message.accepted` (en handler per topic; matchning sker pa innehall) samt, nar `THINGS_V1_VALUES=true`, `things.v1.values` (versionerade vardesevent med `values.<egenskap>.*`-vagar; regler avgransas med `match.event: things.v1.values`, se `deployments/models/90-*.yaml`). Ingen `message.transformed` publiceras i nulaget.
 
-Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) eftersom tjansten saknar publik server. Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober.
+Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) och den publika porten (`EXPOSE 8080`). Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober och den publika porten for regel-API:t.
 
-Extern paverkan (PILOT-003): den doda `SERVICE_PORT`-konfigurationen ar borttagen eftersom tjansten saknar publik server. Att satta `SERVICE_PORT` har inte langre nagon effekt; ta bort variabeln ur externa deploymentdefinitioner.
+Extern paverkan: `SERVICE_PORT` styr den publika servern med regel-API:t (`/api/v0/models`, OPA-skyddat). Compose-definitioner som behovt det tidigare reverserade PILOT-003-beslutet ska satta porten igen.
 # Harmoniseringspilot (PILOT-004)
 
 Denna tjanst var pilot for harmoniseringen mot malstrukturen
@@ -133,8 +159,8 @@ Slutstruktur:
 ```text
 cmd/iot-transform-fiware
 internal/application/{measurements,things,transform}
-internal/infrastructure/{config,contextbroker,devicemanagement}
-internal/presentation/messaging/{measurements,things}
+internal/infrastructure/{config,contextbroker,devicemanagement,rules}
+internal/presentation/{api,messaging/{measurements,things}}
 ```
 
 ## Monster att ateranvanda
@@ -148,7 +174,6 @@ internal/presentation/messaging/{measurements,things}
 
 ## Att inte kopiera
 
-- Tjansten saknar publik server (ingen `servicePort`); API-tjanster ska ha separat publik server pa `SERVICE_PORT`.
 - Presentation far importera bade `internal/application` och `internal/infrastructure`; `internal/application` far inte importera `internal/infrastructure`.
 
 # Links

@@ -8,36 +8,43 @@ docker build -f deployments/Dockerfile . -t diwise/iot-transform-fiware:latest
 
 ## Modeller
 
-Tjänsten laddar YAML-modeller från `MODELS_DIR`
-(`/opt/diwise/config/models`) i lexikografisk filnamnsordning vid start.
-Strikt avkodning och validering av `required`-attribut m.m. körs; fel i någon
-fil stoppar starten med ett tydligt fel. Imagen har standardmodellerna från
-`deployments/models` inbakade i `/opt/diwise/config/models`, så den kör utan
-mount. Montera en egen katalog read-only för att ersätta dem:
+Tjänsten lagrar regler i postgres (tabell `transform_rules`) och seedar
+YAML-modeller från `MODELS_DIR` (`/opt/diwise/config/models`) i
+lexikografisk filnamnsordning vid start (aldrig överskrivning av
+API-ändringar; varje API-skrivning laddar om körningsmotorerna atomärt).
+Strikt avkodning och validering stoppar starten vid fel. Imagen har
+standardmodellerna från `deployments/models` inbakade som seed.
 
 ```bash
 docker run --rm \
   -e RABBITMQ_DISABLED=true -e MODELS_DIR=/models \
+  -e POSTGRES_HOST=postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password \
   -v "$PWD/deployments/models:/models:ro" \
   diwise/iot-transform-fiware:latest
 ```
+Regel­lagring kräver PostgreSQL (enda backend); seed-monteringen ovan kan
+vara read-only eftersom seed bara läser.
 
 ## Miljövariabler
 
 | Variabel | Notering |
 | --- | --- |
-| `MODELS_DIR` | Katalog med YAML-modeller (lexikografisk ordning) |
+| `MODELS_DIR` | YAML-seed (lexikografisk ordning; aldrig overskrivning av API-rader) |
+| `POSTGRES_*` | Regel­lagring (kravs, enda backend) |
+| `SERVICE_PORT` | Publik server: regel-API:t (`/api/v0/models`, OPA-skyddat) |
+| `POLICIES_FILE` | OPA-policy for regel-API:t |
+| `AUTHZ_ACCESS_OBJECT_ENABLED` | `true` for access-objekt-modell |
 | `DEV_MGMT_URL` | Sensortyp-uppslag med TTL-cache |
 | `DEFAULT_CONTEXT_URL` | JSON-LD-context som fallback när en entitet inte anger `context` |
 | `NGSI_CB_URL`, `OAUTH2_*` | Context-broker och OAuth2 |
 | `RABBITMQ_*` | Se `messaging.LoadConfiguration` |
 | `THINGS_V1_VALUES` | Endast exakt `true` prenumererar pa `things.v1.values` (E7-cutover) |
 
-## Rökprov utan RabbitMQ/context-broker
+## Rökprov utan RabbitMQ/context-broker (med postgres)
 
-Startar med `RABBITMQ_DISABLED=true`; kontrollservern svarar `204` på `/health`
-och `/readyz`. En trasig `MODELS_DIR` ska ge `failed to load model
-configuration` och avsluta processen.
+Startar med `RABBITMQ_DISABLED=true` mot postgres; kontrollservern svarar
+`204` på `/health` och `/readyz`. En trasig `MODELS_DIR` ska ge seed-fel
+och avsluta processen. Regel-API:t (`SERVICE_PORT`) svarar 401 utan token.
 
 ## e2e i compose
 
@@ -56,11 +63,13 @@ värdesevent på `things.v1.values` (regler med `match.event`, t.ex.
 
 ## Utrullningsordning
 
-1. Bygg och tagga imagen. Standardmodellerna är inbakade, så ingen separat
-   config-fil behövs för grundfallet.
+1. Bygg och tagga imagen. Standardmodellerna är inbakade som seed, så ingen separat
+   config-fil behövs för grundfallet. Sätt `POSTGRES_*` (kravs) och
+   `SERVICE_PORT` + `POLICIES_FILE` för regel-API:t.
 2. Används en delad `MODELS_DIR`-mount: uppdatera modellerna och imagen i samma
-   rullning så att versionerna inte glider isär. Tjänsten validerar modellerna
-   vid start och vägrar starta vid fel.
+   rullning så att versionerna inte glider isär. Seed skriver aldrig över
+   API-ändringar (`source=api`); redigerade seed-filer uppdaterar seed-rader
+   vid omstart. Tjänsten validerar modellerna vid start och vägrar starta vid fel.
 3. Rulla ut och verifiera `/health`/`/readyz` samt att `message.accepted` och
    `thing.updated` ger förväntade entiteter i context-broker. Sätt
    `THINGS_V1_VALUES=true` först vid cutover till versionerade kontrakt;
