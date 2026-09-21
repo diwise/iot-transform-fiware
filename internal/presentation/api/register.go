@@ -19,12 +19,11 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/net/http/router"
 )
 
-// Scopes för regel-API:t (transforms.*-namnrymden; create/write läggs till
-// i compose-policyn, read/update/delete finns där).
+// Scopes för regel-API:t (transforms.*-namnrymden; create läggs till i
+// compose-policyn, read/update/delete finns där).
 const (
 	TransformRead   auth.Scope = "transforms.read"
 	TransformCreate auth.Scope = "transforms.create"
-	TransformWrite  auth.Scope = "transforms.write"
 	TransformUpdate auth.Scope = "transforms.update"
 	TransformDelete auth.Scope = "transforms.delete"
 )
@@ -104,6 +103,12 @@ func RegisterHandlers(ctx context.Context, mux *http.ServeMux, models *Models, p
 		r.Group(func(r router.ServeMux) {
 			r.Use(authz.RequireAccess(TransformCreate))
 			r.Post("", h.createModel)
+			// Samma grupp+scope av routertekniska skäl: två POST-grupper
+			// under samma prefix panikkar muxen. Validate/preview är
+			// författarverktyg (torra, utan persistens) och hör till
+			// create-scopet; därför behövs ingen separat transforms.write.
+			r.Post("validate", h.validateModel)
+			r.Post("preview", h.previewModel)
 		})
 		r.Group(func(r router.ServeMux) {
 			r.Use(authz.RequireAccess(TransformUpdate))

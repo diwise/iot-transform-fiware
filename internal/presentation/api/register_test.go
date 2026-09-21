@@ -215,3 +215,99 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 	is.Equal(rr.Code, http.StatusOK)
 	is.True(strings.Contains(rr.Body.String(), `"models":[]`))
 }
+
+func TestValidateModel(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rr := doModel(h.validateModel, http.MethodPost, "", testRule(), nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.True(strings.Contains(rr.Body.String(), `"valid":true`))
+
+	bad := testRule()
+	bad.Match.Kind = "nope"
+	rr = doModel(h.validateModel, http.MethodPost, "", bad, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+func TestPreviewThing(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	body := map[string]any{
+		"rule": testRule(),
+		"event": map[string]any{
+			"kind": "thing",
+			"message": map[string]any{
+				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
+				"tenant":    "t",
+				"timestamp": "2024-01-01T00:00:00Z",
+			},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 1)
+	is.Equal(out.Entities[0].Type, "Room")
+
+	// Icke-matchande typ: tomt resultat, inget fel.
+	body["event"].(map[string]any)["message"].(map[string]any)["thing"].(map[string]any)["type"] = "Other"
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(!out.Matched)
+	is.Equal(len(out.Entities), 0)
+
+	// Ogiltig kind nekas.
+	body["event"] = map[string]any{"kind": "nope", "message": map[string]any{}}
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+func TestPreviewMeasurement(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	v := 22.5
+	pack := []map[string]any{
+		{"n": "dev-1/0", "vs": "urn:oma:lwm2m:ext:3303", "t": 1720000000},
+		{"n": "dev-1/5700", "v": v},
+		{"n": "dev-1/env", "vs": "indoors"},
+		{"n": "dev-1/lat", "v": 62.36, "u": "lat"},
+		{"n": "dev-1/lon", "v": 17.51, "u": "lon"},
+		{"n": "dev-1/tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303", "env": "indoors"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type": "IndoorEnvironmentObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700", "observedAt": "header"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "measurement",
+			"message": map[string]any{
+				"pack":      pack,
+				"timestamp": "2024-06-03T00:00:00Z",
+			},
+			"sensorType": "st-test",
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 1)
+}
