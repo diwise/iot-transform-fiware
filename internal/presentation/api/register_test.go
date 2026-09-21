@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,11 +17,16 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/matryer/is"
 )
 
 // pgTestModels öppnar regel­lagret mot lokal testdatabas och tömmer det.
 // Utan nåbar databas skippas testerna (husets mönster).
+// Egen databas per paket: go test kör paket parallellt och delad tabell
+// ger interferens (TF-08). Kan överstyras med PG_TEST_DBNAME (samma namn
+// i flera paket återinför interferens).
 func pgTestModels(t *testing.T) *Models {
 	t.Helper()
 	get := func(key, def string) string {
@@ -29,14 +35,30 @@ func pgTestModels(t *testing.T) *Models {
 		}
 		return def
 	}
-	store, err := rules.NewPostgres(context.Background(), rules.NewConfig(
-		get("PG_TEST_HOST", "localhost"),
-		get("PG_TEST_USER", "postgres"),
-		get("PG_TEST_PASSWORD", "password"),
-		get("PG_TEST_PORT", "5434"),
-		get("PG_TEST_DBNAME", "diwise"),
-		get("PG_TEST_SSLMODE", "disable"),
-	))
+	newCfg := func(dbname string) rules.Config {
+		return rules.NewConfig(
+			get("PG_TEST_HOST", "localhost"),
+			get("PG_TEST_USER", "postgres"),
+			get("PG_TEST_PASSWORD", "password"),
+			get("PG_TEST_PORT", "5434"),
+			dbname,
+			get("PG_TEST_SSLMODE", "disable"),
+		)
+	}
+	dbname := get("PG_TEST_DBNAME", "diwise_test_api")
+	admin, err := pgx.Connect(context.Background(), newCfg("postgres").ConnStr())
+	if err != nil {
+		t.Skipf("no test database server: %v", err)
+	}
+	_, err = admin.Exec(context.Background(), fmt.Sprintf(`CREATE DATABASE %s`, pgx.Identifier{dbname}.Sanitize()))
+	admin.Close(context.Background())
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42P04" {
+			t.Skipf("cannot create test database: %v", err)
+		}
+	}
+	store, err := rules.NewPostgres(context.Background(), newCfg(dbname))
 	if err != nil {
 		t.Skipf("no test database: %v", err)
 	}

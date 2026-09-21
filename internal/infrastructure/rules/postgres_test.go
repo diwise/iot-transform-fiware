@@ -3,12 +3,42 @@ package rules
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
+
+// testDBName isolerar paketets tester i egen databas: go test kör paket
+// parallellt och delad tabell ger interferens (TF-08). Kan överstyras med
+// PG_TEST_DBNAME (samma namn i flera paket återinför interferens).
+const testDBName = "diwise_test_rules"
+
+// ensureTestDB skapar testdatabasen om den saknas. Samtidiga paket hanteras
+// via duplicate_database-fel som framgång.
+func ensureTestDB(t *testing.T, cfg Config) {
+	t.Helper()
+	admin := cfg
+	admin.dbname = "postgres"
+	conn, err := pgx.Connect(context.Background(), admin.ConnStr())
+	if err != nil {
+		t.Skipf("no test database server: %v", err)
+	}
+	defer conn.Close(context.Background())
+	_, err = conn.Exec(context.Background(), fmt.Sprintf(`CREATE DATABASE %s`, pgx.Identifier{cfg.dbname}.Sanitize()))
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42P04" {
+			return
+		}
+		t.Skipf("cannot create test database: %v", err)
+	}
+}
 
 // pgTestRules ansluter mot lokal testdatabas och tömmer transform_rules.
 // Utan nåbar databas skippas testerna (husets mönster).
@@ -16,7 +46,7 @@ import (
 // Starta: docker run -d --name pg -e POSTGRES_PASSWORD=password
 // -e POSTGRES_DB=diwise -p 5434:5432 postgres:16-alpine
 // Avvikande anslutning: PG_TEST_HOST/PORT/DBNAME/USER/PASSWORD/SSLMODE.
-func pgTestRules(t *testing.T) *PgStore {
+func pgTestConfig(t *testing.T) Config {
 	t.Helper()
 	get := func(key, def string) string {
 		if v := os.Getenv(key); v != "" {
@@ -29,18 +59,26 @@ func pgTestRules(t *testing.T) *PgStore {
 		get("PG_TEST_USER", "postgres"),
 		get("PG_TEST_PASSWORD", "password"),
 		get("PG_TEST_PORT", "5434"),
-		get("PG_TEST_DBNAME", "diwise"),
+		get("PG_TEST_DBNAME", testDBName),
 		get("PG_TEST_SSLMODE", "disable"),
 	)
-	s, err := NewPostgres(context.Background(), cfg)
+	ensureTestDB(t, cfg)
+	return cfg
+}
+
+func pgTestRules(t *testing.T) *PgStore {
+	t.Helper()
+	s, err := NewPostgres(context.Background(), pgTestConfig(t))
 	if err != nil {
 		t.Skipf("no test database: %v", err)
 	}
 	t.Cleanup(func() { s.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if _, err := s.pool.Exec(ctx, `DELETE FROM transform_rules`); err != nil {
-		t.Fatalf("truncate: %v", err)
+	for _, table := range []string{"transform_rules", "seed_tombstones"} {
+		if _, err := s.pool.Exec(ctx, `DELETE FROM `+table); err != nil {
+			t.Fatalf("truncate %s: %v", table, err)
+		}
 	}
 	return s
 }
@@ -310,21 +348,7 @@ func TestSeedOrderDefinesPrecedence(t *testing.T) {
 // pgTestRulesNoTruncate öppnar lagret utan att tömma (för omstartstest).
 func pgTestRulesNoTruncate(t *testing.T) *PgStore {
 	t.Helper()
-	get := func(key, def string) string {
-		if v := os.Getenv(key); v != "" {
-			return v
-		}
-		return def
-	}
-	cfg := NewConfig(
-		get("PG_TEST_HOST", "localhost"),
-		get("PG_TEST_USER", "postgres"),
-		get("PG_TEST_PASSWORD", "password"),
-		get("PG_TEST_PORT", "5434"),
-		get("PG_TEST_DBNAME", "diwise"),
-		get("PG_TEST_SSLMODE", "disable"),
-	)
-	s, err := NewPostgres(context.Background(), cfg)
+	s, err := NewPostgres(context.Background(), pgTestConfig(t))
 	if err != nil {
 		t.Skipf("no test database: %v", err)
 	}
@@ -395,5 +419,106 @@ func TestSeedShiftReorders(t *testing.T) {
 		got[1] != "urn:ngsi-ld:Thing:first" ||
 		got[2] != "urn:ngsi-ld:Thing:second" {
 		t.Fatalf("order=%v, want [zeroth first second]", got)
+	}
+}
+
+// TF-03: borttagen seed-regel återupplivas inte vid omseed (tombstone).
+func TestSeedDeleteTombstoned(t *testing.T) {
+	s := pgTestRules(t)
+	r := testRule()
+	entries := []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}
+	if _, err := s.SeedRules(entries); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	list, err := s.ListRules()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list=%v err=%v, want 1", list, err)
+	}
+	ok, err := s.DeleteRule(list[0].ID)
+	if err != nil || !ok {
+		t.Fatalf("delete=%v err=%v", ok, err)
+	}
+	res, err := s.SeedRules(entries)
+	if err != nil {
+		t.Fatalf("reseed: %v", err)
+	}
+	if res.Added != 0 || res.Updated != 0 || res.Skipped != 1 {
+		t.Fatalf("reseed=%+v, want 1 skipped (tombstoned)", res)
+	}
+	list, err = s.ListRules()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("deleted seed rule resurrected: %+v", list)
+	}
+}
+
+// TF-03: samtidiga seed-körningar (t.ex. två startande instanser)
+// konvergerar utan fel eller dubbletter.
+func TestSeedConcurrentBoots(t *testing.T) {
+	s := pgTestRules(t)
+	r := testRule()
+	entries := []SeedEntry{
+		{SeedKey: "a.yaml#0", Kind: "thing", Rule: r},
+		{SeedKey: "b.yaml#0", Kind: "thing", Rule: r},
+	}
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			_, err := s.SeedRules(entries)
+			errs[n] = err
+		}(i)
+	}
+	wg.Wait()
+	if errs[0] != nil || errs[1] != nil {
+		t.Fatalf("concurrent seeds failed: %v %v", errs[0], errs[1])
+	}
+	list, err := s.ListRules()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("want exactly 2 rows, got %d", len(list))
+	}
+	seen := map[string]bool{}
+	for _, st := range list {
+		if seen[st.SeedKey] {
+			t.Fatalf("duplicate seed key %q", st.SeedKey)
+		}
+		seen[st.SeedKey] = true
+	}
+}
+
+// TF-03: tombstones utanför aktuellt seed-set beskärs; regeln kan
+// därefter seedas in på nytt.
+func TestSeedTombstonePrune(t *testing.T) {
+	s := pgTestRules(t)
+	r := testRule()
+	a := []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}
+	if _, err := s.SeedRules(a); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	list, err := s.ListRules()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list=%v err=%v", list, err)
+	}
+	if ok, err := s.DeleteRule(list[0].ID); err != nil || !ok {
+		t.Fatalf("delete=%v err=%v", ok, err)
+	}
+	b := testRule()
+	b.Match.Type = "other"
+	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: b}}); err != nil {
+		t.Fatalf("seed b: %v", err)
+	}
+	res, err := s.SeedRules(a)
+	if err != nil {
+		t.Fatalf("reseed a: %v", err)
+	}
+	if res.Added != 1 {
+		t.Fatalf("reseed a=%+v, want 1 added (tombstone pruned)", res)
 	}
 }
