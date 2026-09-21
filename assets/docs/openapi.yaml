@@ -18,7 +18,7 @@ paths:
   /models:
     get:
       tags: [Models]
-      summary: Lista regler
+      summary: Lista regler i precedensordning (seed i filordning, API-regler sist)
       responses:
         '200':
           description: Regler

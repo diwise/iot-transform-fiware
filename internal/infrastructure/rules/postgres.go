@@ -37,6 +37,9 @@ var (
 )
 
 // StoredRule är en persisterad regel med identitet och livscykel.
+// Position är den stabila ordningen motorn använder vid lika-poäng
+// (seed i filordning, API-regler sist i skapandeordning); aldrig
+// omnumrerad, luckor vid DELETE är avsiktliga.
 type StoredRule struct {
 	ID       string
 	SeedKey  string
@@ -44,6 +47,7 @@ type StoredRule struct {
 	Rule     transform.Rule
 	Source   string
 	Revision int64
+	Position int64
 }
 
 // SeedEntry är en regel från seed-filer med stabil nyckel (<fil>#<index>).
@@ -134,19 +138,22 @@ func (s *PgStore) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), queryTimeout)
 }
 
-func scanRule(id, seedKey, kind, source string, revision int64, raw []byte) (StoredRule, error) {
+func scanRule(id, seedKey, kind, source string, revision, position int64, raw []byte) (StoredRule, error) {
 	var r transform.Rule
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return StoredRule{}, fmt.Errorf("rules: stored rule %s is not decodable: %w", id, err)
 	}
-	return StoredRule{ID: id, SeedKey: seedKey, Kind: kind, Rule: r, Source: source, Revision: revision}, nil
+	return StoredRule{ID: id, SeedKey: seedKey, Kind: kind, Rule: r, Source: source, Revision: revision, Position: position}, nil
 }
 
-// ListRules returnerar alla regler sorterade på id (deterministiskt).
+// ListRules returnerar alla regler i stabil ordning (position, sedan id
+// som deterministisk tiebreak): seed i filordning, API-regler sist.
+// Motorn väljer första regeln vid lika poäng, så denna ordning definierar
+// precedens oberoende av UUID.
 func (s *PgStore) ListRules() ([]StoredRule, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	rows, err := s.pool.Query(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, rule FROM transform_rules ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, position, rule FROM transform_rules ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -155,10 +162,10 @@ func (s *PgStore) ListRules() ([]StoredRule, error) {
 	for rows.Next() {
 		var st StoredRule
 		var raw []byte
-		if err := rows.Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &raw); err != nil {
+		if err := rows.Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &raw); err != nil {
 			return nil, err
 		}
-		st, err = scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, raw)
+		st, err = scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, raw)
 		if err != nil {
 			return nil, err
 		}
@@ -176,15 +183,15 @@ func (s *PgStore) GetRule(id string) (StoredRule, error) {
 	defer cancel()
 	var st StoredRule
 	var raw []byte
-	err := s.pool.QueryRow(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, rule FROM transform_rules WHERE id=$1`, id).
-		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &raw)
+	err := s.pool.QueryRow(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, position, rule FROM transform_rules WHERE id=$1`, id).
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
 	}
 	if err != nil {
 		return StoredRule{}, err
 	}
-	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, raw)
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, raw)
 }
 
 func marshalRule(r transform.Rule) ([]byte, error) {
@@ -210,13 +217,13 @@ func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
 	var st StoredRule
 	var stored []byte
 	err = s.pool.QueryRow(ctx,
-		`INSERT INTO transform_rules(kind, rule, source) VALUES($1, $2, $3) RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, rule`,
+		`INSERT INTO transform_rules(kind, rule, source) VALUES($1, $2, $3) RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, position, rule`,
 		string(r.Match.Kind), raw, SourceAPI).
-		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &stored)
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &stored)
 	if err != nil {
 		return StoredRule{}, err
 	}
-	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, stored)
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, stored)
 }
 
 // UpdateRule ersätter en regel vid matchande revision (optimistisk låsning:
@@ -234,9 +241,9 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 	err = s.pool.QueryRow(ctx,
 		`UPDATE transform_rules SET kind=$1, rule=$2, source=$3, revision=revision+1, updated_at=now()
 		 WHERE id=$4 AND revision=$5
-		 RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, rule`,
+		 RETURNING id::text, COALESCE(seed_key,''), kind, source, revision, position, rule`,
 		string(r.Match.Kind), raw, SourceAPI, id, expectedRev).
-		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &stored)
+		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &stored)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
 		if qerr := s.pool.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
@@ -247,7 +254,7 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 	if err != nil {
 		return StoredRule{}, err
 	}
-	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, stored)
+	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, stored)
 }
 
 // DeleteRule tar bort en regel. Returnerar false när id:t saknas (idempotent).
@@ -265,24 +272,32 @@ func (s *PgStore) DeleteRule(id string) (bool, error) {
 // och hoppar över oförändrade seed-rader samt API-ägda rader (aldrig
 // överskrivning av manuella ändringar). Ogiltiga seed-regler felar hela
 // seedningen (fail fast, samma som startup-validering idag).
+//
+// Positioner tilldelas efter inmatningsordning (0..N): seed i filordning
+// först, API-regler därefter i skapandeordning. Revision bumpas vid varje
+// ändring av raden — även ren omordning — eftersom ordning är en del av
+// den effektiva konfigurationen. Efter seedningen ställs sekvensen förbi
+// max så att samtidiga API-skapanden alltid får distinkta positioner
+// efter seed-blocket.
 func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
 	var res SeedResult
-	for _, e := range entries {
+	for i, e := range entries {
 		raw, err := marshalRule(e.Rule)
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
 		ctx, cancel := s.ctx()
 		var id, source string
+		var position int64
 		var stored []byte
-		err = s.pool.QueryRow(ctx, `SELECT id::text, source, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
-			Scan(&id, &source, &stored)
+		err = s.pool.QueryRow(ctx, `SELECT id::text, source, position, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
+			Scan(&id, &source, &position, &stored)
 		cancel()
 		if errors.Is(err, pgx.ErrNoRows) {
 			ctx, cancel := s.ctx()
 			_, err = s.pool.Exec(ctx,
-				`INSERT INTO transform_rules(seed_key, kind, rule, source) VALUES($1, $2, $3, $4)`,
-				e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed)
+				`INSERT INTO transform_rules(seed_key, kind, rule, source, position) VALUES($1, $2, $3, $4, $5)`,
+				e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed, i)
 			cancel()
 			if err != nil {
 				return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
@@ -301,19 +316,24 @@ func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
 		if err := json.Unmarshal(stored, &cur); err != nil {
 			return res, fmt.Errorf("seed %s: stored rule is not decodable: %w", e.SeedKey, err)
 		}
-		if reflect.DeepEqual(cur, e.Rule) {
+		if reflect.DeepEqual(cur, e.Rule) && position == int64(i) {
 			res.Skipped++
 			continue
 		}
 		ctx2, cancel2 := s.ctx()
 		_, err = s.pool.Exec(ctx2,
-			`UPDATE transform_rules SET kind=$1, rule=$2, revision=revision+1, updated_at=now() WHERE id=$3`,
-			string(e.Rule.Match.Kind), raw, id)
+			`UPDATE transform_rules SET kind=$1, rule=$2, position=$3, revision=revision+1, updated_at=now() WHERE id=$4`,
+			string(e.Rule.Match.Kind), raw, i, id)
 		cancel2()
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
 		res.Updated++
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	if _, err := s.pool.Exec(ctx, `SELECT setval('transform_rules_position_seq', (SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), false)`); err != nil {
+		return res, fmt.Errorf("seed sequence: %w", err)
 	}
 	return res, nil
 }
