@@ -19,6 +19,6 @@ WITH ordered AS (
   FROM transform_rules WHERE position IS NULL
 )
 UPDATE transform_rules t SET position = o.pos FROM ordered o WHERE o.id = t.id;
-SELECT setval('transform_rules_position_seq', (SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), false);
+SELECT setval('transform_rules_position_seq', GREATEST((SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), 1), false);
 ALTER TABLE transform_rules ALTER COLUMN position SET NOT NULL;
 ALTER TABLE transform_rules ALTER COLUMN position SET DEFAULT nextval('transform_rules_position_seq');

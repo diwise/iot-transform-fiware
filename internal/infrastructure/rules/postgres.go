@@ -258,14 +258,35 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 }
 
 // DeleteRule tar bort en regel. Returnerar false när id:t saknas (idempotent).
+// Borttagning av en seed-rad registreras som tombstone så att seed inte
+// återupplivar den (TF-03); API-rader utan seed_key lämnar inget spår.
 func (s *PgStore) DeleteRule(id string) (bool, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	tag, err := s.pool.Exec(ctx, `DELETE FROM transform_rules WHERE id=$1`, id)
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
-	return tag.RowsAffected() > 0, nil
+	defer tx.Rollback(ctx)
+	var seedKey *string
+	if err := tx.QueryRow(ctx, `SELECT seed_key FROM transform_rules WHERE id=$1 FOR UPDATE`, id).Scan(&seedKey); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM transform_rules WHERE id=$1`, id); err != nil {
+		return false, err
+	}
+	if seedKey != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO seed_tombstones(seed_key) VALUES($1) ON CONFLICT DO NOTHING`, *seedKey); err != nil {
+			return false, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // SeedRules lägger in saknade seed-nycklar, uppdaterar ändrade seed-rader
@@ -276,10 +297,31 @@ func (s *PgStore) DeleteRule(id string) (bool, error) {
 // Positioner tilldelas efter inmatningsordning (0..N): seed i filordning
 // först, API-regler därefter i skapandeordning. Revision bumpas vid varje
 // ändring av raden — även ren omordning — eftersom ordning är en del av
-// den effektiva konfigurationen. Efter seedningen ställs sekvensen förbi
-// max så att samtidiga API-skapanden alltid får distinkta positioner
-// efter seed-blocket.
+// den effektiva konfigurationen.
+//
+// Samtidighet (TF-03): varje skrivning är atomär och villkorad.
+// Samtidiga seed-körningar konvergerar (ON CONFLICT + IS DISTINCT
+// FROM-kontroll); en API-ändring mellan seed-läsning och seed-skrivning
+// vinner eftersom uppdateringen kräver source='seed'. Tombstonade nycklar
+// (borttagna via API) återupplivas aldrig. Sekvensen ställs alltid förbi
+// max — även vid partiellt fel — så API-skapanden aldrig interfolieras
+// med seed-blocket.
 func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
+	res, err := s.seedRules(entries)
+	if serr := s.advanceSequence(); serr != nil && err == nil {
+		err = fmt.Errorf("seed sequence: %w", serr)
+	}
+	return res, err
+}
+
+func (s *PgStore) advanceSequence() error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	_, err := s.pool.Exec(ctx, `SELECT setval('transform_rules_position_seq', GREATEST((SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), 1), false)`)
+	return err
+}
+
+func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 	var res SeedResult
 	for i, e := range entries {
 		raw, err := marshalRule(e.Rule)
@@ -287,22 +329,30 @@ func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
 		ctx, cancel := s.ctx()
+		tag, err := s.pool.Exec(ctx,
+			`INSERT INTO transform_rules(seed_key, kind, rule, source, position)
+			 SELECT $1, $2, $3, $4, $5
+			 WHERE NOT EXISTS (SELECT 1 FROM seed_tombstones WHERE seed_key=$1)
+			 ON CONFLICT (seed_key) DO NOTHING`,
+			e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed, i)
+		cancel()
+		if err != nil {
+			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
+		}
+		if tag.RowsAffected() > 0 {
+			res.Added++
+			continue
+		}
+		ctx2, cancel2 := s.ctx()
 		var id, source string
 		var position int64
 		var stored []byte
-		err = s.pool.QueryRow(ctx, `SELECT id::text, source, position, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
+		err = s.pool.QueryRow(ctx2, `SELECT id::text, source, position, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
 			Scan(&id, &source, &position, &stored)
-		cancel()
+		cancel2()
 		if errors.Is(err, pgx.ErrNoRows) {
-			ctx, cancel := s.ctx()
-			_, err = s.pool.Exec(ctx,
-				`INSERT INTO transform_rules(seed_key, kind, rule, source, position) VALUES($1, $2, $3, $4, $5)`,
-				e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed, i)
-			cancel()
-			if err != nil {
-				return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
-			}
-			res.Added++
+			// Tombstonad (eller tävlande borttagning): återuppliva aldrig.
+			res.Skipped++
 			continue
 		}
 		if err != nil {
@@ -320,20 +370,33 @@ func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
 			res.Skipped++
 			continue
 		}
-		ctx2, cancel2 := s.ctx()
-		_, err = s.pool.Exec(ctx2,
-			`UPDATE transform_rules SET kind=$1, rule=$2, position=$3, revision=revision+1, updated_at=now() WHERE id=$4`,
-			string(e.Rule.Match.Kind), raw, i, id)
-		cancel2()
+		ctx3, cancel3 := s.ctx()
+		tag, err = s.pool.Exec(ctx3,
+			`UPDATE transform_rules
+			 SET kind=$1, rule=$2, position=$3, revision=revision+1, updated_at=now()
+			 WHERE id=$4 AND source=$5
+			   AND (rule IS DISTINCT FROM $2::jsonb OR position IS DISTINCT FROM $3)`,
+			string(e.Rule.Match.Kind), string(raw), i, id, SourceSeed)
+		cancel3()
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
+		if tag.RowsAffected() == 0 {
+			res.Skipped++
+			continue
+		}
 		res.Updated++
 	}
-	ctx, cancel := s.ctx()
-	defer cancel()
-	if _, err := s.pool.Exec(ctx, `SELECT setval('transform_rules_position_seq', (SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), false)`); err != nil {
-		return res, fmt.Errorf("seed sequence: %w", err)
+	if len(entries) > 0 {
+		keys := make([]string, 0, len(entries))
+		for _, e := range entries {
+			keys = append(keys, e.SeedKey)
+		}
+		ctx, cancel := s.ctx()
+		defer cancel()
+		if _, err := s.pool.Exec(ctx, `DELETE FROM seed_tombstones WHERE NOT (seed_key = ANY($1))`, keys); err != nil {
+			return res, fmt.Errorf("seed tombstone prune: %w", err)
+		}
 	}
 	return res, nil
 }
