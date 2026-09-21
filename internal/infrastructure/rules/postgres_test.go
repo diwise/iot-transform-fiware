@@ -141,13 +141,16 @@ func TestRuleCRUD(t *testing.T) {
 		t.Fatalf("list=%v err=%v, want 1", list, err)
 	}
 
-	ok, err := s.DeleteRule(stored.ID)
-	if err != nil || !ok {
-		t.Fatalf("delete=%v err=%v", ok, err)
+	// TF-04: revisionen jämförs atomärt i SQL — gammal revision ger
+	// konflikt även om raden finns, okänt id ger not found.
+	if err := s.DeleteRule(stored.ID, 1); !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale revision delete must conflict, got %v", err)
 	}
-	ok, err = s.DeleteRule(stored.ID)
-	if err != nil || ok {
-		t.Fatalf("second delete must be idempotent false, got %v %v", ok, err)
+	if err := s.DeleteRule(stored.ID, 2); err != nil {
+		t.Fatalf("delete rev 2: %v", err)
+	}
+	if err := s.DeleteRule(stored.ID, 2); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second delete must be not found, got %v", err)
 	}
 	if _, err := s.GetRule(stored.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get after delete must be not found, got %v", err)
@@ -434,9 +437,8 @@ func TestSeedDeleteTombstoned(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v, want 1", list, err)
 	}
-	ok, err := s.DeleteRule(list[0].ID)
-	if err != nil || !ok {
-		t.Fatalf("delete=%v err=%v", ok, err)
+	if err := s.DeleteRule(list[0].ID, list[0].Revision); err != nil {
+		t.Fatalf("delete: %v", err)
 	}
 	res, err := s.SeedRules(entries)
 	if err != nil {
@@ -506,8 +508,8 @@ func TestSeedTombstonePrune(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v", list, err)
 	}
-	if ok, err := s.DeleteRule(list[0].ID); err != nil || !ok {
-		t.Fatalf("delete=%v err=%v", ok, err)
+	if err := s.DeleteRule(list[0].ID, list[0].Revision); err != nil {
+		t.Fatalf("delete: %v", err)
 	}
 	b := testRule()
 	b.Match.Type = "other"

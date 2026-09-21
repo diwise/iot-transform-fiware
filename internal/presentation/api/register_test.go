@@ -69,7 +69,7 @@ func pgTestModels(t *testing.T) *Models {
 		t.Fatalf("list: %v", err)
 	}
 	for _, st := range list {
-		if _, err := store.DeleteRule(st.ID); err != nil {
+		if err := store.DeleteRule(st.ID, st.Revision); err != nil {
 			t.Fatalf("truncate %s: %v", st.ID, err)
 		}
 	}

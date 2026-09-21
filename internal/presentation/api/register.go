@@ -434,15 +434,10 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		if err := requireRuleTenant(st.Rule, authorized); err != nil {
 			return StoredResult{}, err
 		}
-		if st.Revision != rev {
-			return StoredResult{}, fmt.Errorf("%w: %s has revision %d, request had %d", rules.ErrConflict, id, st.Revision, rev)
-		}
-		ok, err := h.models.store.DeleteRule(id)
-		if err != nil {
+		// Revisionen jämförs atomärt i SQL (TF-04): ingen TOCTOU-glipa
+		// mellan läsning och radering, även mellan instanser.
+		if err := h.models.store.DeleteRule(id, rev); err != nil {
 			return StoredResult{}, err
-		}
-		if !ok {
-			return StoredResult{}, fmt.Errorf("%w: %s", rules.ErrNotFound, id)
 		}
 		return StoredResult{Rule: st}, nil
 	})

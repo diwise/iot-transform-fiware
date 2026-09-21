@@ -257,36 +257,42 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 	return scanRule(st.ID, st.SeedKey, st.Kind, st.Source, st.Revision, st.Position, stored)
 }
 
-// DeleteRule tar bort en regel. Returnerar false när id:t saknas (idempotent).
+// DeleteRule tar bort en regel vid matchande revision (optimistisk låsning
+// i SQL: fel revision ger ErrConflict, okänt id ErrNotFound — ingen
+// TOCTOU-glipa mellan läsning och radering, även mellan instanser).
 // Borttagning av en seed-rad registreras som tombstone så att seed inte
 // återupplivar den (TF-03); API-rader utan seed_key lämnar inget spår.
-func (s *PgStore) DeleteRule(id string) (bool, error) {
+func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return false, err
+		return err
 	}
 	defer tx.Rollback(ctx)
 	var seedKey *string
-	if err := tx.QueryRow(ctx, `SELECT seed_key FROM transform_rules WHERE id=$1 FOR UPDATE`, id).Scan(&seedKey); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
+	err = tx.QueryRow(ctx,
+		`DELETE FROM transform_rules WHERE id=$1 AND revision=$2 RETURNING seed_key`,
+		id, expectedRev).Scan(&seedKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var exists bool
+		if qerr := tx.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
+			return fmt.Errorf("%w: %s", ErrNotFound, id)
 		}
-		return false, err
+		return fmt.Errorf("%w: %s", ErrConflict, id)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM transform_rules WHERE id=$1`, id); err != nil {
-		return false, err
+	if err != nil {
+		return err
 	}
 	if seedKey != nil {
 		if _, err := tx.Exec(ctx, `INSERT INTO seed_tombstones(seed_key) VALUES($1) ON CONFLICT DO NOTHING`, *seedKey); err != nil {
-			return false, err
+			return err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return false, err
+		return err
 	}
-	return true, nil
+	return nil
 }
 
 // SeedRules lägger in saknade seed-nycklar, uppdaterar ändrade seed-rader
