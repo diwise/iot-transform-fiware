@@ -3,6 +3,7 @@ package measurements
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/diwise/iot-core/pkg/messaging/events"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
@@ -18,12 +19,21 @@ type SensorTypeResolver interface {
 // DynamicTransformer mappar en enskild objektobservation till
 // entitetsskrivningar med den konfigurationsstyrda motorn.
 type DynamicTransformer struct {
+	mu       sync.RWMutex
 	engine   *transform.Engine
 	resolver SensorTypeResolver
 }
 
 func NewDynamicTransformer(rules []transform.Rule, resolver SensorTypeResolver) *DynamicTransformer {
 	return &DynamicTransformer{engine: transform.NewEngine(rules), resolver: resolver}
+}
+
+// Reload byter reglmängd atomärt (för API-styrd omladdning efter PUT/DELETE;
+// resolvern (device-management) behålls).
+func (d *DynamicTransformer) Reload(rules []transform.Rule) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.engine = transform.NewEngine(rules)
 }
 
 // Transform slår upp sensortypen (om en resolver finns) och kör motorn.
@@ -42,6 +52,8 @@ func (d *DynamicTransformer) Transform(ctx context.Context, msg events.MessageAc
 		}
 	}
 
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.engine.Transform(measurementFromMessage(msg, sensorType))
 }
 

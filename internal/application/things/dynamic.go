@@ -2,6 +2,7 @@ package things
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
@@ -10,6 +11,7 @@ import (
 // DynamicThingTransformer mappar en sak till entitetsskrivningar med den
 // konfigurationsstyrda motorn.
 type DynamicThingTransformer struct {
+	mu     sync.RWMutex
 	engine *transform.Engine
 }
 
@@ -18,7 +20,17 @@ func NewDynamicThingTransformer(rules []transform.Rule) *DynamicThingTransformer
 }
 
 func (d *DynamicThingTransformer) Transform(t transform.Thing) ([]transform.EntityWrite, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	return d.engine.Transform(t)
+}
+
+// Reload byter reglmängd atomärt (för API-styrd omladdning efter PUT/DELETE;
+// samtidiga Transform-anrop ser alltid en komplett gammal eller ny motor).
+func (d *DynamicThingTransformer) Reload(rules []transform.Rule) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.engine = transform.NewEngine(rules)
 }
 
 // ThingFromJSON tolkar ett thing.updated-envelope och bygger motorns indata.
