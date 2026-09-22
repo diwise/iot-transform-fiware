@@ -76,6 +76,15 @@ func NewEngine(rules []Rule) *Engine {
 	return &Engine{rules: rules}
 }
 
+// Matched rapporterar om någon regel matchar indatat, oavsett om den
+// sedan producerar skrivningar. Skiljer "ingen regel" (false) från
+// "matchad men undertryckt" (true med tomma writes, t.ex. required som
+// saknas) — preview behöver detta för ärlig matched-rapportering (TF-06).
+func (e *Engine) Matched(in Input) bool {
+	_, ok := e.match(in)
+	return ok
+}
+
 // Transform matchar indatat mot den mest specifika regeln och producerar
 // entitetsskrivningar. Ingen matchande regel ger ErrNoMatchingRule.
 func (e *Engine) Transform(in Input) ([]EntityWrite, error) {

@@ -28,23 +28,33 @@ func NewDynamicTransformer(rules []transform.Rule, resolver SensorTypeResolver) 
 	return &DynamicTransformer{engine: transform.NewEngine(rules), resolver: resolver}
 }
 
+// resolveSensorType slår upp sensortypen med samma fallback som Transform:
+// misslyckat uppslag ger tom sträng så att objekt/env-regler fungerar offline.
+func (d *DynamicTransformer) resolveSensorType(ctx context.Context, msg events.MessageAccepted) string {
+	if d.resolver == nil {
+		return ""
+	}
+	resolved, err := d.resolver.SensorType(ctx, msg.DeviceID())
+	if err != nil {
+		logging.GetFromContext(ctx).Debug("unable to resolve sensor type", "err", err.Error(), "device_id", msg.DeviceID())
+		return ""
+	}
+	return resolved
+}
+
+// Matched rapporterar om någon regel matchar meddelandet, även när den
+// sedan undertrycks (required saknas → tomma writes). Preview behöver detta
+// för att skilja "ingen regel" från "matchad men undertryckt" (TF-06).
+func (d *DynamicTransformer) Matched(ctx context.Context, msg events.MessageAccepted) bool {
+	return d.engine.Matched(measurementFromMessage(msg, d.resolveSensorType(ctx, msg)))
+}
+
 // Transform slår upp sensortypen (om en resolver finns) och kör motorn.
 // Om uppslaget misslyckas fortsätter matchningen utan sensortyp, så att
 // regler som bara matchar på object/env fungerar även när device-management
 // är otillgängligt.
 func (d *DynamicTransformer) Transform(ctx context.Context, msg events.MessageAccepted) ([]transform.EntityWrite, error) {
-	sensorType := ""
-
-	if d.resolver != nil {
-		resolved, err := d.resolver.SensorType(ctx, msg.DeviceID())
-		if err != nil {
-			logging.GetFromContext(ctx).Debug("unable to resolve sensor type", "err", err.Error(), "device_id", msg.DeviceID())
-		} else {
-			sensorType = resolved
-		}
-	}
-
-	return d.engine.Transform(measurementFromMessage(msg, sensorType))
+	return d.engine.Transform(measurementFromMessage(msg, d.resolveSensorType(ctx, msg)))
 }
 
 // measurementFromMessage normaliserar ett scopat meddelande till motorns

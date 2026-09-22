@@ -14,6 +14,11 @@ info:
     övrigt ger 404 utan existensläcka. Skrivning kräver icke-tom tenant
     inom egna auktoriserade tenants; globala regler administreras via
     seed-filer och ger 403 via API.
+    Scopes: read för läsning, create för POST /models, update för PUT,
+    delete för DELETE, write (transforms.write) för torra validate/preview.
+servers:
+  - url: /api/v0
+    description: API-bas (alla paths nedan är relativa mot denna).
 paths:
   /models:
     get:
@@ -118,7 +123,7 @@ paths:
   /models/validate:
     post:
       tags: [Models]
-      summary: Validera regel utan att spara (samma regler som vid start)
+      summary: Validera regel utan att spara (samma regler som vid start; kräver transforms.write)
       requestBody:
         required: true
         content:
@@ -140,12 +145,15 @@ paths:
   /models/preview:
     post:
       tags: [Models]
-      summary: Torr körning av inline-regel mot exempelhändelse
+      summary: Torr körning av inline-regel mot exempelhändelse (kräver transforms.write)
       description: >-
         Kör regeln mot en mätvärdes- ({pack, timestamp} + valfri sensorType
         som kringgår device-management) eller sakhändelse (thing.updated-
-        eller things.v1.values-kuvert). Aldrig broker-kontakt, aldrig
-        persistens. Ingen matchning ger matched:false med tom lista.
+        eller things.v1.values-kuvert). Mätvärdespack delas i
+        enobservations-meddelanden med samma normalisering som produktion
+        (TF-06). Aldrig broker-kontakt, aldrig persistens. Ingen matchning
+        ger matched:false med tom lista; matchad men undertryckt regel
+        (required saknas) ger matched:true med tom lista och skippedReason.
       requestBody:
         required: true
         content:
@@ -171,24 +179,28 @@ paths:
                       description: Offline-override för mätvärden.
       responses:
         '200':
-          description: Entiteter (NGSI-LD-attribut utan id/type)
+          description: Entiteter (NGSI-LD-attribut utan id/type) med operation och context
           content:
             application/json:
               schema:
                 type: object
-                required: [matched, entities]
+                required: [matched, entities, observations]
                 properties:
-                  matched: { type: boolean }
+                  matched: { type: boolean, description: True vid regelträff, även undertryckt }
+                  observations: { type: integer, description: Antal enobservations-indata som utvärderades }
+                  skippedReason: { type: string, description: Orsak vid matchning utan entiteter }
                   entities:
                     type: array
                     items:
                       type: object
-                      required: [id, type, properties]
+                      required: [id, type, properties, operation]
                       properties:
                         id: { type: string }
                         type: { type: string }
                         properties:
                           type: object
+                        context: { type: string, description: Entitetens JSON-LD-context (tom betyder deployment-default) }
+                        operation: { type: string, enum: [create, merge], description: Skrivsemantik mot brokern }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 components:
@@ -292,7 +304,10 @@ components:
           type: string
           enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured]
         unit: { type: string }
-        observedAt: { type: string, enum: [header, record, message, none] }
+        observedAt:
+          type: string
+          description: header (default), record, message, none eller field:<väg> (motorn stöder field:-vägar)
+          example: header
         observedBy: { type: string }
         when: { type: string, enum: [present] }
         required: { type: boolean }

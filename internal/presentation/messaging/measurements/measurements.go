@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/client"
@@ -15,8 +13,6 @@ import (
 	apptransform "github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
-	"github.com/diwise/senml"
-	diwisepkg "github.com/diwise/senml/diwise"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
@@ -69,8 +65,10 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return messaging.Permanent(err)
 		}
 
-		// Referenstid för relativa SenML-tider: mottagningstid.
-		parsed, err := diwisepkg.Parse(messageAccepted.Pack(), time.Now().UTC())
+		// Delad normalisering med preview (TF-06): samma partitionering
+		// i enobservations-meddelanden. Referenstid för relativa
+		// SenML-tider: mottagningstid.
+		observations, err := appmeasurements.PartitionMessage(messageAccepted, time.Now().UTC())
 		if err != nil {
 			log.Error("unable to parse incoming pack", "err", err.Error())
 			return messaging.Permanent(err)
@@ -86,14 +84,8 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		// typ: packet partitioneras i enobservations-meddelanden med
 		// delad packmetadata så att befintliga transformers fungerar
 		// oförändrade och resurser aldrig läses från fel objekt.
-		for _, o := range parsed.Objects() {
+		for _, observation := range observations {
 			totalCounter.Add(ctx, 1)
-
-			scoped := scopePack(parsed, o)
-			observation := events.MessageAccepted{
-				Pack_:     scoped,
-				Timestamp: messageAccepted.Timestamp,
-			}
 
 			deviceID := observation.DeviceID()
 			if deviceID == "" {
@@ -169,36 +161,4 @@ func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicT
 	}
 
 	return nil
-}
-
-// scopePack partitionerar en observation ur ett tolkat pack: headern, dess
-// resurser samt packnivå- och observations egen metadata. Resultatet är ett
-// fristående enobservationspack som befintliga transformers läser oförändrat.
-func scopePack(parsed *diwisepkg.Pack, o diwisepkg.Object) senml.Pack {
-	devicePrefix := parsed.DeviceID() + "/"
-
-	var scoped senml.Pack
-	scoped = append(scoped, o.Header())
-	scoped = append(scoped, o.Resources()...)
-
-	for _, r := range parsed.Pack() {
-		name := r.Name
-		idx := strings.LastIndex(name, "/")
-		if idx < 0 {
-			continue
-		}
-		trailing, prefix := name[idx+1:], name[:idx+1]
-		if trailing == "" || trailing == "0" {
-			continue
-		}
-		if _, err := strconv.Atoi(trailing); err == nil {
-			continue
-		}
-		if prefix != devicePrefix && prefix != o.Prefix() {
-			continue
-		}
-		scoped = append(scoped, r)
-	}
-
-	return scoped
 }

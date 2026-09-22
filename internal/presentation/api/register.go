@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"slices"
 	"strconv"
@@ -18,6 +19,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
 	"github.com/diwise/service-chassis/pkg/infrastructure/net/http/router"
+	"github.com/google/uuid"
 )
 
 // Scopes för regel-API:t (transforms.*-namnrymden; create läggs till i
@@ -27,6 +29,11 @@ const (
 	TransformCreate auth.Scope = "transforms.create"
 	TransformUpdate auth.Scope = "transforms.update"
 	TransformDelete auth.Scope = "transforms.delete"
+	// TransformWrite är avtalat scope för torra författarverktyg
+	// (validate/preview): ingen persistens, ingen tenant-påverkan.
+	// Separat från create så att läs+skriv-rätt inte ger skapanderätt
+	// (TF-07). Endpointspecifik middleware, inte grupp-scope.
+	TransformWrite auth.Scope = "transforms.write"
 )
 
 type registerOptions struct {
@@ -105,16 +112,15 @@ func RegisterHandlers(ctx context.Context, mux *http.ServeMux, models *Models, p
 			r.Get("", h.listModels)
 			r.Get("{id}", h.getModel)
 		})
-		r.Group(func(r router.ServeMux) {
-			r.Use(authz.RequireAccess(TransformCreate))
-			r.Post("", h.createModel)
-			// Samma grupp+scope av routertekniska skäl: två POST-grupper
-			// under samma prefix panikkar muxen. Validate/preview är
-			// författarverktyg (torra, utan persistens) och hör till
-			// create-scopet; därför behövs ingen separat transforms.write.
-			r.Post("validate", h.validateModel)
-			r.Post("preview", h.previewModel)
-		})
+		// Endpointspecifik middleware (TF-07): två POST-grupper under samma
+		// prefix panikkar muxen, så grupp-scope kan inte uttrycka avtalade
+		// scopes (create för POST "", write för validate/preview). Varje
+		// POST lindas därför med sitt eget scope här; handlers verifierar
+		// dessutom samma scope via authorizedTenants så att direktanrop
+		// aldrig kringgår tenant-scoping.
+		r.Post("", withAccess(authz, TransformCreate, h.createModel))
+		r.Post("validate", withAccess(authz, TransformWrite, h.validateModel))
+		r.Post("preview", withAccess(authz, TransformWrite, h.previewModel))
 		r.Group(func(r router.ServeMux) {
 			r.Use(authz.RequireAccess(TransformUpdate))
 			r.Put("{id}", h.updateModel)
@@ -126,6 +132,16 @@ func RegisterHandlers(ctx context.Context, mux *http.ServeMux, models *Models, p
 	})
 
 	return nil
+}
+
+// withAccess lindar en handler med endpointspecifikt scope (TF-07).
+// Grupp-scope kan inte skilja POST "" (create) från POST validate/preview
+// (write) utan mux-panik; därför bär varje POST sitt eget scope här.
+func withAccess(authz auth.Enticator, scope auth.Scope, h func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
+	mw := authz.RequireAccess(scope)
+	return func(w http.ResponseWriter, r *http.Request) {
+		mw(http.HandlerFunc(h)).ServeHTTP(w, r)
+	}
 }
 
 type handler struct {
@@ -206,26 +222,57 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// decodeRule avkodar ett regelobjekt strikt: fel Content-Type, ogiltig JSON
-// och okända fält (stavfel) nekas i stället för att tyst tappas.
-func decodeRule(r *http.Request) (transform.Rule, error) {
-	var rule transform.Rule
-	if ct := r.Header.Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
-		return rule, fmt.Errorf("%w: content-type must be application/json", errValidation)
+// decodeJSONBody avkodar exakt ett JSON-dokument strikt (TF-07):
+// mediatypen parsas (application/json-invalid accepteras inte), okända fält
+// nekas och efterföljande data (trailing JSON) nekas via EOF-kontroll.
+func decodeJSONBody(r *http.Request, dst any) error {
+	ct := r.Header.Get("Content-Type")
+	mt, _, err := mime.ParseMediaType(ct)
+	if err != nil || mt != "application/json" {
+		return fmt.Errorf("%w: content-type must be application/json", errValidation)
 	}
 	if r.Body == nil {
-		return rule, fmt.Errorf("%w: empty body", errValidation)
+		return fmt.Errorf("%w: empty body", errValidation)
 	}
 	defer r.Body.Close()
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&rule); err != nil {
-		return rule, fmt.Errorf("%w: invalid rule body: %v", errValidation, err)
+	if err := dec.Decode(dst); err != nil {
+		return fmt.Errorf("%w: invalid JSON body: %v", errValidation, err)
+	}
+	// Exakt ett dokument: trailing JSON/whitespace-bara? Andra Decode måste
+	// ge io.EOF, annars finns extra data efter första dokumentet.
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("%w: trailing data after JSON document", errValidation)
+		}
+		return fmt.Errorf("%w: invalid JSON trailing data: %v", errValidation, err)
+	}
+	return nil
+}
+
+// decodeRule avkodar ett regelobjekt strikt: fel Content-Type, ogiltig JSON,
+// trailing data och okända fält (stavfel) nekas i stället för att tyst tappas.
+func decodeRule(r *http.Request) (transform.Rule, error) {
+	var rule transform.Rule
+	if err := decodeJSONBody(r, &rule); err != nil {
+		return rule, err
 	}
 	if err := transform.Validate([]transform.Rule{rule}); err != nil {
 		return rule, fmt.Errorf("%w: %v", errValidation, err)
 	}
 	return rule, nil
+}
+
+// requireModelID validerar sökvägens id som UUID före lagret (TF-07):
+// ogiltigt UUID ger 400, inte 500 från PostgreSQL.
+func requireModelID(r *http.Request) (string, error) {
+	id := r.PathValue("id")
+	if _, err := uuid.Parse(id); err != nil {
+		return "", fmt.Errorf("%w: invalid id %q: must be UUID", errValidation, id)
+	}
+	return id, nil
 }
 
 // formatETag/parseETag speglar iot-things-v2 ("rev-<n>" med eller utan citattecken).
@@ -309,7 +356,12 @@ func (h *handler) getModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	st, err := h.models.store.GetRule(r.PathValue("id"))
+	id, err := requireModelID(r)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	st, err := h.models.store.GetRule(id)
 	if err != nil {
 		writeAPIError(w, err)
 		return
@@ -374,7 +426,11 @@ func (h *handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	id := r.PathValue("id")
+	id, err := requireModelID(r)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	res, err := h.models.mutate(func() (StoredResult, error) {
 		st, err := h.models.store.GetRule(id)
 		if err != nil {
@@ -409,7 +465,11 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	id := r.PathValue("id")
+	id, err := requireModelID(r)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
 	_, err = h.models.mutate(func() (StoredResult, error) {
 		st, err := h.models.store.GetRule(id)
 		if err != nil {

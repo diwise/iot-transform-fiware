@@ -102,7 +102,18 @@ func fullAccess(tenants ...string) context.Context {
 			TransformCreate: {},
 			TransformUpdate: {},
 			TransformDelete: {},
+			TransformWrite:  {},
 		}
+	}
+	return auth.WithAccess(context.Background(), m)
+}
+
+// writeOnly ger endast avtalat write-scope för torra författarverktyg
+// (validate/preview) — utan skapanderätt (TF-07).
+func writeOnly(tenants ...string) context.Context {
+	m := map[string]map[auth.Scope]struct{}{}
+	for _, t := range tenants {
+		m[t] = map[auth.Scope]struct{}{TransformWrite: {}}
 	}
 	return auth.WithAccess(context.Background(), m)
 }
@@ -220,6 +231,84 @@ func TestModelsStrictDecode(t *testing.T) {
 	is.Equal(rr.Code, http.StatusBadRequest)
 	rr = doModel(h.updateModel, http.MethodPut, "x", testRule(), map[string]string{"If-Match": "bogus"})
 	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+// TF-07: strikt decoder — trailing JSON, fel mediatyp och ogiltig UUID ger
+// 400, inte 500 eller tyst acceptans.
+func TestModelsStrictDecoderContract(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	// Trailing JSON efter första dokumentet nekas.
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	req := httptest.NewRequest(http.MethodPost, "/x", &buf)
+	req = req.WithContext(fullAccess("t"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.createModel(rec, req)
+	is.Equal(rec.Code, http.StatusBadRequest)
+
+	// application/json-invalid är inte application/json.
+	buf.Reset()
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	req = httptest.NewRequest(http.MethodPost, "/x", &buf)
+	req = req.WithContext(fullAccess("t"))
+	req.Header.Set("Content-Type", "application/json-invalid")
+	rec = httptest.NewRecorder()
+	h.createModel(rec, req)
+	is.Equal(rec.Code, http.StatusBadRequest)
+
+	// Ogiltigt UUID når aldrig PostgreSQL (500) — ger 400.
+	rr := doModel(h.getModel, http.MethodGet, "not-a-uuid", nil, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+	rr = doModel(h.updateModel, http.MethodPut, "not-a-uuid", testRule(), map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusBadRequest)
+	rr = doModel(h.deleteModel, http.MethodDelete, "not-a-uuid", nil, map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+// TF-07: avtalade scopes — validate/preview kräver transforms.write,
+// inte create. Endpointspecifik middleware, inte grupp-scope.
+func TestValidatePreviewWriteScope(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	// Write-only får validera och förhandsgranska ...
+	rr := doModelAs(h.validateModel, http.MethodPost, "", testRule(), nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusOK)
+
+	previewBody := map[string]any{
+		"rule": testRule(),
+		"event": map[string]any{
+			"kind": "thing",
+			"message": map[string]any{
+				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
+				"tenant":    "t",
+				"timestamp": "2024-01-01T00:00:00Z",
+			},
+		},
+	}
+	rr = doModelAs(h.previewModel, http.MethodPost, "", previewBody, nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusOK)
+
+	// ... men inte skapa (kräver create).
+	rr = doModelAs(h.createModel, http.MethodPost, "", testRule(), nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusUnauthorized)
+
+	// Create-only får skapa men inte validera/förhandsgranska.
+	createOnly := auth.WithAccess(context.Background(), map[string]map[auth.Scope]struct{}{
+		"t": {TransformCreate: {}},
+	})
+	rr = doModelAs(h.createModel, http.MethodPost, "", testRule(), nil, createOnly)
+	is.True(rr.Code == http.StatusCreated || rr.Code == http.StatusForbidden)
+	rr = doModelAs(h.validateModel, http.MethodPost, "", testRule(), nil, createOnly)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+	rr = doModelAs(h.previewModel, http.MethodPost, "", previewBody, nil, createOnly)
+	is.Equal(rr.Code, http.StatusUnauthorized)
 }
 
 // Omladdning ska synas i körning: efter PUT matchar nya regler,
@@ -411,13 +500,15 @@ func TestPreviewMeasurement(t *testing.T) {
 	h := &handler{models: m}
 
 	v := 22.5
+	// Produktionsformat (bn/bt) — preview delar produktionens
+	// partitionering (TF-06), så testpacket måste parsa som produktion.
 	pack := []map[string]any{
-		{"n": "dev-1/0", "vs": "urn:oma:lwm2m:ext:3303", "t": 1720000000},
-		{"n": "dev-1/5700", "v": v},
-		{"n": "dev-1/env", "vs": "indoors"},
-		{"n": "dev-1/lat", "v": 62.36, "u": "lat"},
-		{"n": "dev-1/lon", "v": 17.51, "u": "lon"},
-		{"n": "dev-1/tenant", "vs": "default"},
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": v},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "lat", "v": 62.36, "u": "lat"},
+		{"bn": "dev-1/", "n": "lon", "v": 17.51, "u": "lon"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
 	}
 	rule := map[string]any{
 		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303", "env": "indoors"},
@@ -446,6 +537,129 @@ func TestPreviewMeasurement(t *testing.T) {
 	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
 	is.True(out.Matched)
 	is.Equal(len(out.Entities), 1)
+}
+
+// TF-06: multi-observation-pack delas som i produktion — en regel för ett
+// objekt ger träff på dess observation utan läckage från andra objekt.
+func TestPreviewMultiObservation(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev1/3428/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3428"},
+		{"n": "5700", "u": "Cel", "v": 22.2},
+		{"bn": "dev1/3324/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3324"},
+		{"n": "5700", "u": "dB", "v": 55},
+		{"bn": "dev1/", "n": "tenant", "vs": "acme"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3428"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:AirQualityObserved:{{deviceID}}",
+			"type": "AirQualityObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-07-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(out.Observations, 2)
+	is.Equal(len(out.Entities), 1)
+	is.Equal(out.Entities[0].Type, "AirQualityObserved")
+	// 3324-observationens buller får inte läcka in i 3428-entiteten.
+	is.True(!strings.Contains(rr.Body.String(), "55"))
+}
+
+// TF-06: matchad regel utan entiteter (required saknas) rapporteras som
+// matchad med skip-orsak — inte som ingen matchning.
+func TestPreviewMatchedButSuppressed(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": 22.5},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303", "env": "indoors"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type": "IndoorEnvironmentObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "9999", "required": true},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-06-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 0)
+	is.True(out.SkippedReason != "")
+}
+
+// TF-06: preview exponerar Create-semantik och context som produktion.
+func TestPreviewExposesOperationAndContext(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": 22.5},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303"},
+		"entities": []any{map[string]any{
+			"id":      "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type":    "IndoorEnvironmentObserved",
+			"context": "https://example.com/ctx.jsonld",
+			"create":  true,
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-06-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 1)
+	is.Equal(out.Entities[0].Operation, "create")
+	is.Equal(out.Entities[0].Context, "https://example.com/ctx.jsonld")
 }
 
 const muxAllowPolicy = `package example.authz
