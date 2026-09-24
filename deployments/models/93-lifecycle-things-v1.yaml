@@ -1,11 +1,11 @@
 # Livscykelhändelser (things.v1.lifecycle) mappade med samma motor som
 # värdesevent. Delete-regler raderar NGSI-LD-entiteten idempotent (404 = OK)
-# med samma id/typ-mallar som 90-92, så att borttagna saker inte lämnar
-# föräldralösa entiteter hos brokern. Reglerna avgränsas med match.event +
-# match.lifecycle: deleted + match.type (en regel per mall, samma mönster
-# som 90-92 — utan typ skulle första regeln vinna alla deletes), så
-# created/updated/värdes/relations-händelser aktiverar dem aldrig.
-# properties: [] krävs av OpenAPI-kontraktet.
+# med samma id/typ-mallar som värde-reglerna, så att borttagna saker inte
+# lämnar föräldralösa entiteter hos brokern. Reglerna avgränsas med
+# match.event + match.lifecycle: deleted + match.type (en regel per mall,
+# samma mönster som 90-92 — utan typ skulle första regeln vinna alla
+# deletes), så created/updated/värdes/relations-händelser aktiverar dem
+# aldrig. properties: [] krävs av OpenAPI-kontraktet.
 rules:
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: room }
     entities:
@@ -23,5 +23,41 @@ rules:
     entities:
       - id: "urn:ngsi-ld:AgriGreenhouse:{{nameOrID}}"
         type: AgriGreenhouse
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: tank }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{nameOrID}}"
+        type: WaterQualityObserved
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: lifebuoy }
+    entities:
+      - id: "urn:ngsi-ld:Lifebuoy:{{nameOrID}}"
+        type: Lifebuoy
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: desk }
+    entities:
+      - id: "urn:ngsi-ld:Device:{{nameOrID}}"
+        type: Device
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pumpingstation }
+    entities:
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{nameOrID}}"
+        type: SewagePumpingStation
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: sewer }
+    entities:
+      - id: "urn:ngsi-ld:Sewer:{{nameOrID}}"
+        type: Sewer
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pointofinterest }
+    entities:
+      - id: "urn:ngsi-ld:PointOfInterest:{{nameOrID}}"
+        type: PointOfInterest
         properties: []
         delete: true

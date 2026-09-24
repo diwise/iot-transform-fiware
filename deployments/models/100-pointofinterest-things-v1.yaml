@@ -1,0 +1,17 @@
+# PointOfInterest från versionerade värdesevent (things.v1.values).
+# Ersätter 60-point-of-interest.yaml (thing.updated) delvis — produktbeslut
+# (PLAN001 7.2): legacy skapade Beach + WaterQualityObserved från inbäddade
+# current.*-fält som saknar v2-motsvarighet (POI-mallen har endast valfri
+# temperature). WaterQualityObserved-delen utgår (levande mätdata hör till
+# mätvärdesburna saker i v2); PointOfInterest-entiteten (name/location/
+# description) byggs från deskriptorfält. POI-temperatur lämnas omappad
+# (samma medvetna princip som tankens co2/waterLevel i 95).
+rules:
+  - match: { kind: thing, event: things.v1.values, type: pointofinterest }
+    entities:
+      - id: "urn:ngsi-ld:PointOfInterest:{{nameOrID}}"
+        type: PointOfInterest
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none, required: true }
+          - { target: description, type: Text, field: description, observedAt: none }
+          - { target: location, type: Geo, field: location }
