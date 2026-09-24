@@ -94,7 +94,18 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 		if len(rawLocation) > 0 {
 			if ll, ok := geoPointToLatLon(rawLocation); ok {
 				fields["location"] = ll
+			} else if geom, ok := rawGeometryMap(rawLocation); ok {
+				// Icke-punkt-geometri bevaras rått för Geo-regler
+				// (field:geometry); fields["location"] är oförändrad.
+				fields["geometry"] = geom
 			}
+		}
+		if len(desc.Metadata) > 0 {
+			meta := make(map[string]any, len(desc.Metadata))
+			for k, v := range desc.Metadata {
+				meta[k] = v
+			}
+			fields["metadata"] = meta
 		}
 	}
 
@@ -147,6 +158,21 @@ func valuesFields(values []thingValue) (time.Time, map[string]any) {
 		byProperty[v.PropertyID] = entry
 	}
 	return latest, map[string]any{"values": byProperty}
+}
+
+// rawGeometryMap bevarar en icke-punkt-plats som rå GeoJSON-mapp för
+// Geo-regler (field:geometry). Punktplatser hanteras av fields["location"]
+// och sätts aldrig här; skräp utan type-nyckel utelämnas tyst (som före).
+func rawGeometryMap(raw json.RawMessage) (map[string]any, bool) {
+	var m map[string]any
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, false
+	}
+	t, ok := m["type"].(string)
+	if !ok || t == "Point" {
+		return nil, false
+	}
+	return m, true
 }
 
 // geoPointToLatLon översätter en GeoJSON-Point ({type,coordinates:[lon,lat]})

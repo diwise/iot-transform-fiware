@@ -147,6 +147,65 @@ func TestThingValuesFromJSONSkipsNonPointLocation(t *testing.T) {
 	if _, ok := th.Fields["location"]; ok {
 		t.Fatal("polygon får inte bli Geo-punkt (required hoppar entiteten i stället)")
 	}
+	// Polygonen bevaras rått som fields["geometry"] för Geo-regler.
+	geom, ok := th.Fields["geometry"].(map[string]any)
+	if !ok {
+		t.Fatalf("geometry=%+v, want rå GeoJSON-mapp", th.Fields["geometry"])
+	}
+	if geom["type"] != "Polygon" {
+		t.Fatalf("geometry.type=%v, want Polygon", geom["type"])
+	}
+}
+
+func TestThingValuesFromJSONExposesMetadata(t *testing.T) {
+	body := `{"thingId":"p","tenant":"t","thingType":"room",
+	  "thing":{"thingId":"p","metadata":{"floor":"2","zone":"A"}},
+	  "values":[]}`
+	th, err := ThingValuesFromJSON([]byte(body))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	meta, ok := th.Fields["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata=%+v, want mapp", th.Fields["metadata"])
+	}
+	if meta["floor"] != "2" || meta["zone"] != "A" {
+		t.Fatalf("metadata=%+v, want floor/zone", meta)
+	}
+	// field:metadata.<nyckel> fungerar för Text via motorn.
+	d := NewDynamicThingTransformer([]transform.Rule{{
+		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
+		Entities: []transform.Entity{{
+			ID: "urn:ngsi-ld:X:x", Type: "X",
+			Properties: []transform.Property{{
+				Target: "floor", Type: transform.TypeText,
+				Source: transform.Source{Field: "metadata.floor"},
+			}},
+		}},
+	}})
+	writes, err := d.Transform(th)
+	if err != nil {
+		t.Fatalf("transform: %v", err)
+	}
+	if len(writes) != 1 {
+		t.Fatalf("writes=%d, want 1", len(writes))
+	}
+}
+
+func TestThingValuesFromJSONOmitsMissingGeometryAndMetadata(t *testing.T) {
+	th, err := ThingValuesFromJSON([]byte(`{"thingId":"p","tenant":"t","thingType":"room","values":[]}`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, ok := th.Fields["geometry"]; ok {
+		t.Fatal("saknad plats ska inte ge geometry-nyckel")
+	}
+	if _, ok := th.Fields["metadata"]; ok {
+		t.Fatal("saknad metadata ska inte ge metadata-nyckel")
+	}
+	if _, ok := th.Fields["location"]; ok {
+		t.Fatal("saknad plats ska inte ge location-nyckel")
+	}
 }
 
 // End-to-end genom motorn med v2-regel: växthus → AgriGreenhouse.
