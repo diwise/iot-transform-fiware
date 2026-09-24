@@ -14,7 +14,10 @@ const (
 	OpFloor       = "floor"
 	OpRound       = "round"
 	OpBoolToOnOff = "boolToOnOff"
-	OpSafeURI     = "safeURI"
+	// OpNumToOnOff mappar numerisk närvaro (v2-presence anländer som 1/0,
+	// inte bool) till "on"/"off". Befintlig boolToOnOff ändras inte.
+	OpNumToOnOff = "numToOnOff"
+	OpSafeURI    = "safeURI"
 )
 
 // DeriveFn är de namngivna funktioner som kombinerar flera källor.
@@ -35,6 +38,7 @@ var validTransformOps = map[string]bool{
 	OpFloor:       true,
 	OpRound:       true,
 	OpBoolToOnOff: true,
+	OpNumToOnOff:  true,
 	OpSafeURI:     true,
 }
 

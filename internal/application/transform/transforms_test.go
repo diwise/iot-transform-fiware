@@ -79,6 +79,30 @@ func TestBoolToOnOff(t *testing.T) {
 	is.True(strings.Contains(renderFirst(t, x, r), `"value":"on"`))
 }
 
+// numToOnOff mappar numerisk närvaro (1/0 från v2, aldrig bool) till
+// on/off; noll ger off, allt annat on. Icke-numeriskt ger fel.
+func TestNumToOnOff(t *testing.T) {
+	is := is.New(t)
+
+	m := func(v float64) Measurement {
+		x := testMeasurement()
+		x.Records = []Record{{Name: "5500", Value: ptr(v)}}
+		return x
+	}
+
+	on := transformRule(TypeText, Source{Resource: "5500"}, Transform{Op: OpNumToOnOff})
+	is.True(strings.Contains(renderFirst(t, m(1), on), `"value":"on"`))
+	is.True(strings.Contains(renderFirst(t, m(0.5), on), `"value":"on"`))
+	is.True(strings.Contains(renderFirst(t, m(0), on), `"value":"off"`))
+
+	str := testMeasurement()
+	str.Records = []Record{{Name: "name", String: strptr("närvaro")}}
+	bad := transformRule(TypeText, Source{Resource: "name"}, Transform{Op: OpNumToOnOff})
+	if _, err := NewEngine([]Rule{bad}).Transform(str); err == nil {
+		t.Fatal("icke-numeriskt ska ge fel")
+	}
+}
+
 func TestSafeURITransform(t *testing.T) {
 	is := is.New(t)
 

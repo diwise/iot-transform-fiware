@@ -584,6 +584,17 @@ func applyTransform(t Transform, raw any) (any, error) {
 			return "on", nil
 		}
 		return "off", nil
+	case OpNumToOnOff:
+		// Numerisk närvaro: noll (inkl. 0.0) ger "off", allt annat "on".
+		// NaN/Inf kan inte förekomma per producentkontraktet.
+		f, ok := toFloat(raw)
+		if !ok {
+			return nil, fmt.Errorf("numToOnOff expects a number")
+		}
+		if f != 0 {
+			return "on", nil
+		}
+		return "off", nil
 	case OpSafeURI:
 		s, ok := raw.(string)
 		if !ok {
