@@ -148,8 +148,8 @@ paths:
       summary: Torr körning av inline-regel mot exempelhändelse (kräver transforms.write)
       description: >-
         Kör regeln mot en mätvärdes- ({pack, timestamp} + valfri sensorType
-        som kringgår device-management) eller sakhändelse (thing.updated-,
-        things.v1.values-, things.v1.relations- eller things.v1.lifecycle-kuvert). Mätvärdespack delas i
+        som kringgår device-management) eller sakhändelse (things.v1.values-,
+        things.v1.relations- eller things.v1.lifecycle-kuvert). Mätvärdespack delas i
         enobservations-meddelanden med samma normalisering som produktion
         (TF-06). Aldrig broker-kontakt, aldrig persistens. Ingen matchning
         ger matched:false med tom lista; matchad men undertryckt regel
