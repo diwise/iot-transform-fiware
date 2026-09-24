@@ -111,8 +111,8 @@ func main() {
 	exitIf(err, logger, "failed to connect to rule storage")
 	seeded, err := rules.SeedDir(ruleStore, flags[modelsDir])
 	exitIf(err, logger, "failed to seed model configuration")
-	if seeded.Added+seeded.Updated > 0 {
-		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "skipped", seeded.Skipped)
+	if seeded.Added+seeded.Updated+seeded.Pruned > 0 {
+		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "pruned", seeded.Pruned, "skipped", seeded.Skipped)
 	}
 	var sensorTypes devicemanagement.SensorTypeResolver
 	if flags[deviceMgmtUrl] != "" {

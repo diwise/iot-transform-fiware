@@ -227,6 +227,80 @@ func TestRuleSeedIdempotent(t *testing.T) {
 	}
 }
 
+func TestRuleSeedPrunesRemovedFiles(t *testing.T) {
+	s := pgTestRules(t)
+	r := testRule()
+	entries := []SeedEntry{
+		{SeedKey: "a.yaml#0", Kind: "thing", Rule: r},
+		{SeedKey: "b.yaml#0", Kind: "thing", Rule: r},
+	}
+
+	if _, err := s.SeedRules(entries); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Borttagen seed-fil tar bort raden och räknas som ändring.
+	res, err := s.SeedRules(entries[:1])
+	if err != nil {
+		t.Fatalf("reseed without b: %v", err)
+	}
+	if res.Pruned != 1 {
+		t.Fatalf("prune=%+v, want 1 pruned", res)
+	}
+	list, err := s.ListRules()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 || list[0].SeedKey != "a.yaml#0" {
+		t.Fatalf("list=%+v, want only a.yaml#0", list)
+	}
+
+	// Upprepad seed är stabil (ingen ny prune).
+	res, err = s.SeedRules(entries[:1])
+	if err != nil {
+		t.Fatalf("reseed stable: %v", err)
+	}
+	if res.Pruned != 0 || res.Added != 0 || res.Updated != 0 {
+		t.Fatalf("stable reseed=%+v, want only skips", res)
+	}
+}
+
+func TestRuleSeedPrunePreservesAPIRows(t *testing.T) {
+	s := pgTestRules(t)
+	r := testRule()
+
+	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	list, err := s.ListRules()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("list=%+v, err=%v", list, err)
+	}
+
+	// API-övertag raden (samma seed_key, source='api').
+	r2 := testRule()
+	r2.Match.Type = "api-owned"
+	if _, err := s.UpdateRule(list[0].ID, r2, list[0].Revision); err != nil {
+		t.Fatalf("api update: %v", err)
+	}
+
+	// Filen försvinner ur seed — API-raden bevaras ändå.
+	res, err := s.SeedRules([]SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: r}})
+	if err != nil {
+		t.Fatalf("reseed: %v", err)
+	}
+	if res.Pruned != 0 {
+		t.Fatalf("prune=%+v, API-owned row must survive", res)
+	}
+	got, err := s.GetRule(list[0].ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Source != SourceAPI || got.Rule.Match.Type != "api-owned" {
+		t.Fatalf("api row changed: %+v", got)
+	}
+}
+
 func TestRuleSeedDirShippedModels(t *testing.T) {
 	s := pgTestRules(t)
 	res, err := SeedDir(s, "../../../deployments/models")

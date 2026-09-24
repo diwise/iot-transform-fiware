@@ -57,11 +57,13 @@ type SeedEntry struct {
 	Rule    transform.Rule
 }
 
-// SeedResult räknar seed-utfallet: nya rader, uppdaterade seed-rader och
-// överhoppade (oförändrade seed-rader + API-ägda rader).
+// SeedResult räknar seed-utfallet: nya rader, uppdaterade seed-rader,
+// borttagna seed-rader (borttagna filer) och överhoppade (oförändrade
+// seed-rader + API-ägda rader).
 type SeedResult struct {
 	Added   int
 	Updated int
+	Pruned  int
 	Skipped int
 }
 
@@ -443,6 +445,7 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 	// Versionsbump vid faktisk ändring (TF-05): pollande instanser laddar
 	// om. Egen sats utanför radtransaktionerna — monoton och konvergent;
 	// värsta fallet är en extra bump som nästa seed konstaterar onödig.
+	// Prune nedan bumpar separat vid borttagna rader.
 	if res.Added+res.Updated > 0 {
 		ctx, cancel := s.ctx()
 		defer cancel()
@@ -460,6 +463,21 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 		defer cancel()
 		if _, err := s.pool.Exec(ctx, `DELETE FROM seed_tombstones WHERE NOT (seed_key = ANY($1))`, keys); err != nil {
 			return res, fmt.Errorf("seed tombstone prune: %w", err)
+		}
+		// Borttagna seed-filer: radera föräldralösa seed-rader (7.4).
+		// API-övertagna rader har source='api' och bevaras — även med samma
+		// seed_key. Verifiera på staging att endast förväntade rader
+		// försvinner vid deploy.
+		tag, err := s.pool.Exec(ctx, `DELETE FROM transform_rules WHERE source=$1 AND NOT (seed_key = ANY($2))`, SourceSeed, keys)
+		if err != nil {
+			return res, fmt.Errorf("seed prune: %w", err)
+		}
+		res.Pruned = int(tag.RowsAffected())
+		if res.Pruned > 0 {
+			if _, err := s.pool.Exec(ctx, `INSERT INTO rule_version(id, version) VALUES(1, 1)
+				ON CONFLICT (id) DO UPDATE SET version = rule_version.version + 1`); err != nil {
+				return res, fmt.Errorf("seed prune version bump: %w", err)
+			}
 		}
 	}
 	return res, nil
