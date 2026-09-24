@@ -26,7 +26,7 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 	is := is.New(t)
 
 	called := false
-	handler := NewDynamicThingTopicMessageHandler(
+	handler := NewThingValuesTopicMessageHandler(
 		func(string) (client.ContextBrokerClient, error) {
 			called = true
 			return nil, nil
@@ -35,10 +35,10 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 		"",
 	)
 
-	body := `{"thing":{"id":"x","type":"Container","percent":50,"tenant":""},"tenant":"","timestamp":"2024-01-01T00:00:00Z"}`
+	body := `{"thingId":"x","tenant":"","thingType":"room","values":[]}`
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(body) },
-		ContentTypeFunc: func() string { return "application/vnd.diwise.container+json" },
+		ContentTypeFunc: func() string { return "application/vnd.diwise.things.v1+json" },
 	}
 
 	is.NoErr(handler(context.Background(), itm, slog.Default()))
@@ -49,21 +49,22 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 func TestDynamicThingHandlerReturnsBrokerError(t *testing.T) {
 	is := is.New(t)
 
-	handler := NewDynamicThingTopicMessageHandler(
+	handler := NewThingValuesTopicMessageHandler(
 		func(string) (client.ContextBrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
 		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{{
-			Match:    transform.Match{Kind: transform.KindThing, Type: "Container"},
+			Match:    transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
 			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{nameOrID}}", Type: "Thing"}},
 		}})},
 		"",
 	)
 
-	body := `{"thing":{"id":"x","type":"Container","name":"n","percent":50,"tenant":"default"},"tenant":"default","timestamp":"2024-01-01T00:00:00Z"}`
+	body := `{"thingId":"x","tenant":"default","thingType":"room",
+		"thing":{"thingId":"x","name":"Rum"},"values":[]}`
 	itm := &messaging.IncomingTopicMessageMock{
 		BodyFunc:        func() []byte { return []byte(body) },
-		ContentTypeFunc: func() string { return "application/vnd.diwise.container+json" },
+		ContentTypeFunc: func() string { return "application/vnd.diwise.things.v1+json" },
 	}
 
 	is.True(handler(context.Background(), itm, slog.Default()) != nil)

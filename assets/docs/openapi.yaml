@@ -170,7 +170,7 @@ paths:
                   properties:
                     kind:
                       type: string
-                      enum: [measurement, thing, things.v1.values, things.v1.relations, things.v1.lifecycle]
+                      enum: [measurement, things.v1.values, things.v1.relations, things.v1.lifecycle]
                     message:
                       type: object
                       description: Rått kuvert (mätarmeddelande eller sakuvert).

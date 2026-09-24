@@ -284,11 +284,11 @@ func TestValidatePreviewWriteScope(t *testing.T) {
 	previewBody := map[string]any{
 		"rule": testRule(),
 		"event": map[string]any{
-			"kind": "thing",
+			"kind": "things.v1.values",
 			"message": map[string]any{
-				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
-				"tenant":    "t",
-				"timestamp": "2024-01-01T00:00:00Z",
+				"thingId": "r1", "tenant": "t", "thingType": "room",
+				"thing":  map[string]any{"thingId": "r1", "name": "Rum"},
+				"values": []any{},
 			},
 		},
 	}
@@ -456,44 +456,6 @@ func TestValidateModel(t *testing.T) {
 	is.Equal(rr.Code, http.StatusBadRequest)
 }
 
-func TestPreviewThing(t *testing.T) {
-	is := is.New(t)
-	m := pgTestModels(t)
-	h := &handler{models: m}
-
-	body := map[string]any{
-		"rule": testRule(),
-		"event": map[string]any{
-			"kind": "thing",
-			"message": map[string]any{
-				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
-				"tenant":    "t",
-				"timestamp": "2024-01-01T00:00:00Z",
-			},
-		},
-	}
-	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
-	is.Equal(rr.Code, http.StatusOK)
-	var out previewResponse
-	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
-	is.True(out.Matched)
-	is.Equal(len(out.Entities), 1)
-	is.Equal(out.Entities[0].Type, "Room")
-
-	// Icke-matchande typ: tomt resultat, inget fel.
-	body["event"].(map[string]any)["message"].(map[string]any)["thing"].(map[string]any)["type"] = "Other"
-	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
-	is.Equal(rr.Code, http.StatusOK)
-	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
-	is.True(!out.Matched)
-	is.Equal(len(out.Entities), 0)
-
-	// Ogiltig kind nekas.
-	body["event"] = map[string]any{"kind": "nope", "message": map[string]any{}}
-	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
-	is.Equal(rr.Code, http.StatusBadRequest)
-}
-
 func TestPreviewRelations(t *testing.T) {
 	is := is.New(t)
 	m := pgTestModels(t)
@@ -580,6 +542,11 @@ func TestPreviewLifecycle(t *testing.T) {
 	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
 	is.True(!out.Matched)
 	is.Equal(len(out.Entities), 0)
+
+	// Ogiltig kind nekas (thing.updated-kuvert stöds inte längre).
+	body["event"] = map[string]any{"kind": "thing", "message": map[string]any{}}
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
 }
 
 func TestPreviewMeasurement(t *testing.T) {
@@ -807,11 +774,11 @@ func TestRegisterHandlersRoundTrip(t *testing.T) {
 	preview := map[string]any{
 		"rule": testRule(),
 		"event": map[string]any{
-			"kind": "thing",
+			"kind": "things.v1.values",
 			"message": map[string]any{
-				"thing":     map[string]any{"id": "r1", "type": "Room", "name": "Rum", "tenant": "t"},
-				"tenant":    "t",
-				"timestamp": "2024-01-01T00:00:00Z",
+				"thingId": "r1", "tenant": "t", "thingType": "room",
+				"thing":  map[string]any{"thingId": "r1", "name": "Rum"},
+				"values": []any{},
 			},
 		},
 	}

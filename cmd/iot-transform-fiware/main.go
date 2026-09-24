@@ -73,7 +73,6 @@ func defaultFlags() flagMap {
 }
 
 const (
-	ThingUpdatedTopic    string = "thing.updated"
 	MessageAcceptedTopic string = "message.accepted"
 	// ThingValuesV1Topic bär versionerade värdesevent (things.v1.values).
 	ThingValuesV1Topic string = transform.EventThingsV1Values
@@ -206,10 +205,11 @@ func registerHandlers(svcCfg *appConfig) error {
 	cbClientFn := svcCfg.cbClientFn
 
 	// things (snapshot-providern levererar aktuell motor per meddelande;
-	// API-skrivningar och polling-synk byter snapshot atomärt)
-	if err := messenger.RegisterTopicMessageHandler(ThingUpdatedTopic, things.NewDynamicThingTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
-		return fmt.Errorf("failed to register dynamic thing handler: %w", err)
-	}
+	// API-skrivningar och polling-synk byter snapshot atomärt).
+	// thing.updated konsumeras inte längre (PLAN001 steg 7.6): legacy
+	// thing-reglerna är ersatta av things-v2-regler. Topicen publiceras
+	// fortfarande för andra konsumenter (t.ex. iot-events) — endast denna
+	// tjänsts prenumeration är borttagen.
 
 	// Versionerade värdesevent (E7): samma transformator, egen prenumeration.
 	// Gatas av THINGS_V1_VALUES (exakt "true"); av som default så att

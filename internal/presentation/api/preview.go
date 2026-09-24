@@ -161,23 +161,6 @@ func entityProperties(id, typeName string, props []entities.EntityDecoratorFunc)
 func previewTransform(ctx context.Context, req previewRequest) ([]transform.EntityWrite, bool, int, error) {
 	engine := transform.NewEngine([]transform.Rule{req.Rule})
 	switch req.Event.Kind {
-	case string(transform.KindThing):
-		th, err := things.ThingFromJSON(req.Event.Message)
-		if err != nil {
-			return nil, false, 0, fmt.Errorf("%w: invalid thing envelope: %v", errValidation, err)
-		}
-		matched := engine.Matched(th)
-		if !matched {
-			return nil, false, 1, nil
-		}
-		writes, err := engine.Transform(th)
-		if errors.Is(err, transform.ErrNoMatchingRule) {
-			return nil, false, 1, nil
-		}
-		if err != nil {
-			return nil, true, 1, err
-		}
-		return writes, true, 1, nil
 	case transform.EventThingsV1Values:
 		th, err := things.ThingValuesFromJSON(req.Event.Message)
 		if err != nil {
@@ -265,8 +248,8 @@ func previewTransform(ctx context.Context, req previewRequest) ([]transform.Enti
 		}
 		return writes, true, 1, nil
 	default:
-		return nil, false, 0, fmt.Errorf("%w: event.kind must be %q, %q, %q, %q or %q", errValidation,
-			transform.KindMeasurement, transform.KindThing, transform.EventThingsV1Values,
+		return nil, false, 0, fmt.Errorf("%w: event.kind must be %q, %q, %q or %q", errValidation,
+			transform.KindMeasurement, transform.EventThingsV1Values,
 			transform.EventThingsV1Relations, transform.EventThingsV1Lifecycle)
 	}
 }

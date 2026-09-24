@@ -7,18 +7,23 @@ import (
 	"github.com/matryer/is"
 )
 
-// HARM-003: locks the subscribed topic names. The thing.updated envelope
-// shape is produced by iot-things (pkg/types.ThingUpdated) and the
-// message.accepted envelope by iot-core (pkg/messaging/events); renames
-// require a compatibility/migration plan and producer-side tests.
+// HARM-003: locks the subscribed topic names. The message.accepted envelope
+// is produced by iot-core (pkg/messaging/events); things.v1.* envelopes by
+// iot-things-v2 (pkg/types). Renames require a compatibility/migration plan
+// and producer-side tests. thing.updated publiceras fortfarande (andra
+// konsumenter, t.ex. iot-events) men konsumeras inte längre av denna tjänst
+// (PLAN001 steg 7.6).
 func TestSubscribedTopicContracts(t *testing.T) {
 	is := is.New(t)
 
-	is.Equal(ThingUpdatedTopic, "thing.updated")
 	is.Equal(MessageAcceptedTopic, "message.accepted")
+	is.Equal(ThingValuesV1Topic, "things.v1.values")
+	is.Equal(ThingRelationsV1Topic, "things.v1.relations")
+	is.Equal(ThingLifecycleV1Topic, "things.v1.lifecycle")
 }
 
-// Den dynamiska motorn registrerar en handler per topic (sak + mätvärde).
+// Motorn registrerar en handler per topic (mätvärde; versionerade
+// sakhändelser endast under THINGS_V1_VALUES-flaggan, här av).
 func TestRegisterHandlersRegistersDynamicHandlers(t *testing.T) {
 	is := is.New(t)
 
@@ -31,13 +36,12 @@ func TestRegisterHandlersRegistersDynamicHandlers(t *testing.T) {
 	is.NoErr(registerHandlers(&appConfig{messenger: messenger}))
 
 	plain := messenger.RegisterTopicMessageHandlerCalls()
-	is.Equal(len(plain), 2)
+	is.Equal(len(plain), 1)
 
 	topics := map[string]bool{}
 	for _, c := range plain {
 		topics[c.RoutingKey] = true
 	}
-	is.True(topics[ThingUpdatedTopic])
 	is.True(topics[MessageAcceptedTopic])
 
 	is.Equal(len(messenger.RegisterTopicMessageHandlerWithFilterCalls()), 0)

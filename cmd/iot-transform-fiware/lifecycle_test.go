@@ -21,20 +21,20 @@ import (
 	"github.com/matryer/is"
 )
 
-// containerHandler bygger den dynamiska container-handlern för OAuth-testerna.
+// containerHandler bygger värdesevent-handlern för OAuth-testerna (en
+// wastebin-regel mot things.v1.values; thing.updated-vägen är borttagen).
 func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
 	rules := []transform.Rule{{
-		Match: transform.Match{Kind: transform.KindThing, Type: "Container"},
+		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "wastebin"},
 		Entities: []transform.Entity{{
 			ID: "urn:ngsi-ld:WasteContainer:{{nameOrID}}", Type: "WasteContainer",
 			Properties: []transform.Property{
-				{Target: "fillingLevel", Type: transform.TypeNumber, Source: transform.Source{Field: "percent"}},
-				{Target: "location", Type: transform.TypeGeo, Source: transform.Source{Field: "location"}},
+				{Target: "fillingLevel", Type: transform.TypeNumber, Source: transform.Source{Field: "values.fillRate.value"}, Required: true},
 			},
 		}},
 	}}
 
-	return things.NewDynamicThingTopicMessageHandler(cbClientFn, staticThingsProvider{appthings.NewDynamicThingTransformer(rules)}, "")
+	return things.NewThingValuesTopicMessageHandler(cbClientFn, staticThingsProvider{appthings.NewDynamicThingTransformer(rules)}, "")
 }
 
 // staticThingsProvider levererar en fast motor till handler-tester.
@@ -221,29 +221,29 @@ func containerMessage(t *testing.T) *messaging.IncomingTopicMessageMock {
 	return &messaging.IncomingTopicMessageMock{
 		BodyFunc: func() []byte { return []byte(containerEnvelopeJson) },
 		ContentTypeFunc: func() string {
-			return "application/vnd.diwise.container+json"
+			return "application/vnd.diwise.things.v1+json"
 		},
-		TopicNameFunc: func() string { return ThingUpdatedTopic },
+		TopicNameFunc: func() string { return ThingValuesV1Topic },
 	}
 }
 
 const containerEnvelopeJson = `{
-	"id": "2bf440f4",
-	"type": "Container",
-	"thing": {
-		"id": "2bf440f4",
-		"type": "Container",
-		"subType": "WasteContainer",
-		"name": "Soptunnor.X",
-		"alternativeName": "Soptunnor.XY",
-		"location": {
-			"latitude": 62,
-			"longitude": 17
-		},
-		"observedAt": "2024-11-19T10:49:59Z",
-		"percent": 56,
-		"tenant": "default"
-	},
+	"schema": "v1",
+	"eventId": "v1/default/bin-1/m1",
 	"tenant": "default",
-	"timestamp": "2024-11-19T10:49:59.748823813Z"
+	"thingId": "bin-1",
+	"thingType": "wastebin",
+	"thingTypeVersion": "1",
+	"configRevision": 2,
+	"publishedAt": "2024-11-19T10:49:59Z",
+	"thing": {
+		"thingId": "bin-1",
+		"name": "Soptunna 1",
+		"category": "wastebin"
+	},
+	"values": [
+		{"thingId": "bin-1", "tenant": "default", "propertyId": "fillRate",
+		 "value": 56.0, "quality": "ok", "unit": "%",
+		 "source": "s/3428/17", "observedAt": "2024-11-19T10:49:59Z"}
+	]
 }`
