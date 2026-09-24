@@ -51,6 +51,9 @@ type MatchInfo struct {
 	// skiljer bortkoppling från koppling (likhetsmatchning).
 	Relation        string
 	RelationRemoved bool
+	// Lifecycle avgränsar livscykelregler till en händelsetyp
+	// (likhetsmatchning, ingen score).
+	Lifecycle string
 }
 
 // resolvedValue är resultatet av en värdekälleuppslagning.
@@ -64,7 +67,8 @@ type resolvedValue struct {
 // EntityWrite beskriver en entitet som ska skrivas, utan att utföra
 // skrivningen. Presentationen exekverar skrivningarna i listordning.
 // RemoveAttributes rensar namngivna attribut (PATCH-null) i stället för
-// att skriva värden; Props är då tom.
+// att skriva värden; Delete raderar hela entiteten (idempotent).
+// Props är då tomma.
 type EntityWrite struct {
 	EntityID         string
 	TypeName         string
@@ -72,6 +76,7 @@ type EntityWrite struct {
 	Create           bool
 	Props            []entities.EntityDecoratorFunc
 	RemoveAttributes []string
+	Delete           bool
 }
 
 // Engine kör den konfigurationsstyrda mappningen.
@@ -116,6 +121,17 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		typeName, err := renderTemplate(ent.Type, in, ids)
 		if err != nil {
 			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+		}
+
+		// delete-entiteter raderar hela entiteten; properties byggs aldrig.
+		if ent.Delete {
+			writes = append(writes, EntityWrite{
+				EntityID: id,
+				TypeName: typeName,
+				Context:  ent.Context,
+				Delete:   true,
+			})
+			continue
 		}
 
 		// removeAttributes-entiteter rensar namngivna attribut i stället
@@ -230,6 +246,9 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 		return false
 	}
 	if mm.RelationRemoved != info.RelationRemoved {
+		return false
+	}
+	if mm.Lifecycle != info.Lifecycle {
 		return false
 	}
 	return true

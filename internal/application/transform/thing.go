@@ -31,6 +31,10 @@ type Thing struct {
 	Relation        string
 	RelationRemoved bool
 
+	// Lifecycle bär livscykeltypen (created/updated/deleted) för
+	// things.v1.lifecycle-händelser; tomt för övriga källor.
+	Lifecycle string
+
 	ObservedAt time.Time
 	Fields     map[string]any
 }
@@ -60,6 +64,7 @@ func (t Thing) MatchInfo() MatchInfo {
 		Event:           t.Event,
 		Relation:        t.Relation,
 		RelationRemoved: t.RelationRemoved,
+		Lifecycle:       t.Lifecycle,
 	}
 }
 

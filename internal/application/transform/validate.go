@@ -58,6 +58,14 @@ func (r Rule) validate() error {
 		return err
 	}
 
+	if err := r.Match.validateLifecycleMatch(); err != nil {
+		return err
+	}
+
+	if err := r.validateDeleteMatch(); err != nil {
+		return err
+	}
+
 	if len(r.Entities) == 0 {
 		return errors.New("rule must declare at least one entity")
 	}
@@ -114,7 +122,7 @@ func (r Rule) validateReferences() error {
 // att en felskrivning inte tyst gör att regeln aldrig matchar.
 func (mm Match) validateForKind() error {
 	// Kända händelsekällor för versionerade event. Tomt = ursprunglig källa.
-	if mm.Event != "" && mm.Event != EventThingsV1Values && mm.Event != EventThingsV1Relations {
+	if mm.Event != "" && mm.Event != EventThingsV1Values && mm.Event != EventThingsV1Relations && mm.Event != EventThingsV1Lifecycle {
 		return fmt.Errorf("unknown match.event %q", mm.Event)
 	}
 	switch mm.Kind {
@@ -128,6 +136,9 @@ func (mm Match) validateForKind() error {
 		if mm.Relation != "" || mm.RelationRemoved {
 			return errors.New("match.relation/relationRemoved is only valid for things")
 		}
+		if mm.Lifecycle != "" {
+			return errors.New("match.lifecycle is only valid for things")
+		}
 	case KindThing:
 		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
 			return errors.New("match.port/sensorType/object/resource/env is only valid for measurements")
@@ -137,6 +148,9 @@ func (mm Match) validateForKind() error {
 		}
 		if mm.RelationRemoved && mm.Relation == "" {
 			return errors.New("match.relationRemoved requires match.relation")
+		}
+		if mm.Lifecycle != "" && mm.Event != EventThingsV1Lifecycle {
+			return errors.New("match.lifecycle requires event things.v1.lifecycle")
 		}
 	}
 	return nil
@@ -151,6 +165,36 @@ func (mm Match) validateRelationsMatch() error {
 		if mm.Type == "" && mm.SubType == "" {
 			return errors.New("match.type/subType is required for relations rules")
 		}
+	}
+	return nil
+}
+
+// validateLifecycleMatch avvisar okända livscykeltyper: endast
+// created/updated/deleted finns i producentens kontrakt.
+func (mm Match) validateLifecycleMatch() error {
+	if mm.Kind == KindThing && mm.Event == EventThingsV1Lifecycle && mm.Lifecycle != "" {
+		switch LifecycleKind(mm.Lifecycle) {
+		case LifecycleCreated, LifecycleUpdated, LifecycleDeleted:
+		default:
+			return fmt.Errorf("unknown match.lifecycle %q (want created, updated or deleted)", mm.Lifecycle)
+		}
+	}
+	return nil
+}
+
+// validateDeleteMatch kräver match.lifecycle: deleted för delete-regler:
+// radering är en deleted-mekanik och får aldrig aktiveras av
+// created/updated/värdes/relations-händelser. Korskontrollen ligger här
+// (inte i Entity.validate) eftersom den behöver både Match och Entities.
+func (r Rule) validateDeleteMatch() error {
+	for _, e := range r.Entities {
+		if !e.Delete {
+			continue
+		}
+		if r.Match.Kind == KindThing && r.Match.Event == EventThingsV1Lifecycle && r.Match.Lifecycle == string(LifecycleDeleted) {
+			continue
+		}
+		return errors.New("delete requires match.lifecycle: deleted")
 	}
 	return nil
 }
@@ -181,7 +225,24 @@ func (e Entity) validate() error {
 // validateForRule kontrollerar entitet mot regelns kind: removeAttributes
 // är en thing-mekanik (attributrensning) som saknar mening för mätvärden,
 // kräver namngivna attribut och utesluter värdeskrivning i samma entitet.
+// Delete är en deleted-mekanik med samma exklusivitet (extend i
+// validateDeleteMatch kräver dessutom match.lifecycle: deleted).
 func (e Entity) validateForRule(kind Kind) error {
+	if e.Delete {
+		if kind != KindThing {
+			return errors.New("delete is only valid for things")
+		}
+		if e.Create {
+			return errors.New("delete cannot be combined with create")
+		}
+		if len(e.RemoveAttributes) > 0 {
+			return errors.New("delete cannot be combined with removeAttributes")
+		}
+		if len(e.Properties) > 0 {
+			return errors.New("delete cannot be combined with properties")
+		}
+		return nil
+	}
 	if len(e.RemoveAttributes) == 0 {
 		return nil
 	}

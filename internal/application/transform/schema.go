@@ -20,6 +20,20 @@ const EventThingsV1Values = "things.v1.values"
 // (things.v1.relations) i match.event och motorns indata.
 const EventThingsV1Relations = "things.v1.relations"
 
+// EventThingsV1Lifecycle taggar versionerade livscykelhändelser
+// (things.v1.lifecycle) i match.event och motorns indata.
+const EventThingsV1Lifecycle = "things.v1.lifecycle"
+
+// LifecycleKind avgränsar livscykelregler till en händelsetyp
+// (created/updated/deleted) — samma ord som producentens kontrakt.
+type LifecycleKind string
+
+const (
+	LifecycleCreated LifecycleKind = "created"
+	LifecycleUpdated LifecycleKind = "updated"
+	LifecycleDeleted LifecycleKind = "deleted"
+)
+
 // PropertyType är den NGSI-LD-typ en property skrivs som.
 type PropertyType string
 
@@ -89,6 +103,11 @@ type Match struct {
 	// RelationRemoved skiljer bortkoppling (true) från koppling (osatt).
 	// Jämförs med likhet: osatt matchar endast set-händelser.
 	RelationRemoved bool `yaml:"relationRemoved,omitempty" json:"relationRemoved,omitempty"`
+	// Lifecycle avgränsar livscykelregler till en händelsetyp (created,
+	// updated, deleted); endast giltig med event things.v1.lifecycle.
+	// Jämförs som hårt filter utan score-påverkan, så livscykelregler
+	// aldrig korsaktiveras av värdes- eller relationshändelser.
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 }
 
 // Entity beskriver en NGSI-LD-entitet som ska skrivas.
@@ -100,9 +119,13 @@ type Entity struct {
 	Create     bool       `yaml:"create,omitempty" json:"create,omitempty"`
 	Properties []Property `yaml:"properties" json:"properties"`
 	// RemoveAttributes rensar namngivna attribut via PATCH-null i stället
-	// för att skriva värden; ömsesidigt uteslutande med create och med
-	// icke-tomma properties.
+	// för att skriva värden; ömsesidigt uteslutande med create, delete och
+	// med icke-tomma properties.
 	RemoveAttributes []string `yaml:"removeAttributes,omitempty" json:"removeAttributes,omitempty"`
+	// Delete raderar hela NGSI-LD-entiteten (idempotent, 404 = OK);
+	// kräver match.lifecycle: deleted; ömsesidigt uteslutande med create,
+	// removeAttributes och icke-tomma properties.
+	Delete bool `yaml:"delete,omitempty" json:"delete,omitempty"`
 }
 
 // Source beskriver var ett värde hämtas. Exakt en källa ska vara satt.
