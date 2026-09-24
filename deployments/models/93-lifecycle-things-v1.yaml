@@ -1,0 +1,27 @@
+# Livscykelhändelser (things.v1.lifecycle) mappade med samma motor som
+# värdesevent. Delete-regler raderar NGSI-LD-entiteten idempotent (404 = OK)
+# med samma id/typ-mallar som 90-92, så att borttagna saker inte lämnar
+# föräldralösa entiteter hos brokern. Reglerna avgränsas med match.event +
+# match.lifecycle: deleted + match.type (en regel per mall, samma mönster
+# som 90-92 — utan typ skulle första regeln vinna alla deletes), så
+# created/updated/värdes/relations-händelser aktiverar dem aldrig.
+# properties: [] krävs av OpenAPI-kontraktet.
+rules:
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: room }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}"
+        type: IndoorEnvironmentObserved
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: wastebin }
+    entities:
+      - id: "urn:ngsi-ld:WasteContainer:{{nameOrID}}"
+        type: WasteContainer
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{nameOrID}}"
+        type: AgriGreenhouse
+        properties: []
+        delete: true

@@ -159,11 +159,11 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `RABBITMQ_PASS` | `bitnami` |  |
 | `RABBITMQ_DISABLED` | `false` |  |
 | `RABBITMQ_INIT_TIMEOUT` | `10` | Sekunder |
-| `THINGS_V1_VALUES` | `false` | Endast exakt `true` prenumererar pa versionerade sakhandelser (`things.v1.values` och `things.v1.relations`, E7). Samma motor/modeller; handelsekallan (`match.event`) skiljer reglerna at |
+| `THINGS_V1_VALUES` | `false` | Endast exakt `true` prenumererar pa versionerade sakhandelser (`things.v1.values`, `things.v1.relations` och `things.v1.lifecycle`, E7). Samma motor/modeller; handelsekallan (`match.event`) skiljer reglerna at |
 
 Health paths pa kontrollservern (`CONTROL_PORT`): `/health`, `/healthz`, `/livez`, `/readyz`, `/readyz/{check}`.
 
-Konsumerar `thing.updated` och `message.accepted` (en handler per topic; matchning sker pa innehall) samt, nar `THINGS_V1_VALUES=true`, `things.v1.values` (versionerade vardesevent med `values.<egenskap>.*`-vagar; regler avgransas med `match.event: things.v1.values`, se `deployments/models/90-*.yaml`) och `things.v1.relations` (partOf set/removed med from/to-descriptors; regler avgransas med `match.event` + `match.relation`/`match.relationRemoved`, se `deployments/models/94-relations-things-v1.yaml`). Ingen `message.transformed` publiceras i nulaget.
+Konsumerar `thing.updated` och `message.accepted` (en handler per topic; matchning sker pa innehall) samt, nar `THINGS_V1_VALUES=true`, `things.v1.values` (versionerade vardesevent med `values.<egenskap>.*`-vagar; regler avgransas med `match.event: things.v1.values`, se `deployments/models/90-*.yaml`), `things.v1.relations` (partOf set/removed med from/to-descriptors; regler avgransas med `match.event` + `match.relation`/`match.relationRemoved`, se `deployments/models/94-relations-things-v1.yaml`) och `things.v1.lifecycle` (created/updated/deleted; delete-regler raderar entiteten idempotent med `match.lifecycle: deleted`, se `deployments/models/93-lifecycle-things-v1.yaml`). Ingen `message.transformed` publiceras i nulaget.
 
 Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) och den publika porten (`EXPOSE 8080`). Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober och den publika porten for regel-API:t.
 

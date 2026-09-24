@@ -534,6 +534,54 @@ func TestPreviewRelations(t *testing.T) {
 	is.Equal("merge", out.Entities[0].Operation)
 }
 
+func TestPreviewLifecycle(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rule := map[string]any{
+		"match": map[string]any{"kind": "thing", "event": "things.v1.lifecycle", "lifecycle": "deleted"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:room:{{nameOrID}}",
+			"type": "IndoorEnvironmentObserved", "properties": []any{}, "delete": true,
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "things.v1.lifecycle",
+			"message": map[string]any{
+				"eventId": "v1/t/room-a/lifecycle/deleted/4", "tenant": "t",
+				"thingId": "room-a", "kind": "deleted",
+				"thingType": "room", "thingTypeVersion": "1",
+				"configRevision": 4, "changedAt": "2026-09-17T12:00:00Z",
+				"thing": map[string]any{"thingId": "room-a", "name": "Room A"},
+			},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(1, len(out.Entities))
+	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room:Room:A", out.Entities[0].ID)
+	is.Equal("delete", out.Entities[0].Operation)
+	// delete-svar bär tomt properties-objekt (aldrig null mot kontraktet).
+	if out.Entities[0].Properties == nil {
+		t.Fatal("delete properties must be {}, not null")
+	}
+	is.Equal(0, len(out.Entities[0].Properties))
+
+	// created-händelse aktiverar aldrig delete-regeln.
+	body["event"].(map[string]any)["message"].(map[string]any)["kind"] = "created"
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(!out.Matched)
+	is.Equal(len(out.Entities), 0)
+}
+
 func TestPreviewMeasurement(t *testing.T) {
 	is := is.New(t)
 	m := pgTestModels(t)

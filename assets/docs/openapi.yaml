@@ -148,8 +148,8 @@ paths:
       summary: Torr körning av inline-regel mot exempelhändelse (kräver transforms.write)
       description: >-
         Kör regeln mot en mätvärdes- ({pack, timestamp} + valfri sensorType
-        som kringgår device-management) eller sakhändelse (thing.updated-
-        eller things.v1.values-kuvert). Mätvärdespack delas i
+        som kringgår device-management) eller sakhändelse (thing.updated-,
+        things.v1.values-, things.v1.relations- eller things.v1.lifecycle-kuvert). Mätvärdespack delas i
         enobservations-meddelanden med samma normalisering som produktion
         (TF-06). Aldrig broker-kontakt, aldrig persistens. Ingen matchning
         ger matched:false med tom lista; matchad men undertryckt regel
@@ -170,7 +170,7 @@ paths:
                   properties:
                     kind:
                       type: string
-                      enum: [measurement, thing, things.v1.values, things.v1.relations]
+                      enum: [measurement, thing, things.v1.values, things.v1.relations, things.v1.lifecycle]
                     message:
                       type: object
                       description: Rått kuvert (mätarmeddelande eller sakuvert).
@@ -200,7 +200,7 @@ paths:
                         properties:
                           type: object
                         context: { type: string, description: Entitetens JSON-LD-context (tom betyder deployment-default) }
-                        operation: { type: string, enum: [create, merge, remove], description: Skrivsemantik mot brokern }
+                        operation: { type: string, enum: [create, merge, remove, delete], description: Skrivsemantik mot brokern }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 components:
@@ -281,9 +281,10 @@ components:
         type: { type: string }
         subType: { type: string }
         tenant: { type: string, description: Ägarskap för API-administration (tom = global seed-regel) }
-        event: { type: string, description: Händelsekälla för things-regler (t.ex. things.v1.values, things.v1.relations); tom = ursprunglig källa }
+        event: { type: string, description: Händelsekälla för things-regler (t.ex. things.v1.values, things.v1.relations, things.v1.lifecycle); tom = ursprunglig källa }
         relation: { type: string, description: Relationsregler avgränsas till relationstyp (t.ex. partOf); endast med event things.v1.relations och match.type/subType }
         relationRemoved: { type: boolean, description: Bortkoppling (true) eller koppling (osatt); endast med match.relation }
+        lifecycle: { type: string, description: Livscykelregler avgränsas till händelsetyp (created, updated, deleted); endast med event things.v1.lifecycle }
     Entity:
       type: object
       required: [id, type, properties]
@@ -294,6 +295,7 @@ components:
         context: { type: string }
         create: { type: boolean }
         removeAttributes: { type: array, items: { type: string }, description: Rensar namngivna attribut (PATCH-null) i stället för att skriva värden; endast thing-regler }
+        delete: { type: boolean, description: Raderar hela entiteten (idempotent, 404 = OK); kräver match.lifecycle deleted; endast thing-regler }
         properties:
           type: array
           items:
