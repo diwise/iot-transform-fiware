@@ -85,7 +85,7 @@ func pgTestRules(t *testing.T) *PgStore {
 
 func testRule() transform.Rule {
 	return transform.Rule{
-		Match: transform.Match{Kind: transform.KindThing, Type: "room"},
+		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
 		Entities: []transform.Entity{{
 			ID:   "urn:ngsi-ld:Room:{{nameOrID}}",
 			Type: "Room",

@@ -147,6 +147,12 @@ func (mm Match) validateForKind() error {
 		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
 			return errors.New("match.port/sensorType/object/resource/env is only valid for measurements")
 		}
+		// Legacy thing-regler (tom event-tagg) är ersatta av things-v2-regler
+		// (PLAN001 steg 7.7): tomma thing-regler matchar aldrig och blir
+		// tyst dödvikt — fail fast i stället.
+		if mm.Event == "" {
+			return errors.New("match.event is required for things")
+		}
 		if (mm.Relation != "" || mm.RelationRemoved) && mm.Event != EventThingsV1Relations {
 			return errors.New("match.relation/relationRemoved requires event things.v1.relations")
 		}

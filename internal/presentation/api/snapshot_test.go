@@ -113,7 +113,8 @@ func (s *stubRuleStore) RuleVersion() (int64, error) {
 func stubThing() transform.Thing {
 	return transform.Thing{
 		ID: "r1", Type: "Room", TypeName: "Room", NameOrID: "r1",
-		Tenant: "t", Fields: map[string]any{"name": "n"},
+		Tenant: "t", Event: transform.EventThingsV1Values,
+		Fields: map[string]any{"name": "n"},
 	}
 }
 

@@ -80,7 +80,7 @@ func pgTestModels(t *testing.T) *Models {
 
 func testRule() transform.Rule {
 	return transform.Rule{
-		Match: transform.Match{Kind: transform.KindThing, Type: "Room", Tenant: "t"},
+		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "Room", Tenant: "t"},
 		Entities: []transform.Entity{{
 			ID:   "urn:ngsi-ld:Room:{{nameOrID}}",
 			Type: "Room",
@@ -324,7 +324,8 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 
 	th := transform.Thing{
 		ID: "r1", Type: "Room", TypeName: "Room", NameOrID: "r1",
-		Tenant: "t", Fields: map[string]any{"name": "n"},
+		Tenant: "t", Event: transform.EventThingsV1Values,
+		Fields: map[string]any{"name": "n"},
 	}
 	writes, err := m.Snapshot().Things.Transform(th)
 	is.NoErr(err)

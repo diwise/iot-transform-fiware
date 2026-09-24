@@ -7,7 +7,11 @@ import (
 )
 
 func kindRule(kind Kind, src Source) Rule {
-	return Rule{Match: Match{Kind: kind}, Entities: []Entity{{
+	match := Match{Kind: kind}
+	if kind == KindThing {
+		match.Event = EventThingsV1Values
+	}
+	return Rule{Match: match, Entities: []Entity{{
 		ID: "urn:ngsi-ld:X:x", Type: "X",
 		Properties: []Property{{Target: "v", Type: TypeNumber, Source: src}},
 	}}}
@@ -100,7 +104,11 @@ func TestLanguageMapSourceKinds(t *testing.T) {
 	is := is.New(t)
 
 	lm := func(kind Kind, src Source) Rule {
-		return Rule{Match: Match{Kind: kind}, Entities: []Entity{{
+		match := Match{Kind: kind}
+		if kind == KindThing {
+			match.Event = EventThingsV1Values
+		}
+		return Rule{Match: match, Entities: []Entity{{
 			ID: "urn:ngsi-ld:X:x", Type: "X",
 			Properties: []Property{{Target: "name", Type: TypeLanguageMap, Source: src}},
 		}}}

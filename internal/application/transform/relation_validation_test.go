@@ -15,7 +15,7 @@ func relationRef(id, value string) Entity {
 func TestValidateAllowsForwardReferenceToNonCreatedEntity(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{
 		relationRef("urn:ngsi-ld:Observer:a", "{{entities.target.id}}"),
 		{Name: "target", ID: "urn:ngsi-ld:Target:b", Type: "Target"},
 	}}
@@ -58,7 +58,7 @@ func TestValidateRejectsUnknownVariableInFirstPresent(t *testing.T) {
 func TestValidateAcceptsFieldAndFirstPresent(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observer:{{firstPresent(field:current.ref, nameOrID)}}", Type: "Observer",
 		Properties: []Property{{
 			Target: "refTarget", Type: TypeRelationship,

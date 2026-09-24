@@ -8,7 +8,7 @@ import (
 )
 
 func languageMapRule(src Source) Rule {
-	return Rule{Match: Match{Kind: KindThing}, Entities: []Entity{{
+	return Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:POI:x", Type: "PointOfInterest",
 		Properties: []Property{{Target: "name", Type: TypeLanguageMap, Source: src}},
 	}}}
@@ -18,6 +18,7 @@ func languageMapThing() Thing {
 	return Thing{
 		ID: "poi-1", Type: "pointofinterest", Tenant: "t",
 		TypeName: "pointofinterest", NameOrID: "poi-1",
+		Event: EventThingsV1Values,
 		Fields: map[string]any{
 			"metadata": map[string]any{"sv": "Strand", "en": "Beach"},
 			"empty":    map[string]any{},

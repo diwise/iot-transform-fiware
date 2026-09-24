@@ -75,7 +75,7 @@ func TestValidateRejectsKindSpecificMatchFields(t *testing.T) {
 
 	// device är tillåtet för båda enligt planen (entiteten använder en
 	// kind-neutral const-källa så att endast match-fältet prövas).
-	thingWithDevice := Rule{Match: Match{Kind: KindThing, Device: "dev-1"}, Entities: []Entity{{
+	thingWithDevice := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Device: "dev-1"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Thing:x", Type: "Thing",
 		Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Const: "x"}}},
 	}}}
