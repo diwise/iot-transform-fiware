@@ -307,7 +307,7 @@ components:
         target: { type: string }
         type:
           type: string
-          enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured]
+          enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured, LanguageMap]
         unit: { type: string }
         observedAt:
           type: string

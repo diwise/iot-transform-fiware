@@ -47,6 +47,10 @@ const (
 	TypeNumberArray  PropertyType = "NumberArray"
 	TypeTextArray    PropertyType = "TextArray"
 	TypeStructured   PropertyType = "Structured"
+	// TypeLanguageMap skriver flerspråkiga texter som NGSI-LD
+	// LanguageProperty ({type, languageMap}). Källa: field: mot strängmapp
+	// eller const: med mapp; tom mapp = saknad källa.
+	TypeLanguageMap PropertyType = "LanguageMap"
 )
 
 // ObservedAt anger varifrån en property hämtar sin observationstid.

@@ -19,6 +19,7 @@ var validPropertyTypes = map[PropertyType]bool{
 	TypeNumberArray:  true,
 	TypeTextArray:    true,
 	TypeStructured:   true,
+	TypeLanguageMap:  true,
 }
 
 // Validate kör samtliga valideringar på en ordnad regellista.
@@ -270,6 +271,17 @@ func (p Property) validate() error {
 
 	if !validPropertyTypes[p.Type] {
 		return fmt.Errorf("unknown property type %q", p.Type)
+	}
+
+	// LanguageMap tar endast råa språkmappor (field:/const:) — transform
+	// och derive avvisas i v1 (ingen definierad semantik över mappar).
+	if p.Type == TypeLanguageMap {
+		if len(p.Transform) > 0 || p.Derive != nil {
+			return errors.New("transform/derive is not supported for languageMap")
+		}
+		if p.Field == "" && p.Const == nil {
+			return errors.New("languageMap requires field or const")
+		}
 	}
 
 	if p.ObservedAt != "" && !strings.HasPrefix(string(p.ObservedAt), "field:") && !validObservedAt[p.ObservedAt] {

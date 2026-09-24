@@ -27,6 +27,10 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 		return buildStructured(p, in, ids)
 	}
 
+	if p.Type == TypeLanguageMap {
+		return buildLanguageMap(p, in)
+	}
+
 	if p.Const != nil || p.Value != "" {
 		raw := p.Const
 		if p.Value != "" {
@@ -349,6 +353,73 @@ type genericProperty struct {
 func (g *genericProperty) Type() string { return g.Type_ }
 
 func (g *genericProperty) Value() any { return g.Value_ }
+
+// languageMapProperty skriver flerspråkiga texter som NGSI-LD
+// LanguageProperty. Biblioteket saknar konstruktor; interfacet kräver bara
+// Type()/Value(), så structen marshallas korrekt.
+type languageMapProperty struct {
+	Type_       string            `json:"type"`
+	LanguageMap map[string]string `json:"languageMap"`
+}
+
+func (l *languageMapProperty) Type() string { return l.Type_ }
+
+func (l *languageMapProperty) Value() any { return l.LanguageMap }
+
+// buildLanguageMap bygger en LanguageProperty från field: (strängmapp) eller
+// const: (mapp). Tom mapp = saknad källa (skip/required-semantik som
+// vanligt); fel typ ger fel, inte tyst skip.
+func buildLanguageMap(p Property, in Input) (entities.EntityDecoratorFunc, error) {
+	var raw any
+	switch {
+	case p.Const != nil:
+		raw = p.Const
+	case p.Field != "":
+		v, ok := in.ResolvePath(p.Field)
+		if !ok {
+			if p.Required {
+				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+			}
+			return nil, nil
+		}
+		raw = v
+	default:
+		return nil, fmt.Errorf("property %s: languageMap requires field or const", p.Target)
+	}
+
+	m, ok := toLanguageMap(raw)
+	if !ok {
+		return nil, fmt.Errorf("property %s: expected a language map", p.Target)
+	}
+	if len(m) == 0 {
+		if p.Required {
+			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+		}
+		return nil, nil
+	}
+
+	return entities.P(p.Target, &languageMapProperty{Type_: "LanguageProperty", LanguageMap: m}), nil
+}
+
+// toLanguageMap normaliserar en strängmapp (från JSON-avkodning eller YAML
+// const:). Icke-strängvärden avvisas.
+func toLanguageMap(v any) (map[string]string, bool) {
+	switch x := v.(type) {
+	case map[string]string:
+		return x, true
+	case map[string]any:
+		out := make(map[string]string, len(x))
+		for k, e := range x {
+			s, ok := e.(string)
+			if !ok {
+				return nil, false
+			}
+			out[k] = s
+		}
+		return out, true
+	}
+	return nil, false
+}
 
 // genericGeoProperty täcker GeoProperty-geometrier biblioteket saknar
 // konstruktorer för (allt utom Point via latlon-vägen): samma value-form
