@@ -78,6 +78,9 @@ func (r Rule) validate() error {
 		if err := e.validateForRule(r.Match.Kind); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
 		}
+		if err := e.validateSourcesForKind(r.Match.Kind); err != nil {
+			return fmt.Errorf("entity %d: %w", i, err)
+		}
 	}
 
 	return r.validateReferences()
@@ -220,6 +223,65 @@ func (e Entity) validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateSourcesForKind avvisar kind-fel källor: mätvärdeskällor
+// (resource/object/env/name) på thing-regler och sakällor (field/ref) på
+// mätvärdesregler skippas i dag tyst i motorn (Resolve hittar inget) —
+// fail fast i stället. Rekursiv över Derive.Of och subproperties, som alla
+// går via in.Resolve.
+func (e Entity) validateSourcesForKind(kind Kind) error {
+	for i, p := range e.Properties {
+		if err := p.validateSourcesForKind(kind); err != nil {
+			return fmt.Errorf("property %d (%s): %w", i, p.Target, err)
+		}
+	}
+	return nil
+}
+
+func (p Property) validateSourcesForKind(kind Kind) error {
+	if err := validateSourceKind(p.Source, kind); err != nil {
+		return err
+	}
+	if p.Derive != nil {
+		for i, s := range p.Derive.Of {
+			if err := validateSourceKind(s, kind); err != nil {
+				return fmt.Errorf("derive.of %d: %w", i, err)
+			}
+		}
+	}
+	for i, sp := range p.Subproperties {
+		if err := sp.validateSourcesForKind(kind); err != nil {
+			return fmt.Errorf("subproperty %d (%s): %w", i, sp.Target, err)
+		}
+	}
+	return nil
+}
+
+func validateSourceKind(s Source, kind Kind) error {
+	switch kind {
+	case KindThing:
+		if s.Resource != "" {
+			return errors.New("resource is only valid for measurements")
+		}
+		if s.Object != "" {
+			return errors.New("object is only valid for measurements")
+		}
+		if s.Env != "" {
+			return errors.New("env is only valid for measurements")
+		}
+		if s.Name != "" {
+			return errors.New("name is only valid for measurements")
+		}
+	case KindMeasurement:
+		if s.Field != "" {
+			return errors.New("field is only valid for things")
+		}
+		if s.Ref != "" {
+			return errors.New("ref is only valid for things")
+		}
+	}
 	return nil
 }
 

@@ -73,8 +73,12 @@ func TestValidateRejectsKindSpecificMatchFields(t *testing.T) {
 	thingWithObject := Rule{Match: Match{Kind: KindThing, Object: "urn:oma:lwm2m:ext:3303"}, Entities: []Entity{validEntity()}}
 	is.True(Validate([]Rule{thingWithObject}) != nil)
 
-	// device är tillåtet för båda enligt planen
-	thingWithDevice := Rule{Match: Match{Kind: KindThing, Device: "dev-1"}, Entities: []Entity{validEntity()}}
+	// device är tillåtet för båda enligt planen (entiteten använder en
+	// kind-neutral const-källa så att endast match-fältet prövas).
+	thingWithDevice := Rule{Match: Match{Kind: KindThing, Device: "dev-1"}, Entities: []Entity{{
+		ID: "urn:ngsi-ld:Thing:x", Type: "Thing",
+		Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Const: "x"}}},
+	}}}
 	is.NoErr(Validate([]Rule{thingWithDevice}))
 }
 
