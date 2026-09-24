@@ -57,7 +57,7 @@ func NewThingValuesTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return err
 		}
 
-		if err := applyTransformWrites(ctx, cbClient, writes, defaultContext); err != nil {
+		if err := contextbroker.ApplyEntityWrites(ctx, cbClient, writes, defaultContext); err != nil {
 			log.Error("failed to write entity", "err", err.Error())
 			return err
 		}

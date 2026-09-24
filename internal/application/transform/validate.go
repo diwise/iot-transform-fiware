@@ -54,12 +54,19 @@ func (r Rule) validate() error {
 		return err
 	}
 
+	if err := r.Match.validateRelationsMatch(); err != nil {
+		return err
+	}
+
 	if len(r.Entities) == 0 {
 		return errors.New("rule must declare at least one entity")
 	}
 
 	for i, e := range r.Entities {
 		if err := e.validate(); err != nil {
+			return fmt.Errorf("entity %d: %w", i, err)
+		}
+		if err := e.validateForRule(r.Match.Kind); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
 		}
 	}
@@ -107,7 +114,7 @@ func (r Rule) validateReferences() error {
 // att en felskrivning inte tyst gör att regeln aldrig matchar.
 func (mm Match) validateForKind() error {
 	// Kända händelsekällor för versionerade event. Tomt = ursprunglig källa.
-	if mm.Event != "" && mm.Event != EventThingsV1Values {
+	if mm.Event != "" && mm.Event != EventThingsV1Values && mm.Event != EventThingsV1Relations {
 		return fmt.Errorf("unknown match.event %q", mm.Event)
 	}
 	switch mm.Kind {
@@ -118,9 +125,31 @@ func (mm Match) validateForKind() error {
 		if mm.Event != "" {
 			return errors.New("match.event is only valid for things")
 		}
+		if mm.Relation != "" || mm.RelationRemoved {
+			return errors.New("match.relation/relationRemoved is only valid for things")
+		}
 	case KindThing:
 		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
 			return errors.New("match.port/sensorType/object/resource/env is only valid for measurements")
+		}
+		if (mm.Relation != "" || mm.RelationRemoved) && mm.Event != EventThingsV1Relations {
+			return errors.New("match.relation/relationRemoved requires event things.v1.relations")
+		}
+		if mm.RelationRemoved && mm.Relation == "" {
+			return errors.New("match.relationRemoved requires match.relation")
+		}
+	}
+	return nil
+}
+
+// validateRelationsMatch kräver typavgränsning på relationsregler: utan
+// match.type/subType skulle regeln träffa alla sakers länkar (även från
+// producenter utan typfält), och value-mallar med saknade fält skulle ge
+// omsändningsloop i stället för skip.
+func (mm Match) validateRelationsMatch() error {
+	if mm.Kind == KindThing && mm.Event == EventThingsV1Relations {
+		if mm.Type == "" && mm.SubType == "" {
+			return errors.New("match.type/subType is required for relations rules")
 		}
 	}
 	return nil
@@ -146,6 +175,30 @@ func (e Entity) validate() error {
 		}
 	}
 
+	return nil
+}
+
+// validateForRule kontrollerar entitet mot regelns kind: removeAttributes
+// är en thing-mekanik (attributrensning) som saknar mening för mätvärden,
+// kräver namngivna attribut och utesluter värdeskrivning i samma entitet.
+func (e Entity) validateForRule(kind Kind) error {
+	if len(e.RemoveAttributes) == 0 {
+		return nil
+	}
+	if kind != KindThing {
+		return errors.New("removeAttributes is only valid for things")
+	}
+	for _, name := range e.RemoveAttributes {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("removeAttributes must name attributes")
+		}
+	}
+	if e.Create {
+		return errors.New("removeAttributes cannot be combined with create")
+	}
+	if len(e.Properties) > 0 {
+		return errors.New("removeAttributes cannot be combined with properties")
+	}
 	return nil
 }
 

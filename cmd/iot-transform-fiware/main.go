@@ -77,6 +77,9 @@ const (
 	MessageAcceptedTopic string = "message.accepted"
 	// ThingValuesV1Topic bär versionerade värdesevent (things.v1.values).
 	ThingValuesV1Topic string = transform.EventThingsV1Values
+	// ThingRelationsV1Topic bär versionerade relationshändelser
+	// (things.v1.relations). Samma cutover-flagga som värdeseventen.
+	ThingRelationsV1Topic string = transform.EventThingsV1Relations
 )
 
 func main() {
@@ -207,10 +210,15 @@ func registerHandlers(svcCfg *appConfig) error {
 
 	// Versionerade värdesevent (E7): samma transformator, egen prenumeration.
 	// Gatas av THINGS_V1_VALUES (exakt "true"); av som default så att
-	// cutover till nya kontrakt är ett explicit driftbeslut.
+	// cutover till nya kontrakt är ett explicit driftbeslut. Samma flagga
+	// gates relationshändelser (things.v1.relations): ett cutover-beslut
+	// för hela things.v1.*-familjen.
 	if svcCfg.thingsV1Values {
 		if err := messenger.RegisterTopicMessageHandler(ThingValuesV1Topic, things.NewThingValuesTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
 			return fmt.Errorf("failed to register thing values handler: %w", err)
+		}
+		if err := messenger.RegisterTopicMessageHandler(ThingRelationsV1Topic, things.NewThingRelationsTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
+			return fmt.Errorf("failed to register thing relations handler: %w", err)
 		}
 	}
 

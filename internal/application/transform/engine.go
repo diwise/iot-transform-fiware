@@ -47,6 +47,10 @@ type MatchInfo struct {
 	SubType    string
 	// Event taggar händelsekällan (tomt för ursprungliga källor).
 	Event string
+	// Relation avgränsar relationsregler till en relationstyp; RelationRemoved
+	// skiljer bortkoppling från koppling (likhetsmatchning).
+	Relation        string
+	RelationRemoved bool
 }
 
 // resolvedValue är resultatet av en värdekälleuppslagning.
@@ -59,12 +63,15 @@ type resolvedValue struct {
 
 // EntityWrite beskriver en entitet som ska skrivas, utan att utföra
 // skrivningen. Presentationen exekverar skrivningarna i listordning.
+// RemoveAttributes rensar namngivna attribut (PATCH-null) i stället för
+// att skriva värden; Props är då tom.
 type EntityWrite struct {
-	EntityID string
-	TypeName string
-	Context  string
-	Create   bool
-	Props    []entities.EntityDecoratorFunc
+	EntityID         string
+	TypeName         string
+	Context          string
+	Create           bool
+	Props            []entities.EntityDecoratorFunc
+	RemoveAttributes []string
 }
 
 // Engine kör den konfigurationsstyrda mappningen.
@@ -109,6 +116,18 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		typeName, err := renderTemplate(ent.Type, in, ids)
 		if err != nil {
 			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+		}
+
+		// removeAttributes-entiteter rensar namngivna attribut i stället
+		// för att skriva värden; properties byggs aldrig för dem.
+		if len(ent.RemoveAttributes) > 0 {
+			writes = append(writes, EntityWrite{
+				EntityID:         id,
+				TypeName:         typeName,
+				Context:          ent.Context,
+				RemoveAttributes: append([]string(nil), ent.RemoveAttributes...),
+			})
+			continue
 		}
 
 		props, err := entityProps(ent, in, ids)
@@ -205,6 +224,12 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 	// Händelsekälla måste stämma exakt; tomt matchar endast omärkt indata
 	// (ursprungliga källor), så gamla regler aldrig aktiveras av nya event.
 	if mm.Event != info.Event {
+		return false
+	}
+	if mm.Relation != "" && mm.Relation != info.Relation {
+		return false
+	}
+	if mm.RelationRemoved != info.RelationRemoved {
 		return false
 	}
 	return true

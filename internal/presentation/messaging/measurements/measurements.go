@@ -134,31 +134,12 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 }
 
 // transformObservation kör den konfigurationsstyrda motorn och skriver
-// entiteterna mot brokern.
+// entiteterna mot brokern med delad skrivsemantik (create/merge/removeAttributes).
 func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient, defaultContext string) error {
 	writes, err := dynamic.Transform(ctx, observation)
 	if err != nil {
 		return err
 	}
 
-	for _, w := range writes {
-		entityContext := w.Context
-		if entityContext == "" {
-			entityContext = defaultContext
-		}
-
-		if w.Create {
-			err := contextbroker.CreateNewEntityWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
-			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
-				return err
-			}
-			continue
-		}
-
-		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return contextbroker.ApplyEntityWrites(ctx, cbClient, writes, defaultContext)
 }

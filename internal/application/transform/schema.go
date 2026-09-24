@@ -16,6 +16,10 @@ const (
 // i match.event och motorns indata. Tom tagg = ursprunglig källa.
 const EventThingsV1Values = "things.v1.values"
 
+// EventThingsV1Relations taggar versionerade relationshändelser
+// (things.v1.relations) i match.event och motorns indata.
+const EventThingsV1Relations = "things.v1.relations"
+
 // PropertyType är den NGSI-LD-typ en property skrivs som.
 type PropertyType string
 
@@ -78,6 +82,13 @@ type Match struct {
 	// endast indata med samma tagg, så gamla och nya regler aldrig
 	// korsaktiveras.
 	Event string `yaml:"event,omitempty" json:"event,omitempty"`
+	// Relation avgränsar relationsregler till en relationstyp (t.ex.
+	// partOf); endast giltig med event things.v1.relations. Utan
+	// match.type/subType skulle regeln träffa alla sakers länkar.
+	Relation string `yaml:"relation,omitempty" json:"relation,omitempty"`
+	// RelationRemoved skiljer bortkoppling (true) från koppling (osatt).
+	// Jämförs med likhet: osatt matchar endast set-händelser.
+	RelationRemoved bool `yaml:"relationRemoved,omitempty" json:"relationRemoved,omitempty"`
 }
 
 // Entity beskriver en NGSI-LD-entitet som ska skrivas.
@@ -88,6 +99,10 @@ type Entity struct {
 	Context    string     `yaml:"context,omitempty" json:"context,omitempty"`
 	Create     bool       `yaml:"create,omitempty" json:"create,omitempty"`
 	Properties []Property `yaml:"properties" json:"properties"`
+	// RemoveAttributes rensar namngivna attribut via PATCH-null i stället
+	// för att skriva värden; ömsesidigt uteslutande med create och med
+	// icke-tomma properties.
+	RemoveAttributes []string `yaml:"removeAttributes,omitempty" json:"removeAttributes,omitempty"`
 }
 
 // Source beskriver var ett värde hämtas. Exakt en källa ska vara satt.

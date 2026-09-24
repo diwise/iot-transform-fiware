@@ -3,10 +3,8 @@ package things
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
@@ -61,7 +59,7 @@ func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCl
 			return err
 		}
 
-		if err := applyTransformWrites(ctx, cbClient, writes, defaultContext); err != nil {
+		if err := contextbroker.ApplyEntityWrites(ctx, cbClient, writes, defaultContext); err != nil {
 			log.Error("failed to write entity", "err", err.Error())
 			return err
 		}
@@ -69,27 +67,4 @@ func NewDynamicThingTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCl
 		log.Debug("thing handled successfully")
 		return nil
 	}
-}
-
-func applyTransformWrites(ctx context.Context, cbClient client.ContextBrokerClient, writes []transform.EntityWrite, defaultContext string) error {
-	for _, w := range writes {
-		entityContext := w.Context
-		if entityContext == "" {
-			entityContext = defaultContext
-		}
-
-		if w.Create {
-			err := contextbroker.CreateNewEntityWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
-			if err != nil && !errors.Is(err, contextbroker.ErrEntityAlreadyExists) {
-				return fmt.Errorf("failed to create entity %s: %w", w.EntityID, err)
-			}
-			continue
-		}
-
-		if err := contextbroker.MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
-			return fmt.Errorf("failed to merge or create entity %s: %w", w.EntityID, err)
-		}
-	}
-
-	return nil
 }

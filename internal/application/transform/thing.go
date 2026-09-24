@@ -26,6 +26,11 @@ type Thing struct {
 	// thing.updated-källa; t.ex. "things.v1.values" för värdesevent).
 	Event string
 
+	// Relation avgränsar relationsregler till en relationstyp;
+	// RelationRemoved skiljer bortkoppling från koppling.
+	Relation        string
+	RelationRemoved bool
+
 	ObservedAt time.Time
 	Fields     map[string]any
 }
@@ -49,10 +54,12 @@ func (t Thing) HasResource(string) bool { return false }
 
 func (t Thing) MatchInfo() MatchInfo {
 	return MatchInfo{
-		Tenant:  t.Tenant,
-		Type:    t.Type,
-		SubType: t.SubType,
-		Event:   t.Event,
+		Tenant:          t.Tenant,
+		Type:            t.Type,
+		SubType:         t.SubType,
+		Event:           t.Event,
+		Relation:        t.Relation,
+		RelationRemoved: t.RelationRemoved,
 	}
 }
 

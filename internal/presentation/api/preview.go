@@ -24,8 +24,8 @@ type previewRequest struct {
 
 type previewEvent struct {
 	Kind string `json:"kind"`
-	// Message är det råa kuvertet: thing.updated- eller
-	// things.v1.values-JSON för saker, {pack, timestamp} för mätvärden.
+	// Message är det råa kuvertet: thing.updated-, things.v1.values- eller
+	// things.v1.relations-JSON för saker, {pack, timestamp} för mätvärden.
 	Message json.RawMessage `json:"message"`
 	// SensorType kringgår device-management-uppslag för mätvärden
 	// (offline-preview); tom sträng beter sig som produktion.
@@ -50,8 +50,8 @@ type previewEntity struct {
 	// Context är entitetens JSON-LD-context (faller tillbaka till
 	// deployment-default i produktion; tom här betyder default).
 	Context string `json:"context,omitempty"`
-	// Operation är create (POST) eller merge (PATCH/merge) — samma
-	// semantik som produktion skriver mot brokern.
+	// Operation är create (POST), merge (PATCH/merge) eller remove
+	// (PATCH-null) — samma semantik som produktion skriver mot brokern.
 	Operation string `json:"operation"`
 }
 
@@ -115,6 +115,9 @@ func (h *handler) previewModel(w http.ResponseWriter, r *http.Request) {
 		op := "merge"
 		if wr.Create {
 			op = "create"
+		}
+		if len(wr.RemoveAttributes) > 0 {
+			op = "remove"
 		}
 		out.Entities = append(out.Entities, previewEntity{ID: wr.EntityID, Type: wr.TypeName, Properties: props, Context: wr.Context, Operation: op})
 	}
@@ -223,8 +226,26 @@ func previewTransform(ctx context.Context, req previewRequest) ([]transform.Enti
 			all = []transform.EntityWrite{}
 		}
 		return all, matchedAny, len(observations), nil
+	case transform.EventThingsV1Relations:
+		th, err := things.ThingRelationsFromJSON(req.Event.Message)
+		if err != nil {
+			return nil, false, 0, fmt.Errorf("%w: invalid relations envelope: %v", errValidation, err)
+		}
+		matched := engine.Matched(th)
+		if !matched {
+			return nil, false, 1, nil
+		}
+		writes, err := engine.Transform(th)
+		if errors.Is(err, transform.ErrNoMatchingRule) {
+			return nil, false, 1, nil
+		}
+		if err != nil {
+			return nil, true, 1, err
+		}
+		return writes, true, 1, nil
 	default:
-		return nil, false, 0, fmt.Errorf("%w: event.kind must be %q, %q or %q", errValidation,
-			transform.KindMeasurement, transform.KindThing, transform.EventThingsV1Values)
+		return nil, false, 0, fmt.Errorf("%w: event.kind must be %q, %q, %q or %q", errValidation,
+			transform.KindMeasurement, transform.KindThing, transform.EventThingsV1Values,
+			transform.EventThingsV1Relations)
 	}
 }

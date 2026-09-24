@@ -494,6 +494,46 @@ func TestPreviewThing(t *testing.T) {
 	is.Equal(rr.Code, http.StatusBadRequest)
 }
 
+func TestPreviewRelations(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rule := map[string]any{
+		"match": map[string]any{"kind": "thing", "event": "things.v1.relations", "relation": "partOf", "type": "tank"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}",
+			"type": "AgriGreenhouse",
+			"properties": []any{
+				map[string]any{"target": "hasWaterQualityObserved", "type": "Relationship", "field": "relation.from.waterQualityObserved", "required": true},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "things.v1.relations",
+			"message": map[string]any{
+				"relationId": "partof-tank-1", "type": "partOf",
+				"fromId": "tank-1", "toId": "greenhouse-a", "tenant": "t",
+				"revision": 2, "changedAt": "2026-09-17T12:00:00Z",
+				"fromThingType": "tank",
+				"from":          map[string]any{"thingId": "tank-1", "name": "Tank 1"},
+				"toThingType":   "greenhouse",
+				"to":            map[string]any{"thingId": "greenhouse-a", "name": "Växthus A"},
+			},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(1, len(out.Entities))
+	is.Equal("urn:ngsi-ld:AgriGreenhouse:V:xthus:A", out.Entities[0].ID)
+	is.Equal("merge", out.Entities[0].Operation)
+}
+
 func TestPreviewMeasurement(t *testing.T) {
 	is := is.New(t)
 	m := pgTestModels(t)
