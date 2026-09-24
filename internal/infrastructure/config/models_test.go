@@ -31,11 +31,11 @@ rules:
             transform: [{ op: multiply, value: 2 }]
           - target: category
             type: TextArray
-            field: category
+            name: category
           - target: address
             type: Structured
             subproperties:
-              - { target: streetAddress, type: Text, field: address.streetAddress }
+              - { target: streetAddress, type: Text, name: streetAddress }
       - name: beach
         id: "urn:ngsi-ld:Beach:{{safeURI(name)}}"
         type: Beach

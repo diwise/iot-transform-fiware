@@ -343,6 +343,8 @@ func resolveSubValue(p Property, in Input, ids map[string]string) (any, bool, er
 
 // genericProperty täcker NGSI-LD-properties som biblioteket saknar
 // färdiga konstruktorer för (bool, array av tal, strukturerade värden).
+// Medvetet utanför i v1 (PLAN001 B8): VocabProperty, struktur-arrayer,
+// BooleanArray/DateTimeArray, datasetId, observedBy utanför Number.
 type genericProperty struct {
 	Type_      string `json:"type"`
 	Value_     any    `json:"value"`

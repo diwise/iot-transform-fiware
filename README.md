@@ -102,6 +102,32 @@ Skrivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
 andringar. `POST /models/preview` kor en inline-regel torrt mot en
 exempelhandelse (aldrig broker/persistens).
 
+## Generell SDM-mappning (bada kallor)
+
+Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
+things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens
+kind-kontroller:
+
+- `Geo` tar GeoJSON (`Point`/`LineString`/`Polygon`/`MultiPoint`/
+  `MultiLineString`/`MultiPolygon` med numeriska koordinater) via
+  `field:`/`value:`/`const:`; `latlon:`-vagen ar oforandrad.
+- `LanguageMap` skriver `LanguageProperty` (`field:` mot strangmapp eller
+  `const:` med mapp; tom mapp = saknad kalla). `transform`/`derive`
+  avvisas pa `LanguageMap` i v1.
+- `observedAt` hedras pa `Boolean`, `Geo` och `Relationship` vid explicit
+  konfigurering (utan config ar output oforandrad).
+- Kallbackning per kind: `resource`/`object`/`env`/`name` forbjuds pa
+  thing-regler, `field`/`ref` pa matvardesregler (galler aven `Derive.Of`
+  och subproperties); `LanguageMap` kraver `field` eller `const`.
+- Things-adaptern bevarar icke-punkt-geometri som `fields["geometry"]`
+  (ra GeoJSON-mapp) och exponerar `fields["metadata"]`
+  (`field:metadata.<nyckel>`); `fields["location"]` ar oforandrad
+  (latlon-mapp for punkter).
+
+Medvetet utanfor i v1: `VocabProperty`, struktur-arrayer,
+`BooleanArray`/`DateTimeArray`, `datasetId`, `observedBy` utanfor Number
+(biblioteksbegransning).
+
 ## Regelsynk mellan instanser
 
 Varje mutation bumpar en global versionsraknare i samma transaktion.
