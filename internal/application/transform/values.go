@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -57,7 +58,17 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 			}
 			return nil, nil
 		}
-		return decorators.Location(lat, lon), nil
+		// latlon:-vägen är oförändrad utan explicit observedAt (bibliotekets
+		// Point-form under target "location"); med observedAt skrivs punkten
+		// som GeoJSON under regelns target så att tiden får plats.
+		if p.ObservedAt == "" {
+			return decorators.Location(lat, lon), nil
+		}
+		return entities.P(p.Target, &genericGeoProperty{
+			Type_:      "GeoProperty",
+			Value_:     map[string]any{"type": "Point", "coordinates": []any{lon, lat}},
+			ObservedAt: observationTime(p, in, resolvedValue{}),
+		}), nil
 	}
 
 	if p.Timestamp {
@@ -121,6 +132,14 @@ func renderObservedBy(p Property, in Input) (string, error) {
 }
 
 func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
+	// explicitObservedAt hedras på Boolean/Geo/Relationship endast vid
+	// explicit konfiguration (p.ObservedAt != ""): utan config förblir
+	// output exakt som före (utdataneutralt — ingen seed-regel sätter det
+	// i dag). Number/Text/TextList/NumberArray behåller sin header-default.
+	explicit := ""
+	if p.ObservedAt != "" {
+		explicit = observedAt
+	}
 	switch p.Type {
 	case TypeNumber:
 		v, ok := toFloat(raw)
@@ -153,7 +172,7 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected boolean", p.Target)
 		}
-		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b}), nil
+		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b, ObservedAt: explicit}), nil
 	case TypeDateTime:
 		s, ok := toString(raw)
 		if !ok {
@@ -161,12 +180,49 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		}
 		return decorators.DateTime(p.Target, s), nil
 	case TypeGeo:
+		// value:-mallar renderar strängar: ett JSON-dokument prövas som
+		// GeoJSON före latlon-tolkning.
+		if s, ok := raw.(string); ok {
+			var m map[string]any
+			if err := json.Unmarshal([]byte(s), &m); err == nil {
+				raw = m
+			}
+		}
+		if geo, ok := toGeoJSON(raw); ok {
+			return entities.P(p.Target, &genericGeoProperty{Type_: "GeoProperty", Value_: geo, ObservedAt: explicit}), nil
+		}
 		lat, lon, ok := toLatLon(raw)
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected a location", p.Target)
 		}
-		return decorators.Location(lat, lon), nil
+		// latlon:-vägen är oförändrad utan explicit observedAt; med
+		// observedAt skrivs punkten som GeoJSON så att tiden får plats
+		// (samma value-form som biblioteket, plus observedAt).
+		if explicit == "" {
+			return decorators.Location(lat, lon), nil
+		}
+		return entities.P(p.Target, &genericGeoProperty{
+			Type_:      "GeoProperty",
+			Value_:     map[string]any{"type": "Point", "coordinates": []any{lon, lat}},
+			ObservedAt: explicit,
+		}), nil
 	case TypeRelationship:
+		if explicit == "" {
+			if arr, ok := raw.([]any); ok {
+				objects := make([]string, 0, len(arr))
+				for _, v := range arr {
+					if s, ok := toString(v); ok {
+						objects = append(objects, s)
+					}
+				}
+				return entities.R(p.Target, relationships.NewMultiObjectRelationship(objects)), nil
+			}
+			s, ok := toString(raw)
+			if !ok {
+				return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
+			}
+			return relationshipDecorator(p.Target, s), nil
+		}
 		if arr, ok := raw.([]any); ok {
 			objects := make([]string, 0, len(arr))
 			for _, v := range arr {
@@ -174,13 +230,13 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 					objects = append(objects, s)
 				}
 			}
-			return entities.R(p.Target, relationships.NewMultiObjectRelationship(objects)), nil
+			return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: objects, ObservedAt: explicit}), nil
 		}
 		s, ok := toString(raw)
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
 		}
-		return relationshipDecorator(p.Target, s), nil
+		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: s, ObservedAt: explicit}), nil
 	case TypeTextArray:
 		ss, ok := toStringSlice(raw)
 		if !ok {
@@ -293,6 +349,77 @@ type genericProperty struct {
 func (g *genericProperty) Type() string { return g.Type_ }
 
 func (g *genericProperty) Value() any { return g.Value_ }
+
+// genericGeoProperty täcker GeoProperty-geometrier biblioteket saknar
+// konstruktorer för (allt utom Point via latlon-vägen): samma value-form
+// som biblioteket ({type, coordinates}) plus observedAt. Interfacet kräver
+// bara Type()/Value(), så structen marshallas korrekt.
+type genericGeoProperty struct {
+	Type_      string `json:"type"`
+	Value_     any    `json:"value"`
+	ObservedAt string `json:"observedAt,omitempty"`
+}
+
+func (g *genericGeoProperty) Type() string { return g.Type_ }
+
+func (g *genericGeoProperty) Value() any { return g.Value_ }
+
+// genericRelationship täcker Relationship med observedAt (bibliotekets
+// konstruktorer saknar tiden). Utan observedAt används bibliotekets egna
+// konstruktorer (oförändrad JSON).
+type genericRelationship struct {
+	Type_      string `json:"type"`
+	Object_    any    `json:"object"`
+	ObservedAt string `json:"observedAt,omitempty"`
+}
+
+func (r *genericRelationship) Type() string { return r.Type_ }
+
+func (r *genericRelationship) Object() any { return r.Object_ }
+
+// toGeoJSON normaliserar ett GeoJSON-objekt (Point/LineString/Polygon/
+// MultiPoint/MultiLineString/MultiPolygon med numeriska koordinater) till
+// NGSI-LD-value-form. Ogiltig form ger false (fel, inte tyst skip —
+// anroparen rapporterar typfel).
+func toGeoJSON(v any) (map[string]any, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	t, ok := m["type"].(string)
+	if !ok {
+		return nil, false
+	}
+	switch t {
+	case "Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon":
+	default:
+		return nil, false
+	}
+	coords, ok := m["coordinates"]
+	if !ok || !numericLeaves(coords) {
+		return nil, false
+	}
+	return map[string]any{"type": t, "coordinates": coords}, true
+}
+
+// numericLeaves kräver att alla löv i en nästlad koordinatstruktur är tal.
+func numericLeaves(v any) bool {
+	switch x := v.(type) {
+	case []any:
+		if len(x) == 0 {
+			return false
+		}
+		for _, e := range x {
+			if !numericLeaves(e) {
+				return false
+			}
+		}
+		return true
+	default:
+		_, ok := toFloat(x)
+		return ok
+	}
+}
 
 func toStringSlice(v any) ([]string, bool) {
 	switch x := v.(type) {
