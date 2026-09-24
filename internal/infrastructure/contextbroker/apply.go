@@ -62,6 +62,13 @@ func ApplyEntityWrites(ctx context.Context, cbClient client.ContextBrokerClient,
 			continue
 		}
 
+		if w.Delete {
+			if err := deleteEntity(ctx, cbClient, w.EntityID); err != nil {
+				return fmt.Errorf("failed to delete entity %s: %w", w.EntityID, err)
+			}
+			continue
+		}
+
 		if len(w.RemoveAttributes) > 0 {
 			if err := removeAttributes(ctx, cbClient, w.EntityID, entityContext, w.RemoveAttributes); err != nil {
 				return fmt.Errorf("failed to remove attributes from entity %s: %w", w.EntityID, err)
@@ -88,6 +95,19 @@ func removeAttributes(ctx context.Context, cbClient client.ContextBrokerClient, 
 	_, err := cbClient.MergeEntity(ctx, id,
 		nullAttributeFragment{context: context, attrs: append([]string(nil), attrs...)},
 		map[string][]string{"Content-Type": {"application/ld+json"}})
+	if err != nil {
+		if errors.Is(err, ngsilderrors.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// deleteEntity raderar en entitet. Saknad entitet är framgång (inget att
+// radera) för idempotent retry.
+func deleteEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string) error {
+	_, err := cbClient.DeleteEntity(ctx, id)
 	if err != nil {
 		if errors.Is(err, ngsilderrors.ErrNotFound) {
 			return nil

@@ -86,3 +86,36 @@ func TestApplyEntityWritesPropagatesBrokerError(t *testing.T) {
 		t.Fatal("expected broker error")
 	}
 }
+
+// delete raderar via DeleteEntity och tolererar 404 (idempotent retry).
+func TestApplyEntityWritesDelete(t *testing.T) {
+	mock, calls, _ := recordingMock()
+	writes := []transform.EntityWrite{{
+		EntityID: "urn:ngsi-ld:IndoorEnvironmentObserved:room:Room:A",
+		TypeName: "IndoorEnvironmentObserved",
+		Delete:   true,
+	}}
+	if err := ApplyEntityWrites(context.Background(), mock, writes, "https://default.example/ctx"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(*calls) != 1 || (*calls)[0] != "delete:urn:ngsi-ld:IndoorEnvironmentObserved:room:Room:A" {
+		t.Fatalf("calls=%v, want single delete", *calls)
+	}
+
+	// Saknad entitet (404) är framgång — inget att radera.
+	mock.DeleteEntityFunc = func(ctx context.Context, entityID string) (*ngsild.DeleteEntityResult, error) {
+		return nil, ngsilderrors.ErrNotFound
+	}
+	if err := ApplyEntityWrites(context.Background(), mock, writes, ""); err != nil {
+		t.Fatalf("404 should succeed: %v", err)
+	}
+
+	// Andra fel propageras för retry.
+	boom := errors.New("broker down")
+	mock.DeleteEntityFunc = func(ctx context.Context, entityID string) (*ngsild.DeleteEntityResult, error) {
+		return nil, boom
+	}
+	if err := ApplyEntityWrites(context.Background(), mock, writes, ""); err == nil {
+		t.Fatal("expected broker error")
+	}
+}
