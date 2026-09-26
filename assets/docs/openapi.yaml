@@ -24,6 +24,27 @@ paths:
     get:
       tags: [Models]
       summary: Lista regler i precedensordning (seed i filordning, API-regler sist)
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.kind (t.ex. measurement, thing).
+        - name: event
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.event (t.ex. things.v1.values).
+        - name: type
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.type (sakmall).
+        - name: tenant
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.tenant (ägarskap).
+        - name: source
+          in: query
+          schema: { type: string, enum: [seed, api] }
+          description: Filtrera på regelkälla. Filtren kombineras med AND; okända värden ger tom lista.
       responses:
         '200':
           description: Regler

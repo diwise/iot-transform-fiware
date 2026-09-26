@@ -442,6 +442,60 @@ func TestModelsTenantIsolation(t *testing.T) {
 	is.Equal(rr.Code, http.StatusUnauthorized)
 }
 
+// Valfria sökfilter på GET /models (PLAN002 1.1): omitempty, AND, okända
+// värden ger tom lista (aldrig 400). Precedensordningen är oförändrad.
+func TestListModelsFilters(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	ctx := fullAccess("t")
+
+	thing := testRule() // kind thing, event values, type Room, tenant t
+	meas := transform.Rule{
+		Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Tenant: "t"},
+		Entities: []transform.Entity{{
+			ID: "urn:ngsi-ld:T:x", Type: "T",
+			Properties: []transform.Property{{Target: "v", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}}},
+		}},
+	}
+	for _, r := range []transform.Rule{thing, meas} {
+		if _, err := m.store.InsertRule(r); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	list := func(query string) []Model {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/x?"+query, nil)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+		h.listModels(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list %q: code=%d (%s)", query, rr.Code, rr.Body.String())
+		}
+		var out struct {
+			Models []Model `json:"models"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out.Models
+	}
+
+	is.Equal(2, len(list("")))
+	is.Equal(1, len(list("kind=thing")))
+	is.Equal(1, len(list("kind=measurement")))
+	is.Equal(1, len(list("event=things.v1.values")))
+	is.Equal(1, len(list("type=Room")))
+	is.Equal(2, len(list("tenant=t")))
+	is.Equal(2, len(list("source=api")))
+	is.Equal(0, len(list("source=seed")))
+	// AND-kombination + okända värden ger tom lista, inte 400.
+	is.Equal(1, len(list("kind=thing&type=Room")))
+	is.Equal(0, len(list("kind=thing&type=Other")))
+	is.Equal(0, len(list("kind=nope")))
+}
+
 func TestValidateModel(t *testing.T) {
 	is := is.New(t)
 	m := pgTestModels(t)

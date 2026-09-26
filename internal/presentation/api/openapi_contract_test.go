@@ -79,4 +79,11 @@ fieldOK:
 			t.Fatalf("openapi preview response must document %q", key)
 		}
 	}
+
+	// GET /models ska dokumentera de valfria sökfiltren (PLAN002 1.1).
+	for _, key := range []string{"name: kind", "name: event", "name: type", "name: tenant", "name: source"} {
+		if !strings.Contains(text, key) {
+			t.Fatalf("openapi GET /models must document filter %q", key)
+		}
+	}
 }

@@ -340,14 +340,59 @@ func (h *handler) listModels(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
+	f := parseListFilters(r)
 	out := make([]Model, 0, len(stored))
 	for _, st := range stored {
 		if !ruleVisible(st.Rule, authorized) {
 			continue
 		}
+		if !f.matches(st.Rule, st.Source) {
+			continue
+		}
 		out = append(out, toModel(st))
 	}
 	writeJSON(w, http.StatusOK, map[string][]Model{"models": out})
+}
+
+// listFilters är de valfria, additiva sökfiltren på GET /models (PLAN002
+// 1.1): alla omitempty, kombineras med AND. Okända värden ger tom lista,
+// aldrig 400. Precedensordningen från lagret är oförändrad.
+type listFilters struct {
+	Kind   string
+	Event  string
+	Type   string
+	Tenant string
+	Source string
+}
+
+func parseListFilters(r *http.Request) listFilters {
+	q := r.URL.Query()
+	return listFilters{
+		Kind:   q.Get("kind"),
+		Event:  q.Get("event"),
+		Type:   q.Get("type"),
+		Tenant: q.Get("tenant"),
+		Source: q.Get("source"),
+	}
+}
+
+func (f listFilters) matches(rule transform.Rule, source string) bool {
+	if f.Kind != "" && string(rule.Match.Kind) != f.Kind {
+		return false
+	}
+	if f.Event != "" && rule.Match.Event != f.Event {
+		return false
+	}
+	if f.Type != "" && rule.Match.Type != f.Type {
+		return false
+	}
+	if f.Tenant != "" && rule.Match.Tenant != f.Tenant {
+		return false
+	}
+	if f.Source != "" && source != f.Source {
+		return false
+	}
+	return true
 }
 
 func (h *handler) getModel(w http.ResponseWriter, r *http.Request) {
