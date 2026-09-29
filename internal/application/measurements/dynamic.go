@@ -102,7 +102,7 @@ func recordsFromPack(pack senml.Pack, object string) []transform.Record {
 			continue
 		}
 
-		rec := transform.Record{Object: object, Name: name}
+		rec := transform.Record{Object: object, Name: name, Channel: channelFromName(r.Name)}
 
 		if v, ok := r.GetValue(); ok {
 			rec.Value = &v
@@ -130,6 +130,18 @@ func shortResourceName(name string) string {
 		return name[i+1:]
 	}
 	return name
+}
+
+// channelFromName bevarar eventuellt kanalsegment ur ett fullständigt
+// SenML-namn ("<device>/<kanal>/<resurs>" eller längre). Namn med färre
+// än tre segment saknar kanal och ger "". Matchning på Name/Object
+// påverkas inte; Channel är additiv metadata för framtida regler.
+func channelFromName(name string) string {
+	parts := strings.Split(name, "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	return strings.Join(parts[1:len(parts)-1], "/")
 }
 
 // findHeader matchar objektheaders på kort eller fullständigt namn. Headers

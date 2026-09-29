@@ -6,9 +6,13 @@ import (
 )
 
 // Record är en normaliserad resurs-/metadatapost i en mätning.
+// Channel bevarar eventuell kanalsegment ur SenML-namnet (t.ex.
+// "<device>/<kanal>/<resurs>") utan att påverka befintlig matchning
+// på Name/Object.
 type Record struct {
 	Object  string
 	Name    string
+	Channel string
 	Value   *float64
 	Bool    *bool
 	String  *string
