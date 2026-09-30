@@ -29,7 +29,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 
 - [x] Dokumentera vald ETSI/NGSI-LD-version och tjänstens stödda funktionsprofil.
       Skilj grundvalidering från fullständig ETSI- och Smart Data Models-konformitet.
-- [ ] Beskriv källvyerna för `message.accepted`, `things.v1.values`,
+- [x] Beskriv källvyerna för `message.accepted`, `things.v1.values`,
       `things.v1.relations` och `things.v1.lifecycle`: tillgängliga fält,
       identiteter, proveniens, kvalitet och tidssemantik.
 - [ ] Fastställ dokumenterad semantik för `nameOrID`, typvariabler, URI-kodning,
