@@ -37,7 +37,7 @@ rules:
             subproperties:
               - { target: streetAddress, type: Text, name: streetAddress }
       - name: beach
-        id: "urn:ngsi-ld:Beach:{{safeURI(name)}}"
+        id: "urn:ngsi-ld:Beach:{{safeURI(field:name)}}"
         type: Beach
         create: true
         properties:

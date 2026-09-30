@@ -3,7 +3,6 @@ package transform
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -382,32 +381,11 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		return stringify(v), nil
 	}
 
-	if inner, ok := funcArg(expr, "safeURI"); ok {
-		v, err := resolveExpr(inner, vars, in, entities)
+	if fn, args, call, err := templateCall(expr); call {
 		if err != nil {
 			return "", err
 		}
-		return url.PathEscape(strings.TrimSpace(v)), nil
-	}
-
-	if inner, ok := funcArg(expr, "firstPresent"); ok {
-		args, err := splitArgs(inner)
-		if err != nil {
-			return "", err
-		}
-		for _, arg := range args {
-			v, err := resolveExpr(arg, vars, in, entities)
-			if err != nil {
-				if errors.Is(err, errExprNotFound) {
-					continue
-				}
-				return "", err
-			}
-			if v != "" {
-				return v, nil
-			}
-		}
-		return "", nil
+		return fn.evaluate(args, func(arg string) (string, error) { return resolveExpr(arg, vars, in, entities) })
 	}
 
 	v, ok := vars[expr]
@@ -415,14 +393,6 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		return "", fmt.Errorf("unknown template variable %q", expr)
 	}
 	return v, nil
-}
-
-func funcArg(expr, name string) (string, bool) {
-	prefix := name + "("
-	if strings.HasPrefix(expr, prefix) && strings.HasSuffix(expr, ")") {
-		return expr[len(prefix) : len(expr)-1], true
-	}
-	return "", false
 }
 
 func stringify(v any) string {

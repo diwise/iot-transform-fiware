@@ -8,33 +8,30 @@ import (
 
 // Templatevariabler som får användas i id-mallar och relationsvärden.
 //
-// Mätvärden (context-broker/iot-agent):
+// Mätvärden (message.accepted):
 //
-//	deviceID, sensorType, port, object, resource, name, value, timestamp,
+//	deviceID, sensorType, object, timestamp,
 //	env, tenant
 //
-// Saker (iot-things):
+// Saker (things v1):
 //
-//	id, nameOrID, uuid, type, subType, name, alternativeName, tenant
+//	id, nameOrID, uuid, type, typeName, subType, name, alternativeName, tenant, timestamp
 //
 // Dessutom får alltid {{entities.<namn>.id}} referera till en entitet i samma
 // regel.
 var knownTemplateVariables = map[string]bool{
 	"deviceID":        true,
 	"sensorType":      true,
-	"port":            true,
 	"object":          true,
-	"resource":        true,
 	"name":            true,
-	"value":           true,
 	"timestamp":       true,
 	"env":             true,
-	"ref":             true,
 	"tenant":          true,
 	"id":              true,
 	"nameOrID":        true,
 	"uuid":            true,
 	"type":            true,
+	"typeName":        true,
 	"subType":         true,
 	"alternativeName": true,
 }
@@ -63,19 +60,7 @@ func validateExpr(expr string) error {
 		return err
 	}
 
-	if inner, ok := funcArg(expr, "safeURI"); ok {
-		args, err := splitArgs(inner)
-		if err != nil {
-			return err
-		}
-		if len(args) != 1 {
-			return fmt.Errorf("safeURI requires exactly one argument")
-		}
-		return validateExpr(args[0])
-	}
-
-	if inner, ok := funcArg(expr, "firstPresent"); ok {
-		args, err := splitArgs(inner)
+	if _, args, call, err := templateCall(expr); call {
 		if err != nil {
 			return err
 		}

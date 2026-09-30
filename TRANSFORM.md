@@ -74,7 +74,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
 - [x] Använd gemensam parsning för malluttryck och fältsökvägar i validering och
       körning. Stöd dokumenterad nästling, citerade nycklar och index; avvisa
       felaktigt balanserade eller otillåtna uttryck.
-- [ ] Registrera generella funktioner med dokumenterade argument, returtyper
+- [x] Registrera generella funktioner med dokumenterade argument, returtyper
       och beteende vid saknad källa. Validera tillgängliga variabler per källtyp.
 - [ ] Definiera och implementera konsekvent referenshantering för entitets-ID:n.
       Välj explicit ordningskrav eller beroendeupplösning; valideringen får inte

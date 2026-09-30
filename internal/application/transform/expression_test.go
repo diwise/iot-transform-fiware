@@ -54,3 +54,26 @@ func TestQuotedPathEscapesAndDelimiters(t *testing.T) {
 		t.Fatalf("quoted delimiters: %q %v", got, err)
 	}
 }
+
+func TestTemplateVariablesAreSourceSpecific(t *testing.T) {
+	for _, variable := range []string{"deviceID", "sensorType", "object", "env"} {
+		rule := expressionRule()
+		rule.Entities[0].Properties[0].Value = "{{firstPresent(" + variable + ",name)}}"
+		if err := Validate([]Rule{rule}); err == nil {
+			t.Fatalf("thing accepted measurement variable %s", variable)
+		}
+	}
+	for _, variable := range []string{"id", "name", "nameOrID", "uuid", "type", "subType", "alternativeName"} {
+		rule := validRule()
+		rule.Entities[0].ID = "urn:example:{{safeURI(" + variable + ")}}"
+		if err := Validate([]Rule{rule}); err == nil {
+			t.Fatalf("measurement accepted thing variable %s", variable)
+		}
+	}
+	for _, name := range []string{"safeURI", "firstPresent"} {
+		fn := templateFunctions[name]
+		if fn.result != TypeText || fn.minArgs != 1 {
+			t.Fatalf("undocumented function contract: %s %+v", name, fn)
+		}
+	}
+}

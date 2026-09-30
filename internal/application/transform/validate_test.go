@@ -224,7 +224,7 @@ func TestValidateTemplateVariables(t *testing.T) {
 	is := is.New(t)
 
 	r := validRule()
-	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{deviceID}}-{{safeURI(name)}}"
+	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{deviceID}}-{{safeURI(field:name)}}"
 	is.NoErr(Validate([]Rule{r}))
 
 	r = validRule()

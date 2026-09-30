@@ -72,6 +72,11 @@ func (r Rule) validate() error {
 	}
 
 	for i, e := range r.Entities {
+		for _, expr := range []string{e.ID, e.Type} {
+			if err := validateTemplateForKind(expr, r.Match.Kind); err != nil {
+				return fmt.Errorf("entity %d: %w", i, err)
+			}
+		}
 		if err := e.validate(); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
 		}
@@ -247,6 +252,11 @@ func (e Entity) validateSourcesForKind(kind Kind) error {
 }
 
 func (p Property) validateSourcesForKind(kind Kind) error {
+	for _, expr := range []string{p.Value, p.ObservedBy} {
+		if err := validateTemplateForKind(expr, kind); err != nil {
+			return err
+		}
+	}
 	if err := validateSourceKind(p.Source, kind); err != nil {
 		return err
 	}
@@ -266,6 +276,9 @@ func (p Property) validateSourcesForKind(kind Kind) error {
 }
 
 func validateSourceKind(s Source, kind Kind) error {
+	if err := validateTemplateForKind(s.Value, kind); err != nil {
+		return err
+	}
 	for _, path := range []string{s.Field, s.Ref} {
 		if path != "" {
 			if _, err := parsePath(path); err != nil {

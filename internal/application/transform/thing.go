@@ -71,6 +71,7 @@ func (t Thing) Variables() map[string]string {
 	return map[string]string{
 		"id":              t.ID,
 		"type":            t.TypeName,
+		"typeName":        t.TypeName,
 		"subType":         t.SubType,
 		"name":            t.Name,
 		"alternativeName": t.AlternativeName,
