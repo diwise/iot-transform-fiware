@@ -151,3 +151,27 @@ Transportens faktiska retry-/dead-letter-beteende ska verifieras i den låsta
 messaging-versionen innan handlers ändras; tabellen bestämmer klassificering,
 inte obevisade leveransgarantier. Replay av enskilda operationer kan vara
 idempotent utan att sena händelser är ordningsoberoende korrekta.
+
+## Verifieringsstatus 2026-09-30
+
+Verifierade checklistpunkter: etapp 1 punkt 1–5, etapp 2 samtliga punkter,
+etapp 3 punkt 1–6. Regressionstester för kommande rättningar (1.6) är ett
+fortlöpande arbete. Nästa implementationspunkt är 3.7. Etapp 4–9 och de
+separata designbesluten återstår; målprofilen ovan ska därför inte tolkas som
+att hela transformationen är färdig eller produktionsacceptansen utförd.
+
+Kört i `iot-transform-fiware` efter ändringarna:
+
+```sh
+PG_TEST_PORT=5432 go test ./... -count=1
+go vet ./...
+PG_TEST_PORT=5432 go test -race ./internal/infrastructure/rules ./internal/presentation/api ./internal/application/transform ./cmd/iot-transform-fiware -count=1
+```
+
+Alla dessa kontroller passerade. DB-testerna använde Compose-PostgreSQL på
+localhost:5432 med separata databaser `diwise_test_rules` och
+`diwise_test_api`. Nya DB-tester för MVCC-snapshot, rollback, cancellation,
+revisionskonkurrens och omstart kördes även separat med `-v -count=1` och
+rapporterade PASS, inte SKIP. Ändrade Go-filer har formaterats med gofmt.
+Ingen full Compose-end-to-end-acceptans eller brokerverifiering enligt etapp
+7/9 har utförts för denna ändringsserie.
