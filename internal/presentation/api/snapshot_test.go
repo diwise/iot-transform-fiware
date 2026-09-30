@@ -292,3 +292,50 @@ func TestRunSyncPicksUpChanges(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(len(writes), 1)
 }
+
+type delayedSnapshotStore struct {
+	*stubRuleStore
+	captured chan struct{}
+	release  chan struct{}
+	once     sync.Once
+}
+
+func (s *delayedSnapshotStore) LoadRules(ctx context.Context) ([]rules.StoredRule, int64, error) {
+	r, v, err := s.stubRuleStore.LoadRules(ctx)
+	block := false
+	s.once.Do(func() { block = true })
+	if block {
+		close(s.captured)
+		select {
+		case <-s.release:
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		}
+	}
+	return r, v, err
+}
+
+func TestRefreshCannotPublishOlderSnapshot(t *testing.T) {
+	store := &delayedSnapshotStore{stubRuleStore: &stubRuleStore{}, captured: make(chan struct{}), release: make(chan struct{})}
+	m := NewModels(store, nil)
+	older := make(chan error, 1)
+	go func() { older <- m.Refresh() }()
+	<-store.captured
+	if _, err := store.InsertRule(testRule()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	newer := m.Snapshot()
+	close(store.release)
+	if err := <-older; err != nil {
+		t.Fatal(err)
+	}
+	if m.Snapshot() != newer || m.Snapshot().Version != 1 {
+		t.Fatal("older reload replaced newer published snapshot")
+	}
+	if _, err := m.Snapshot().Things.Transform(stubThing()); err != nil {
+		t.Fatalf("newer rule lost: %v", err)
+	}
+}

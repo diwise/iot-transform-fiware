@@ -68,7 +68,15 @@ func (m *Models) Refresh() error {
 	}
 	snap := buildSnapshot(stored, m.resolver)
 	snap.Version = v
-	m.snap.Store(snap)
+	for {
+		current := m.snap.Load()
+		if current != nil && current.Version >= v {
+			return nil
+		}
+		if m.snap.CompareAndSwap(current, snap) {
+			break
+		}
+	}
 	return nil
 }
 

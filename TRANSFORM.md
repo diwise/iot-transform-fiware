@@ -54,7 +54,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       Verifiera även tenantbyte och samtidiga revisionsändringar.
 - [x] Läs regeluppsättning och versionsnummer konsistent från databasen.
       Förhindra att äldre regler märks med en nyare version.
-- [ ] Samordna samtidiga omladdningar så att en äldre snapshot inte kan
+- [x] Samordna samtidiga omladdningar så att en äldre snapshot inte kan
       publiceras efter en nyare. Behåll föregående fungerande snapshot vid fel.
 - [ ] Validera/kompilera hela kandidatuppsättningen före publicering.
       Seed, API och omladdning ska använda samma regler för giltighet.
