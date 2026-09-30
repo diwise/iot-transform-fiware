@@ -52,3 +52,28 @@ func TestMeasurementDefaultIDAndDynamicTemplateFields(t *testing.T) {
 		}
 	}
 }
+
+func TestIDDoesNotDependOnNameAndHasNoImplicitNameFallback(t *testing.T) {
+	in := Thing{ID: "f7cf7057-d422-4e46-af2b-a8d40c6e739", Name: "Before", AlternativeName: "Alias", Event: EventThingsV1Values}
+	rule := expressionRule()
+	rule.Entities[0].Properties[0].Source = Source{Value: "{{name}}"}
+	engine := NewEngine([]Rule{rule})
+	before, err := engine.Transform(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in.Name, in.AlternativeName = "After", "New alias"
+	after, err := engine.Transform(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) != 1 || len(after) != 1 || before[0].EntityID != after[0].EntityID || after[0].EntityID != "urn:example:"+in.ID {
+		t.Fatalf("name changed target identity: %+v %+v", before, after)
+	}
+	if _, provided := in.Variables()["nameOrID"]; provided {
+		t.Fatal("removed nameOrID helper is still provided")
+	}
+	if _, err := renderTemplate("{{nameOrID}}", in, nil); !errors.Is(err, errExprNotFound) {
+		t.Fatalf("removed helper still falls back to name or ID: %v", err)
+	}
+}

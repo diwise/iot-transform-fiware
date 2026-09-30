@@ -89,7 +89,7 @@ func TestThingValuesHandlerReturnsBrokerError(t *testing.T) {
 		},
 		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{{
 			Match:    transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
-			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{nameOrID}}", Type: "Thing"}},
+			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{id}}", Type: "Thing"}},
 		}})},
 		"",
 	)

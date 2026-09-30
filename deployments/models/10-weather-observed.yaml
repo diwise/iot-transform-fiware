@@ -2,7 +2,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3303", env: air }
     entities:
-      - id: "urn:ngsi-ld:WeatherObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:WeatherObserved:{{id}}"
         type: WeatherObserved
         properties:
           - { target: temperature, type: Number, resource: "5700", observedAt: header }

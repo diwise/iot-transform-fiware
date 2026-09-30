@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
@@ -123,6 +124,12 @@ func applyPrefix(p Property, raw any) any {
 			}
 		}
 		return out
+	case []string:
+		out := make([]string, len(x))
+		for i, value := range x {
+			out[i] = p.Prefix + value
+		}
+		return out
 	default:
 		return raw
 	}
@@ -211,36 +218,11 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 			ObservedAt: explicit,
 		}), nil
 	case TypeRelationship:
-		if explicit == "" {
-			if arr, ok := raw.([]any); ok {
-				objects := make([]string, 0, len(arr))
-				for _, v := range arr {
-					if s, ok := toString(v); ok {
-						objects = append(objects, s)
-					}
-				}
-				return entities.R(p.Target, relationships.NewMultiObjectRelationship(objects)), nil
-			}
-			s, ok := toString(raw)
-			if !ok {
-				return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
-			}
-			return relationshipDecorator(p.Target, s), nil
+		objects, err := relationshipObjects(raw, p.Array)
+		if err != nil {
+			return nil, fmt.Errorf("property %s: %w", p.Target, err)
 		}
-		if arr, ok := raw.([]any); ok {
-			objects := make([]string, 0, len(arr))
-			for _, v := range arr {
-				if s, ok := toString(v); ok {
-					objects = append(objects, s)
-				}
-			}
-			return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: objects, ObservedAt: explicit}), nil
-		}
-		s, ok := toString(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected a relationship value", p.Target)
-		}
-		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: s, ObservedAt: explicit}), nil
+		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: objects, ObservedAt: explicit}), nil
 	case TypeTextArray:
 		ss, ok := toStringSlice(raw)
 		if !ok {
@@ -278,6 +260,48 @@ func textDecorator(name, value string, opts ...properties.TextPropertyDecoratorF
 
 func relationshipDecorator(name, value string) entities.EntityDecoratorFunc {
 	return entities.R(name, relationships.NewSingleObjectRelationship(value))
+}
+
+func relationshipObjects(raw any, array bool) (any, error) {
+	validate := func(value any) (string, error) {
+		reference, ok := value.(string)
+		if !ok {
+			return "", errors.New("relationship reference must be a URI string")
+		}
+		uri, err := url.Parse(reference)
+		if err != nil || !uri.IsAbs() || strings.IndexFunc(reference, unicode.IsSpace) >= 0 || (uri.Opaque == "" && uri.Host == "" && uri.Path == "") {
+			return "", fmt.Errorf("invalid relationship URI %q", reference)
+		}
+		return reference, nil
+	}
+	var elements []any
+	switch value := raw.(type) {
+	case []any:
+		elements = value
+	case []string:
+		elements = make([]any, len(value))
+		for i, reference := range value {
+			elements[i] = reference
+		}
+	default:
+		reference, err := validate(value)
+		if err != nil {
+			return nil, err
+		}
+		if array {
+			return []string{reference}, nil
+		}
+		return reference, nil
+	}
+	references := make([]string, len(elements))
+	for i, element := range elements {
+		reference, err := validate(element)
+		if err != nil {
+			return nil, fmt.Errorf("relationship element %d: %w", i, err)
+		}
+		references[i] = reference
+	}
+	return references, nil
 }
 
 // buildStructured bygger en NGSI-LD-property vars värde som ett objekt av

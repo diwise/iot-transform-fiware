@@ -26,7 +26,7 @@ func TestLifecycleAdapterMapsDeletedEvent(t *testing.T) {
 	is.Equal(th.Event, transform.EventThingsV1Lifecycle)
 	is.Equal(th.Lifecycle, "deleted")
 	// Samma namnkonvention som sakens egna regler.
-	is.Equal(th.NameOrID, "Room:A")
+	is.Equal(th.Name, "Room A")
 	is.Equal(th.TypeName, "room")
 
 	lc, ok := th.Fields["lifecycle"].(map[string]any)

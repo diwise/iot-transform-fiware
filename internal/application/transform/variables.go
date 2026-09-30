@@ -6,16 +6,17 @@ import (
 	"strings"
 )
 
-// Templatevariabler som får användas i id-mallar och relationsvärden.
+// Standardvariabler för ID-mallar och relationsvärden. Dynamiska källfält
+// är också tillåtna; listan är inte en whitelist för malluttryck.
 //
 // Mätvärden (message.accepted):
 //
-//	deviceID, sensorType, object, timestamp,
+//	id, deviceID, sensorType, object, timestamp,
 //	env, tenant
 //
 // Saker (things v1):
 //
-//	id, nameOrID, uuid, type, typeName, subType, name, alternativeName, tenant, timestamp
+//	id, uuid, type, typeName, subType, name, alternativeName, tenant, timestamp
 //
 // Dessutom får alltid {{entities.<namn>.id}} referera till en entitet i samma
 // regel.
@@ -28,7 +29,6 @@ var knownTemplateVariables = map[string]bool{
 	"env":             true,
 	"tenant":          true,
 	"id":              true,
-	"nameOrID":        true,
 	"uuid":            true,
 	"type":            true,
 	"typeName":        true,
@@ -36,7 +36,7 @@ var knownTemplateVariables = map[string]bool{
 	"alternativeName": true,
 }
 
-// KnownTemplateVariables returnerar en sorterad lista över tillåtna variabler.
+// KnownTemplateVariables returnerar en sorterad lista över standardvariabler.
 func KnownTemplateVariables() []string {
 	return keys(knownTemplateVariables)
 }

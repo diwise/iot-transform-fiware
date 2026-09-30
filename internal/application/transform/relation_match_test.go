@@ -9,8 +9,8 @@ import (
 func relationInput() Thing {
 	return Thing{
 		ID: "tank-1", Type: "tank", Tenant: "t",
-		TypeName: "tank", NameOrID: "tank-1",
-		Event: EventThingsV1Relations, Relation: "partOf",
+		TypeName: "tank",
+		Event:    EventThingsV1Relations, Relation: "partOf",
 		Fields: map[string]any{},
 	}
 }
@@ -105,13 +105,13 @@ func TestRemoveAttributesBuildsWrite(t *testing.T) {
 
 	rule := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Relations, Relation: "partOf", RelationRemoved: true, Type: "tank"},
 		Entities: []Entity{{
-			ID: "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}", Type: "AgriGreenhouse",
+			ID: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}", Type: "AgriGreenhouse",
 			RemoveAttributes: []string{"hasWaterQualityObserved"},
 		}}}
 	is.NoErr(Validate([]Rule{rule}))
 
 	th := removedRelationInput()
-	th.Fields["relation"] = map[string]any{"to": map[string]any{"nameOrID": "greenhouse-a"}}
+	th.Fields["relation"] = map[string]any{"to": map[string]any{"thingId": "greenhouse-a"}}
 	writes, err := NewEngine([]Rule{rule}).Transform(th)
 	is.NoErr(err)
 	is.Equal(1, len(writes))

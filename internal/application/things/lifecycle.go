@@ -8,30 +8,19 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 )
 
-// thingLifecycleDescriptor är sakdeskriptorn i en livscykelhändelse
-// (samma form som värdeseventens thing-descriptor).
-type thingLifecycleDescriptor struct {
-	ThingID         string            `json:"thingId"`
-	Name            string            `json:"name"`
-	AlternativeName string            `json:"alternativeName"`
-	SubType         string            `json:"subType"`
-	Category        string            `json:"category"`
-	Metadata        map[string]string `json:"metadata"`
-}
-
 // thingLifecycleEnvelope är den lokala trådformen för versionerade
 // livscykelhändelser (things.v1.lifecycle). Samma princip som values.go:
 // egen typ, ingen import av producentpaketet.
 type thingLifecycleEnvelope struct {
-	EventID          string                    `json:"eventId"`
-	Tenant           string                    `json:"tenant"`
-	ThingID          string                    `json:"thingId"`
-	Kind             string                    `json:"kind"`
-	ThingType        string                    `json:"thingType"`
-	ThingTypeVersion string                    `json:"thingTypeVersion"`
-	ConfigRevision   int64                     `json:"configRevision"`
-	ChangedAt        time.Time                 `json:"changedAt"`
-	Thing            *thingLifecycleDescriptor `json:"thing"`
+	EventID          string           `json:"eventId"`
+	Tenant           string           `json:"tenant"`
+	ThingID          string           `json:"thingId"`
+	Kind             string           `json:"kind"`
+	ThingType        string           `json:"thingType"`
+	ThingTypeVersion string           `json:"thingTypeVersion"`
+	ConfigRevision   int64            `json:"configRevision"`
+	ChangedAt        time.Time        `json:"changedAt"`
+	Thing            *thingDescriptor `json:"thing"`
 }
 
 // ThingLifecycleFromJSON tolkar en versionerad livscykelhändelse och bygger
@@ -39,8 +28,7 @@ type thingLifecycleEnvelope struct {
 // och händelsetyp krävs); tom tenant är inget strukturfel (presentationen
 // skippar utan broker-kontakt, samma grind som thing.updated).
 //
-// Saken blir motorns sak (ID/type/subType/namn med samma konvention som
-// sakens egna regler, så {{nameOrID}}/{{type}} renderar identiskt).
+// Saken behåller kuvertets stabila ID och typ; namn är enbart källdata.
 // Deskriptorn är alltid satt via producenten, även vid deleted — saknat
 // thing-objekt ger därför tomma namn men behåller ID/typ från kuvertet.
 // Fields bär lifecycle.{kind,revision,changedAt}; ObservedAt är changedAt
@@ -64,13 +52,10 @@ func ThingLifecycleFromJSON(body []byte) (transform.Thing, error) {
 	meta := Thing{
 		ID:     env.ThingID,
 		Type:   env.ThingType,
-		Name:   env.ThingID,
 		Tenant: env.Tenant,
 	}
 	if env.Thing != nil {
-		if env.Thing.Name != "" {
-			meta.Name = env.Thing.Name
-		}
+		meta.Name = env.Thing.Name
 		meta.AlternativeName = env.Thing.AlternativeName
 		if sub := env.Thing.SubType; sub != "" {
 			meta.SubType = &sub
@@ -78,11 +63,18 @@ func ThingLifecycleFromJSON(body []byte) (transform.Thing, error) {
 	}
 
 	fields := map[string]any{
+		"thing": descriptorFields(env.ThingID, env.ThingType, env.Thing),
 		"lifecycle": map[string]any{
 			"kind":      env.Kind,
 			"revision":  env.ConfigRevision,
 			"changedAt": env.ChangedAt.UTC().Format(time.RFC3339),
 		},
+	}
+	if meta.Name != "" {
+		fields["name"] = meta.Name
+	}
+	if meta.AlternativeName != "" {
+		fields["alternativeName"] = meta.AlternativeName
 	}
 
 	return transform.Thing{
@@ -93,7 +85,6 @@ func ThingLifecycleFromJSON(body []byte) (transform.Thing, error) {
 		AlternativeName: meta.AlternativeName,
 		Tenant:          meta.Tenant,
 		TypeName:        meta.TypeName(),
-		NameOrID:        meta.AlternativeNameOrNameOrID(),
 		Event:           transform.EventThingsV1Lifecycle,
 		Lifecycle:       env.Kind,
 		ObservedAt:      env.ChangedAt,

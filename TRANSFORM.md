@@ -8,7 +8,10 @@ Tjänsten får känna till ETSI/NGSI-LD och utföra grundläggande protokollvali
 
 - Modellval ligger i regler: entitetstyp, ID-mall, attribut, värdekällor,
   relationer, enheter, tidskällor och JSON-LD-context.
-- Generella funktioner som `{{nameOrID}}`, `safeURI` och `firstPresent` är
+- Standard-ID använder stabilt käll-ID (helst GUID/UUID) via `{{id}}`; namn
+  mappas till attribut. `nameOrID` tas bort. `{{variabel}}` får läsa vilket
+  exponerat källfält som helst, inklusive nästlade vägar, citerade nycklar och index.
+- Generella funktioner som `safeURI` och `firstPresent` är
   önskvärda. Funktionernas beteende ska vara dokumenterat och får inte implicit
   välja en Smart Data Model utifrån källans domäntyp.
 - Adaptrar tolkar källkontrakten och exponerar källtrogen data. Råa identiteter,
@@ -32,7 +35,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 - [x] Beskriv källvyerna för `message.accepted`, `things.v1.values`,
       `things.v1.relations` och `things.v1.lifecycle`: tillgängliga fält,
       identiteter, proveniens, kvalitet och tidssemantik.
-- [x] Fastställ dokumenterad semantik för `nameOrID`, typvariabler, URI-kodning,
+- [x] Fastställ dokumenterad semantik för `{{id}}`, generella fältuttryck, typvariabler, URI-kodning,
       `firstPresent`, tomma värden och saknade källor. Behåll användbara generella
       genvägar utan att ersätta åtkomsten till råa källfält.
 - [x] Definiera matchningskontraktet: en vinnande regel per observation/händelse,
@@ -75,7 +78,8 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       körning. Stöd dokumenterad nästling, citerade nycklar och index; avvisa
       felaktigt balanserade eller otillåtna uttryck.
 - [x] Registrera generella funktioner med dokumenterade argument, returtyper
-      och beteende vid saknad källa. Validera tillgängliga variabler per källtyp.
+      och beteende vid saknad källa. Validera fältsyntax; dynamiska fälts närvaro
+      avgörs mot respektive källa vid körning eller preview.
 - [x] Definiera och implementera konsekvent referenshantering för entitets-ID:n.
       Välj explicit ordningskrav eller beroendeupplösning; valideringen får inte
       godkänna framåtreferenser som körningen inte kan lösa.
@@ -96,14 +100,14 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
 
 Berör `internal/application/measurements` och `internal/application/things`.
 
-- [ ] Ta bort `relation.from.waterQualityObserved` och konstruktionen av
+- [x] Ta bort `relation.from.waterQualityObserved` och konstruktionen av
       `urn:ngsi-ld:WaterQualityObserved:...` från relationsadaptern.
-- [ ] Exponera generella descriptors för både `relation.from` och `relation.to`:
+- [x] Exponera generella descriptors för både `relation.from` och `relation.to`:
       käll-ID, rå typ, undertyp, namn, alternativnamn, kategori samt relevant
       plats-, metadata- och variantinformation ur producentkontraktet.
 - [ ] Exponera relevant descriptor-, event- och proveniensdata konsekvent för
       values och lifecycle. Rätta fält som avkodas men försvinner före regelkörning.
-- [ ] Bevara råa namn och typer. Gör det tydligt vilka variabler som är råa och
+- [x] Bevara råa namn och typer. Gör det tydligt vilka variabler som är råa och
       vilka som är beräknade genvägar; undvik implicit ändring av rå `type`.
 - [ ] Exponera geometridata konsekvent för Point och övriga stödda geometrier.
       Koordinatgenvägar får komplettera, men inte dölja, den ursprungliga geometrin.
@@ -115,7 +119,7 @@ Berör `internal/application/measurements` och `internal/application/things`.
       Verifiera att resurser och metadata aldrig hämtas från fel observation.
 - [ ] Bevara kontraktsregeln att ogiltiga things-värden inte ersätter aktuella.
       Exponera kvalitet/proveniens utan att kringgå filtreringen av skrivbara värden.
-- [ ] Ta bort oanvänd `Thing.EntityID()` och granska kvarvarande äldre typer
+- [x] Ta bort oanvänd `Thing.EntityID()` och granska kvarvarande äldre typer
       utifrån faktisk användning innan de tas bort eller behålls.
 - [ ] Verifiera adaptrarna mot producenternas kontrakt med neutrala testdata
       som inte förutsätter FIWARE-ID:n eller modellnamn i källpayloaden.
@@ -153,9 +157,9 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
 
 - [ ] Låt Geo alltid använda regelns `target`, oavsett koordinatkälla och
       `observedAt`. Ta bort kodvägar som implicit väljer attributet `location`.
-- [ ] Inför generisk relationslistform, exempelvis `array: true` på Relationship.
+- [x] Inför generisk relationslistform, exempelvis `array: true` på Relationship.
       Skalär blir enelementslista; befintlig lista får inte dubbelnästlas.
-- [ ] Validera relationsreferenser och listelement strikt enligt vald profil.
+- [x] Validera relationsreferenser och listelement strikt enligt vald profil.
       Konvertera inte godtyckliga tal/booleska värden till URI:er och tappa inte
       felaktiga listelement tyst.
 - [ ] Kontrollera finita tal efter konvertering och transformation, även i listor.
@@ -191,15 +195,15 @@ det versionslåsta `context-broker`-biblioteket.
 
 ## Etapp 8 — modellregler, preview och dokumentation
 
-- [ ] Uppdatera tank/växthus-regeln till regelstyrd referensmall och listform.
+- [x] Uppdatera tank/växthus-regeln till regelstyrd referensmall och listform.
       Modellnamn och URN-prefix får endast finnas i regeln och modelltesterna.
-- [ ] Uppdatera medföljande ID-mallar till dokumenterade hjälpfunktioner och
+- [x] Uppdatera medföljande ID-mallar till `{{id}}` respektive generella relationsfält och
       verifiera konsistens mellan values-, relations- och lifecycle-regler.
 - [ ] Rätta modellregler som läser oexponerade fält, exempelvis POI-beskrivning,
       och gör platsmappning konsekvent för Point och Polygon.
 - [ ] Gå igenom modellernas tidskällor, enheter och obligatoriska värdekällor.
       Redovisa olösta modellfrågor, exempelvis greenhouse-CO2, i reglernas dokumentation.
-- [ ] Dokumentera namnbaserade ID:n, namnbyten och kollisionsrisk. Regler får
+- [x] Dokumentera namnbaserade ID:n, namnbyten och kollisionsrisk. Regler får
       välja denna policy, men den ska inte införas implicit av adaptern.
 - [ ] Utöka preview med konkret operation, rensade attribut och precisa
       validerings-/skiporsaker. Visa effektiv context eller tydlig fallback.
@@ -248,7 +252,11 @@ Följande kräver egna beslut och ska inte smygas in i ovanstående rättningar.
       values efter delete och replay som blandas med nyare uppdateringar.
 - [ ] Besluta om någon framtida join mellan separata measurements/things-event
       behövs och vem som då äger tillstånd, lagring och återhämtning.
-- [ ] Besluta om hantering av tidigare målidentiteter vid namn-/typändringar.
+- [x] Besluta om hantering av tidigare målidentiteter vid namn-/typändringar.
+      Beslut: standardregler använder stabilt käll-ID, helst GUID/UUID, och
+      fasta modellprefix. Namn är attribut och påverkar inte ID. Egna namn-/
+      typbaserade ID-mallar är regelns författares ansvar; ingen automatisk
+      historik eller städning av tidigare mål-ID:n införs.
 - [ ] Besluta om valfri versionerad Smart Data Models-schemavalidering utöver
       motorns grundläggande NGSI-LD-validering.
 

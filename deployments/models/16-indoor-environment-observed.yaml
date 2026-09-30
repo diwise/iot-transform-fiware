@@ -4,7 +4,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3303", env: indoors }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
           - { target: temperature, type: Number, resource: "5700", observedAt: header }
@@ -12,7 +12,7 @@ rules:
           - { target: dateObserved, type: DateTime, timestamp: true, required: true }
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3304", env: indoors }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
           - { target: relativeHumidity, type: Number, resource: "5700", observedAt: header }
@@ -20,7 +20,7 @@ rules:
           - { target: dateObserved, type: DateTime, timestamp: true, required: true }
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3301", env: indoors }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
           - { target: illuminance, type: Number, resource: "5700", observedAt: header }
@@ -28,7 +28,7 @@ rules:
           - { target: dateObserved, type: DateTime, timestamp: true, required: true }
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3434", env: indoors }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
           - { target: peopleCount, type: Number, resource: "1", observedAt: header }

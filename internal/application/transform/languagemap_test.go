@@ -17,8 +17,8 @@ func languageMapRule(src Source) Rule {
 func languageMapThing() Thing {
 	return Thing{
 		ID: "poi-1", Type: "pointofinterest", Tenant: "t",
-		TypeName: "pointofinterest", NameOrID: "poi-1",
-		Event: EventThingsV1Values,
+		TypeName: "pointofinterest",
+		Event:    EventThingsV1Values,
 		Fields: map[string]any{
 			"metadata": map[string]any{"sv": "Strand", "en": "Beach"},
 			"empty":    map[string]any{},

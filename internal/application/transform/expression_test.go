@@ -66,7 +66,7 @@ func TestDynamicTemplateFieldsAreValidatedAtRuntime(t *testing.T) {
 			t.Fatalf("missing field did not use explicit fallback: %q %v", got, err)
 		}
 	}
-	for _, variable := range []string{"id", "name", "nameOrID", "uuid", "type", "subType", "alternativeName"} {
+	for _, variable := range []string{"id", "name", "uuid", "type", "subType", "alternativeName"} {
 		rule := validRule()
 		rule.Entities[0].ID = "urn:example:{{safeURI(" + variable + ")}}"
 		if err := Validate([]Rule{rule}); err != nil {

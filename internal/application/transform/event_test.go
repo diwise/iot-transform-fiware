@@ -7,7 +7,7 @@ import (
 // Händelsekällan skiljer gamla och nya regler åt: tom tagg matchar endast
 // omärkt indata (ursprungliga källor), satt tagg endast samma tagg.
 func TestEventTagIsolatesOldAndNewRules(t *testing.T) {
-	old := Thing{ID: "r", Type: "Room", TypeName: "Room", NameOrID: "r", Tenant: "t"}
+	old := Thing{ID: "r", Type: "Room", TypeName: "Room", Tenant: "t"}
 	v1 := old
 	v1.Event = EventThingsV1Values
 

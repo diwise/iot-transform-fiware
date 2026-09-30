@@ -27,7 +27,7 @@ func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) m
 	rules := []transform.Rule{{
 		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "wastebin"},
 		Entities: []transform.Entity{{
-			ID: "urn:ngsi-ld:WasteContainer:{{nameOrID}}", Type: "WasteContainer",
+			ID: "urn:ngsi-ld:WasteContainer:{{id}}", Type: "WasteContainer",
 			Properties: []transform.Property{
 				{Target: "fillingLevel", Type: transform.TypeNumber, Source: transform.Source{Field: "values.fillRate.value"}, Required: true},
 			},

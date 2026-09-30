@@ -83,7 +83,7 @@ func testRule() transform.Rule {
 	return transform.Rule{
 		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "Room", Tenant: "t"},
 		Entities: []transform.Entity{{
-			ID:   "urn:ngsi-ld:Room:{{nameOrID}}",
+			ID:   "urn:ngsi-ld:Room:{{id}}",
 			Type: "Room",
 			Properties: []transform.Property{{
 				Target: "name", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,
@@ -324,7 +324,7 @@ func TestModelsReloadVisibleInTransform(t *testing.T) {
 	created := decodeModel(t, rr)
 
 	th := transform.Thing{
-		ID: "r1", Type: "Room", TypeName: "Room", NameOrID: "r1",
+		ID: "r1", Type: "Room", TypeName: "Room",
 		Tenant: "t", Event: transform.EventThingsV1Values,
 		Fields: map[string]any{"name": "n"},
 	}
@@ -631,10 +631,10 @@ func TestPreviewRelations(t *testing.T) {
 	rule := map[string]any{
 		"match": map[string]any{"kind": "thing", "event": "things.v1.relations", "relation": "partOf", "type": "tank"},
 		"entities": []any{map[string]any{
-			"id":   "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}",
+			"id":   "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}",
 			"type": "AgriGreenhouse",
 			"properties": []any{
-				map[string]any{"target": "hasWaterQualityObserved", "type": "Relationship", "field": "relation.from.waterQualityObserved", "required": true},
+				map[string]any{"target": "hasWaterQualityObserved", "type": "Relationship", "array": true, "value": "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", "required": true},
 			},
 		}},
 	}
@@ -659,7 +659,7 @@ func TestPreviewRelations(t *testing.T) {
 	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
 	is.True(out.Matched)
 	is.Equal(1, len(out.Entities))
-	is.Equal("urn:ngsi-ld:AgriGreenhouse:V:xthus:A", out.Entities[0].ID)
+	is.Equal("urn:ngsi-ld:AgriGreenhouse:greenhouse-a", out.Entities[0].ID)
 	is.Equal("merge", out.Entities[0].Operation)
 }
 
@@ -671,7 +671,7 @@ func TestPreviewLifecycle(t *testing.T) {
 	rule := map[string]any{
 		"match": map[string]any{"kind": "thing", "event": "things.v1.lifecycle", "lifecycle": "deleted"},
 		"entities": []any{map[string]any{
-			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:room:{{nameOrID}}",
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}",
 			"type": "IndoorEnvironmentObserved", "properties": []any{}, "delete": true,
 		}},
 	}
@@ -694,7 +694,7 @@ func TestPreviewLifecycle(t *testing.T) {
 	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
 	is.True(out.Matched)
 	is.Equal(1, len(out.Entities))
-	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room:Room:A", out.Entities[0].ID)
+	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room-a", out.Entities[0].ID)
 	is.Equal("delete", out.Entities[0].Operation)
 	// delete-svar bär tomt properties-objekt (aldrig null mot kontraktet).
 	if out.Entities[0].Properties == nil {

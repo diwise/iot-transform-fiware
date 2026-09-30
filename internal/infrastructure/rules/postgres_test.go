@@ -88,7 +88,7 @@ func testRule() transform.Rule {
 	return transform.Rule{
 		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
 		Entities: []transform.Entity{{
-			ID:   "urn:ngsi-ld:Room:{{nameOrID}}",
+			ID:   "urn:ngsi-ld:Room:{{id}}",
 			Type: "Room",
 			Properties: []transform.Property{{
 				Target: "name", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,

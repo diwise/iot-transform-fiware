@@ -110,6 +110,7 @@ Använd normalt `id: "urn:ngsi-ld:<Modell>:{{id}}"`. `id` är sakens
 oförändrade `thingId` för things-event och enhetens `deviceID` för
 measurements. En befintlig GUID/UUID bevaras; motorn skapar ingen ny identitet.
 Namn hör till attribut, exempelvis `{ target: name, type: Text, value: "{{name}}", observedAt: none }`.
+`nameOrID` finns inte längre som genväg eller implicit fallback.
 
 `{{fält}}` kan läsa vilket exponerat källfält som helst, även nästlat:
 `{{metadata.description}}`, `{{values."temperature.average".value}}` och
@@ -122,7 +123,18 @@ som JSON-skalärer, strängar som rå text.
 Validering kontrollerar syntax, funktionsargument och entitetsreferenser.
 Dynamiska fälts närvaro kan bara avgöras mot exempeldata eller ett verkligt
 event. Saknat fält ger ett klassificerbart källfel; `firstPresent` kan ange
-en uttrycklig fallback. Namnbaserade ID:n kräver ett uttryckligt regelval.
+en uttrycklig fallback. Namnbaserade ID:n kräver ett uttryckligt regelval;
+regelns författare ansvarar då för namnbyten, kollisioner och tidigare mål.
+Motorn lagrar inte tidigare mål-ID:n eller städar dem automatiskt. Samma
+ansvar gäller om man uttryckligen ändrar ID-mall eller modellprefix.
+
+Relationsregler använder exempelvis
+`value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"` med
+`type: Relationship, array: true`. Descriptors i `relation.from` och
+`relation.to` innehåller råa ID:n och namn, ingen förbyggd modell-URN.
+`array: true` gör skalären till en lista och bevarar befintliga listor platta;
+flerrelationsaggregation ingår inte. Både skalärer och listelement måste vara
+absoluta URI-strängar.
 
 Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
 things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens

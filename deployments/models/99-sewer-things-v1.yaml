@@ -6,9 +6,11 @@
 rules:
   - match: { kind: thing, event: things.v1.values, type: sewer }
     entities:
-      - id: "urn:ngsi-ld:Sewer:{{nameOrID}}"
+      - id: "urn:ngsi-ld:Sewer:{{id}}"
         type: Sewer
         properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: level, type: Number, field: values.level.value, observedAt: "field:values.level.observedAt" }
           - { target: percent, type: Number, field: values.fillRate.value, observedAt: "field:values.fillRate.observedAt" }
           - { target: status, type: Text, field: values.overflow.value, observedAt: "field:values.overflow.observedAt", transform: [{ op: numToOnOff }] }

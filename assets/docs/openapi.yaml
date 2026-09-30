@@ -311,7 +311,10 @@ components:
       required: [id, type, properties]
       properties:
         name: { type: string }
-        id: { type: string }
+        id:
+          type: string
+          description: 'Rekommenderad ID-mall använder stabilt käll-ID (helst GUID/UUID) via {{id}}. Namn mappas till attribut. Dynamiska {{fält}} och nästlade fältvägar stöds; inga namnbaserade fallback-ID:n skapas.'
+          example: 'urn:ngsi-ld:X:{{id}}'
         type: { type: string }
         context: { type: string }
         create: { type: boolean }
@@ -329,6 +332,10 @@ components:
         type:
           type: string
           enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured, LanguageMap]
+        array:
+          type: boolean
+          default: false
+          description: 'Endast Relationship. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
         unit: { type: string }
         observedAt:
           type: string
@@ -347,7 +354,10 @@ components:
           description: Konstant värde (valfri JSON-typ).
         latlon: { type: boolean }
         timestamp: { type: boolean }
-        value: { type: string }
+        value:
+          type: string
+          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. field: är ett valfritt prefix. Dynamiska fälts närvaro verifieras vid körning eller preview.'
+          example: '{{metadata.description}}'
         prefix: { type: string }
         transform:
           type: array

@@ -1,11 +1,12 @@
 # WasteContainer från versionerade värdesevent (things.v1.values).
-# Gäller endast den nya källan (match.event); thing.updated-regeln i
-# 40-container.yaml rörs inte. required: id, type, location.
+# Stabil identitet från thingId; namn är attribut. required: id, type, location.
 rules:
   - match: { kind: thing, event: things.v1.values, type: wastebin }
     entities:
-      - id: "urn:ngsi-ld:WasteContainer:{{nameOrID}}"
+      - id: "urn:ngsi-ld:WasteContainer:{{id}}"
         type: WasteContainer
         properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: fillingLevel, type: Number, field: values.fillRate.value, observedAt: "field:values.fillRate.observedAt", required: true }
           - { target: location, type: Geo, field: location, required: true }

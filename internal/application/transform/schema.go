@@ -165,6 +165,9 @@ type Derive struct {
 
 // Property beskriver ett NGSI-LD-attribut.
 type Property struct {
+	// Array skriver en skalär Relationship som enelementslista. Listor
+	// bevaras platta; flaggan är inte en flerrelationsaggregation.
+	Array      bool         `yaml:"array,omitempty" json:"array,omitempty"`
 	Target     string       `yaml:"target" json:"target"`
 	Type       PropertyType `yaml:"type" json:"type"`
 	Unit       string       `yaml:"unit,omitempty" json:"unit,omitempty"`

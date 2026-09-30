@@ -31,11 +31,11 @@ func relationRules() []transform.Rule {
 	return []transform.Rule{{
 		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Relations, Relation: "partOf", Type: "tank"},
 		Entities: []transform.Entity{{
-			ID:   "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}",
+			ID:   "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}",
 			Type: "AgriGreenhouse",
 			Properties: []transform.Property{{
 				Target: "hasWaterQualityObserved", Type: transform.TypeRelationship,
-				Source:   transform.Source{Field: "relation.from.waterQualityObserved"},
+				Array: true, Source: transform.Source{Value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"},
 				Required: true,
 			}},
 		}},
@@ -155,8 +155,8 @@ func TestThingRelationsHandlerWritesReference(t *testing.T) {
 	}
 
 	is.NoErr(handler(context.Background(), itm, slog.Default()))
-	// Namnkonventionen sanerar åäö/mellanslag (samma som sakens egna regler).
-	is.Equal("urn:ngsi-ld:AgriGreenhouse:V:xthus:A", mergedID)
+	// Båda sidor använder käll-ID, oberoende av sina namn.
+	is.Equal("urn:ngsi-ld:AgriGreenhouse:greenhouse-a", mergedID)
 	var frag map[string]any
 	is.NoErr(json.Unmarshal(mergedBody, &frag))
 	rel, ok := frag["hasWaterQualityObserved"].(map[string]any)
@@ -165,5 +165,5 @@ func TestThingRelationsHandlerWritesReference(t *testing.T) {
 	objs, ok := rel["object"].([]any)
 	is.True(ok)
 	is.Equal(1, len(objs))
-	is.Equal("urn:ngsi-ld:WaterQualityObserved:Tank:1", objs[0])
+	is.Equal("urn:ngsi-ld:WaterQualityObserved:tank-1", objs[0])
 }

@@ -12,12 +12,12 @@ func TestFirstPresentFallsBackWhenFieldMissing(t *testing.T) {
 	is := is.New(t)
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
-		ID: "urn:ngsi-ld:Observed:{{firstPresent(field:current.ref, nameOrID)}}", Type: "Observed",
+		ID: "urn:ngsi-ld:Observed:{{firstPresent(current.ref, id)}}", Type: "Observed",
 	}}}
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
 	is.NoErr(err)
-	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Observed:s1")
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Observed:s-1")
 }
 
 func TestFirstPresentUsesFieldWhenPresent(t *testing.T) {
@@ -27,7 +27,7 @@ func TestFirstPresentUsesFieldWhenPresent(t *testing.T) {
 	th.Fields["current"] = map[string]any{"ref": "dev-42"}
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
-		ID: "urn:ngsi-ld:Observed:{{firstPresent(field:current.ref, nameOrID)}}", Type: "Observed",
+		ID: "urn:ngsi-ld:Observed:{{firstPresent(current.ref, id)}}", Type: "Observed",
 	}}}
 
 	writes, err := NewEngine([]Rule{rule}).Transform(th)

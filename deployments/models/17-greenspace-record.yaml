@@ -3,7 +3,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3323", env: soil }
     entities:
-      - id: "urn:ngsi-ld:GreenspaceRecord:{{deviceID}}"
+      - id: "urn:ngsi-ld:GreenspaceRecord:{{id}}"
         type: GreenspaceRecord
         properties:
           - target: soilMoisturePressure
@@ -11,13 +11,13 @@ rules:
             resource: "5700"
             unit: KPA
             observedAt: header
-            observedBy: "urn:ngsi-ld:Device:{{deviceID}}"
+            observedBy: "urn:ngsi-ld:Device:{{id}}"
             transform: [{ op: divide, value: 1000 }]
           - { target: location, type: Geo, latlon: true }
           - { target: dateObserved, type: DateTime, timestamp: true }
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3327", env: soil }
     entities:
-      - id: "urn:ngsi-ld:GreenspaceRecord:{{deviceID}}"
+      - id: "urn:ngsi-ld:GreenspaceRecord:{{id}}"
         type: GreenspaceRecord
         properties:
           - target: soilMoistureEc
@@ -25,6 +25,6 @@ rules:
             resource: "5700"
             unit: MHO
             observedAt: header
-            observedBy: "urn:ngsi-ld:Device:{{deviceID}}"
+            observedBy: "urn:ngsi-ld:Device:{{id}}"
           - { target: location, type: Geo, latlon: true }
           - { target: dateObserved, type: DateTime, timestamp: true }

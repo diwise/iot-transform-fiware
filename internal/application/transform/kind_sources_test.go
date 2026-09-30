@@ -60,7 +60,7 @@ func TestThingRulesRejectMeasurementSources(t *testing.T) {
 		{Field: "values.temperature.value"},
 		{Ref: "values.temperature.value"},
 		{Const: "x"},
-		{Value: "{{nameOrID}}"},
+		{Value: "{{id}}"},
 		{LatLon: true},
 		{Timestamp: true},
 	} {

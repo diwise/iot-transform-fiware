@@ -2,7 +2,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3302" }
     entities:
-      - id: "urn:ngsi-ld:Device:{{deviceID}}"
+      - id: "urn:ngsi-ld:Device:{{id}}"
         type: Device
         properties:
           - { target: controlledProperty, type: TextArray, const: ["motion"], observedAt: none }

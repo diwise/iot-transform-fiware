@@ -3,7 +3,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3424" }
     entities:
-      - id: "urn:ngsi-ld:WaterConsumptionObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:WaterConsumptionObserved:{{id}}"
         type: WaterConsumptionObserved
         properties:
           - { target: location, type: Geo, latlon: true }
@@ -29,4 +29,4 @@ rules:
             resource: "1"
             unit: MTQ
             observedAt: record
-            observedBy: "urn:ngsi-ld:Device:{{deviceID}}"
+            observedBy: "urn:ngsi-ld:Device:{{id}}"

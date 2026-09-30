@@ -18,7 +18,7 @@ func arrayThing() Thing {
 
 func arrayRule(properties ...Property) Rule {
 	return Rule{Match: Match{Kind: KindThing, Type: "Container"}, Entities: []Entity{{
-		ID: "urn:ngsi-ld:{{type}}:{{nameOrID}}", Type: "{{type}}",
+		ID: "urn:ngsi-ld:{{type}}:{{id}}", Type: "{{type}}",
 		Properties: properties,
 	}}}
 }

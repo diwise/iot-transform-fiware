@@ -398,6 +398,9 @@ func (e Entity) validateForRule(kind Kind) error {
 }
 
 func (p Property) validate() error {
+	if p.Array && p.Type != TypeRelationship {
+		return errors.New("array is only valid for Relationship")
+	}
 	if p.LatLon {
 		if p.Type != TypeGeo {
 			return errors.New("latlon requires Geo target type")

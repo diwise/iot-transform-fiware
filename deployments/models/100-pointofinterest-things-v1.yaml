@@ -9,9 +9,10 @@
 rules:
   - match: { kind: thing, event: things.v1.values, type: pointofinterest }
     entities:
-      - id: "urn:ngsi-ld:PointOfInterest:{{nameOrID}}"
+      - id: "urn:ngsi-ld:PointOfInterest:{{id}}"
         type: PointOfInterest
         properties:
           - { target: name, type: Text, field: name, observedAt: none, required: true }
-          - { target: description, type: Text, field: description, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
           - { target: location, type: Geo, field: location }

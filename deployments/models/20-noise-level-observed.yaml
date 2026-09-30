@@ -3,7 +3,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3324" }
     entities:
-      - id: "urn:ngsi-ld:NoiseLevelObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:NoiseLevelObserved:{{id}}"
         type: NoiseLevelObserved
         properties:
           - { target: LAeq, type: Number, resource: "5700", observedAt: header }

@@ -3,7 +3,7 @@
 rules:
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3428" }
     entities:
-      - id: "urn:ngsi-ld:AirQualityObserved:{{deviceID}}"
+      - id: "urn:ngsi-ld:AirQualityObserved:{{id}}"
         type: AirQualityObserved
         properties:
           - { target: co2, type: Number, resource: "17", observedAt: header }

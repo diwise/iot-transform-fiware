@@ -9,55 +9,55 @@
 rules:
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: room }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: wastebin }
     entities:
-      - id: "urn:ngsi-ld:WasteContainer:{{nameOrID}}"
+      - id: "urn:ngsi-ld:WasteContainer:{{id}}"
         type: WasteContainer
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: greenhouse }
     entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{nameOrID}}"
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
         type: AgriGreenhouse
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: tank }
     entities:
-      - id: "urn:ngsi-ld:WaterQualityObserved:{{nameOrID}}"
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
         type: WaterQualityObserved
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: lifebuoy }
     entities:
-      - id: "urn:ngsi-ld:Lifebuoy:{{nameOrID}}"
+      - id: "urn:ngsi-ld:Lifebuoy:{{id}}"
         type: Lifebuoy
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: desk }
     entities:
-      - id: "urn:ngsi-ld:Device:{{nameOrID}}"
+      - id: "urn:ngsi-ld:Device:{{id}}"
         type: Device
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pumpingstation }
     entities:
-      - id: "urn:ngsi-ld:SewagePumpingStation:{{nameOrID}}"
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{id}}"
         type: SewagePumpingStation
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: sewer }
     entities:
-      - id: "urn:ngsi-ld:Sewer:{{nameOrID}}"
+      - id: "urn:ngsi-ld:Sewer:{{id}}"
         type: Sewer
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pointofinterest }
     entities:
-      - id: "urn:ngsi-ld:PointOfInterest:{{nameOrID}}"
+      - id: "urn:ngsi-ld:PointOfInterest:{{id}}"
         type: PointOfInterest
         properties: []
         delete: true

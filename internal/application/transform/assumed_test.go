@@ -19,7 +19,7 @@ func TestAssumedExistingEntityIsNotCreated(t *testing.T) {
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
 	is.NoErr(err)
 	is.Equal(len(writes), 1)
-	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Sewer:s1")
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Sewer:s-1")
 
 	b := marshalWrite(t, writes[0])
 	is.True(strings.Contains(b, `"object":"urn:ngsi-ld:Beach:external"`))

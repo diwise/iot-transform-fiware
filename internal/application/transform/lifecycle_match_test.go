@@ -9,8 +9,8 @@ import (
 func lifecycleInput(kind string) Thing {
 	return Thing{
 		ID: "room-a", Type: "room", Tenant: "t",
-		TypeName: "room", NameOrID: "room-a",
-		Event: EventThingsV1Lifecycle, Lifecycle: kind,
+		TypeName: "room",
+		Event:    EventThingsV1Lifecycle, Lifecycle: kind,
 		Fields: map[string]any{},
 	}
 }
@@ -110,11 +110,11 @@ func TestDeleteBuildsWrite(t *testing.T) {
 	is := is.New(t)
 
 	rule := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Lifecycle, Lifecycle: string(LifecycleDeleted)},
-		Entities: []Entity{{ID: "urn:ngsi-ld:X:{{nameOrID}}", Type: "Room", Delete: true}}}
+		Entities: []Entity{{ID: "urn:ngsi-ld:X:{{id}}", Type: "Room", Delete: true}}}
 	is.NoErr(Validate([]Rule{rule}))
 
 	th := lifecycleInput(string(LifecycleDeleted))
-	th.NameOrID = "room-a"
+	th.ID = "room-a"
 	writes, err := NewEngine([]Rule{rule}).Transform(th)
 	is.NoErr(err)
 	is.Equal(1, len(writes))

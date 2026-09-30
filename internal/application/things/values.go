@@ -14,28 +14,16 @@ import (
 // är tråd (topics/JSON), inte Go-moduler, så ingen import av producentens
 // paket sker här.
 type thingValuesEnvelope struct {
-	Schema           string                 `json:"schema"`
-	EventID          string                 `json:"eventId"`
-	Tenant           string                 `json:"tenant"`
-	ThingID          string                 `json:"thingId"`
-	ThingType        string                 `json:"thingType"`
-	ThingTypeVersion string                 `json:"thingTypeVersion"`
-	ConfigRevision   int64                  `json:"configRevision"`
-	PublishedAt      time.Time              `json:"publishedAt"`
-	Thing            *thingValuesDescriptor `json:"thing"`
-	Values           []thingValue           `json:"values"`
-}
-
-type thingValuesDescriptor struct {
-	ThingID         string            `json:"thingId"`
-	Name            string            `json:"name"`
-	AlternativeName string            `json:"alternativeName"`
-	SubType         string            `json:"subType"`
-	Category        string            `json:"category"`
-	Location        json.RawMessage   `json:"location"`
-	Metadata        map[string]string `json:"metadata"`
-	VariantID       string            `json:"variantId"`
-	VariantVersion  string            `json:"variantVersion"`
+	Schema           string           `json:"schema"`
+	EventID          string           `json:"eventId"`
+	Tenant           string           `json:"tenant"`
+	ThingID          string           `json:"thingId"`
+	ThingType        string           `json:"thingType"`
+	ThingTypeVersion string           `json:"thingTypeVersion"`
+	ConfigRevision   int64            `json:"configRevision"`
+	PublishedAt      time.Time        `json:"publishedAt"`
+	Thing            *thingDescriptor `json:"thing"`
+	Values           []thingValue     `json:"values"`
 }
 
 type thingValue struct {
@@ -67,7 +55,6 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 	meta := Thing{
 		ID:     env.ThingID,
 		Type:   env.ThingType,
-		Name:   env.ThingID,
 		Tenant: env.Tenant,
 	}
 	var rawLocation json.RawMessage
@@ -81,6 +68,7 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 	}
 
 	observedAt, fields := valuesFields(env.Values)
+	fields["thing"] = descriptorFields(env.ThingID, env.ThingType, env.Thing)
 	if desc := env.Thing; desc != nil {
 		if desc.Name != "" {
 			fields["name"] = desc.Name
@@ -117,7 +105,6 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 		AlternativeName: meta.AlternativeName,
 		Tenant:          meta.Tenant,
 		TypeName:        meta.TypeName(),
-		NameOrID:        meta.AlternativeNameOrNameOrID(),
 		Event:           transform.EventThingsV1Values,
 		ObservedAt:      observedAt,
 		Fields:          fields,

@@ -27,7 +27,7 @@ func lifecycleDeleteRules() []transform.Rule {
 	return []transform.Rule{{
 		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Lifecycle, Lifecycle: string(transform.LifecycleDeleted)},
 		Entities: []transform.Entity{{
-			ID: "urn:ngsi-ld:IndoorEnvironmentObserved:room:{{nameOrID}}", Type: "IndoorEnvironmentObserved",
+			ID: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}", Type: "IndoorEnvironmentObserved",
 			Delete: true,
 		}},
 	}}
@@ -139,5 +139,5 @@ func TestThingLifecycleHandlerDeletesEntity(t *testing.T) {
 	}
 
 	is.NoErr(handler(context.Background(), itm, slog.Default()))
-	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room:Room:A", deletedID)
+	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room-a", deletedID)
 }

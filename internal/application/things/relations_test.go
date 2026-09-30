@@ -28,9 +28,8 @@ func TestRelationsAdapterMapsSetEvent(t *testing.T) {
 	is.Equal(th.Event, transform.EventThingsV1Relations)
 	is.Equal(th.Relation, "partOf")
 	is.True(!th.RelationRemoved)
-	// Samma namnkonvention som sakens egna regler: name vinner över id,
-	// så {{nameOrID}}/{{type}} renderar identiskt med värde-regeln.
-	is.Equal(th.NameOrID, "Tank:1")
+	// ID förblir källans ID; namn bevaras råa som separata attribut.
+	is.Equal(th.Name, "Tank 1")
 	is.Equal(th.TypeName, "tank")
 
 	rel, ok := th.Fields["relation"].(map[string]any)
@@ -42,16 +41,17 @@ func TestRelationsAdapterMapsSetEvent(t *testing.T) {
 	to, ok := rel["to"].(map[string]any)
 	is.True(ok)
 	is.Equal(to["typeName"], "greenhouse")
-	// Samma sanering som sakens egna regler (åäö/mellanslag → ":").
-	is.Equal(to["nameOrID"], "V:xthus:A")
+	is.Equal(to["name"], "Växthus A")
+	is.Equal(to["type"], "greenhouse")
 	is.Equal(to["thingId"], "greenhouse-a")
 
 	from, ok := rel["from"].(map[string]any)
 	is.True(ok)
-	wq, ok := from["waterQualityObserved"].([]any)
-	is.True(ok)
-	is.Equal(1, len(wq))
-	is.Equal("urn:ngsi-ld:WaterQualityObserved:Tank:1", wq[0])
+	is.Equal(from["thingId"], "tank-1")
+	is.Equal(from["name"], "Tank 1")
+	is.Equal(from["type"], "tank")
+	_, modelDependent := from["waterQualityObserved"]
+	is.True(!modelDependent)
 }
 
 func TestRelationsAdapterMapsRemovedEvent(t *testing.T) {
@@ -87,5 +87,5 @@ func TestRelationsAdapterToleratesMissingTo(t *testing.T) {
 	is.NoErr(err)
 	rel := th.Fields["relation"].(map[string]any)
 	to := rel["to"].(map[string]any)
-	is.Equal("", to["nameOrID"])
+	is.Equal("", to["thingId"])
 }

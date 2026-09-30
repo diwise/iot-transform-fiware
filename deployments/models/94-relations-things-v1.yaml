@@ -16,26 +16,26 @@
 rules:
   - match: { kind: thing, event: things.v1.relations, relation: partOf, type: room }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
-          - { target: refParent, type: Relationship, value: "urn:ngsi-ld:Building:{{field:relation.to.nameOrID}}" }
+          - { target: refParent, type: Relationship, value: "urn:ngsi-ld:Building:{{relation.to.thingId}}" }
   - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: room }
     entities:
-      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}"
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties: []
         removeAttributes: [refParent]
   - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank }
     entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}"
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
         type: AgriGreenhouse
         context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
         properties:
-          - { target: hasWaterQualityObserved, type: Relationship, field: relation.from.waterQualityObserved, required: true }
+          - { target: hasWaterQualityObserved, type: Relationship, array: true, value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", required: true }
   - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: tank }
     entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{field:relation.to.nameOrID}}"
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
         type: AgriGreenhouse
         context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
         properties: []

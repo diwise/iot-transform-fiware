@@ -46,8 +46,8 @@ func TestThingValuesFromJSONBuildsEngineInput(t *testing.T) {
 	if th.ID != "room-a" || th.Type != "room" || th.Tenant != "drill" {
 		t.Fatalf("identitet=%+v", th)
 	}
-	if th.NameOrID != "Rum:A" {
-		t.Fatalf("NameOrID=%q, want sanitized Rum:A", th.NameOrID)
+	if th.Name != "Rum A" {
+		t.Fatalf("Name=%q, want raw Rum A", th.Name)
 	}
 	if th.TypeName != "room" {
 		t.Fatalf("TypeName=%q, want room", th.TypeName)
@@ -105,8 +105,8 @@ func TestThingValuesFromJSONWastebinIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if th.NameOrID != "BinA" {
-		t.Fatalf("NameOrID=%q, want BinA (alternativeName vinner)", th.NameOrID)
+	if th.ID != "bin-42" || th.Name != "Soptunna 42" || th.AlternativeName != "BinA" {
+		t.Fatalf("raw identity and names changed: %+v", th)
 	}
 	if th.TypeName != "WasteContainer" {
 		t.Fatalf("TypeName=%q, want WasteContainer (subType vinner)", th.TypeName)
@@ -228,20 +228,20 @@ func TestThingValuesEndToEndGreenhouse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if th.NameOrID != "Greenhouse:1" {
-		t.Fatalf("NameOrID=%q, want sanitized Greenhouse:1", th.NameOrID)
+	if th.ID != "gh-1" || th.Name != "Växthus 1" || th.AlternativeName != "Greenhouse 1" {
+		t.Fatalf("raw identity and names changed: %+v", th)
 	}
 	d := NewDynamicThingTransformer([]transform.Rule{
 		{
 			Match: transform.Match{Kind: transform.KindThing, Type: "Greenhouse"},
 			Entities: []transform.Entity{{
-				ID: "urn:ngsi-ld:OLD:{{nameOrID}}", Type: "OLD",
+				ID: "urn:ngsi-ld:OLD:{{id}}", Type: "OLD",
 			}},
 		},
 		{
 			Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "greenhouse"},
 			Entities: []transform.Entity{{
-				ID:      "urn:ngsi-ld:AgriGreenhouse:{{nameOrID}}",
+				ID:      "urn:ngsi-ld:AgriGreenhouse:{{id}}",
 				Type:    "AgriGreenhouse",
 				Context: "https://example.invalid/agri-context.jsonld",
 				Properties: []transform.Property{
@@ -259,7 +259,7 @@ func TestThingValuesEndToEndGreenhouse(t *testing.T) {
 		t.Fatalf("writes=%d, want 1", len(writes))
 	}
 	w := writes[0]
-	if w.EntityID != "urn:ngsi-ld:AgriGreenhouse:Greenhouse:1" {
+	if w.EntityID != "urn:ngsi-ld:AgriGreenhouse:gh-1" {
 		t.Fatalf("id=%q", w.EntityID)
 	}
 	if w.TypeName != "AgriGreenhouse" {
@@ -275,13 +275,13 @@ func TestThingValuesEndToEndRoom(t *testing.T) {
 		{
 			Match: transform.Match{Kind: transform.KindThing, Type: "Room"},
 			Entities: []transform.Entity{{
-				ID: "urn:ngsi-ld:OLD:{{nameOrID}}", Type: "OLD",
+				ID: "urn:ngsi-ld:OLD:{{id}}", Type: "OLD",
 			}},
 		},
 		{
 			Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
 			Entities: []transform.Entity{{
-				ID:   "urn:ngsi-ld:IndoorEnvironmentObserved:{{type}}:{{nameOrID}}",
+				ID:   "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}",
 				Type: "IndoorEnvironmentObserved",
 				Properties: []transform.Property{
 					{Target: "location", Type: transform.TypeGeo, Field: "location", Required: true},
@@ -298,7 +298,7 @@ func TestThingValuesEndToEndRoom(t *testing.T) {
 		t.Fatalf("writes=%d, want 1", len(writes))
 	}
 	w := writes[0]
-	if w.EntityID != "urn:ngsi-ld:IndoorEnvironmentObserved:room:Rum:A" {
+	if w.EntityID != "urn:ngsi-ld:IndoorEnvironmentObserved:room-a" {
 		t.Fatalf("id=%q", w.EntityID)
 	}
 	if w.TypeName != "IndoorEnvironmentObserved" {

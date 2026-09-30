@@ -12,7 +12,7 @@ func testThing() Thing {
 	ts := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	return Thing{
-		ID: "id-1", Type: "Container", TypeName: "Container", NameOrID: "c1", Tenant: "default",
+		ID: "id-1", Type: "Container", TypeName: "Container", Tenant: "default",
 		ObservedAt: ts,
 		Fields: map[string]any{
 			"percent":    42.5,
@@ -28,7 +28,7 @@ func TestThingFieldAndRefSources(t *testing.T) {
 	is := is.New(t)
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Container"}, Entities: []Entity{{
-		ID: "urn:ngsi-ld:{{type}}:{{nameOrID}}", Type: "{{type}}",
+		ID: "urn:ngsi-ld:{{type}}:{{id}}", Type: "{{type}}",
 		Properties: []Property{
 			{Target: "fillingLevel", Type: TypeNumber, Source: Source{Field: "percent"}, ObservedAt: ObservedAtHeader},
 			{Target: "location", Type: TypeGeo, Source: Source{Field: "location"}},
@@ -40,7 +40,7 @@ func TestThingFieldAndRefSources(t *testing.T) {
 	writes, err := NewEngine([]Rule{rule}).Transform(testThing())
 	is.NoErr(err)
 	is.Equal(len(writes), 1)
-	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Container:c1")
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Container:id-1")
 	is.Equal(writes[0].TypeName, "Container")
 
 	b := marshalWrite(t, writes[0])

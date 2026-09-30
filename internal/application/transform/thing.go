@@ -16,10 +16,8 @@ type Thing struct {
 	Description     string
 	Tenant          string
 
-	// TypeName och NameOrID är förberäknade med saks-konventionerna
-	// (subType vinner över type; alternativa namn vinner över id).
+	// TypeName är en explicit typgenväg; identiteten är alltid det råa ID:t.
 	TypeName string
-	NameOrID string
 
 	// Event taggar händelsekällan för matchning (tomt = ursprunglig
 	// thing.updated-källa; t.ex. "things.v1.values" för värdesevent).
@@ -70,12 +68,11 @@ func (t Thing) MatchInfo() MatchInfo {
 func (t Thing) Variables() map[string]string {
 	return map[string]string{
 		"id":              t.ID,
-		"type":            t.TypeName,
+		"type":            t.Type,
 		"typeName":        t.TypeName,
 		"subType":         t.SubType,
 		"name":            t.Name,
 		"alternativeName": t.AlternativeName,
-		"nameOrID":        t.NameOrID,
 		"uuid":            trailingSegment(t.ID),
 		"tenant":          t.Tenant,
 		"timestamp":       t.ObservedAt.UTC().Format(rfc3339),

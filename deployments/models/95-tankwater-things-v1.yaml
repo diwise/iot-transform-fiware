@@ -7,9 +7,11 @@
 rules:
   - match: { kind: thing, event: things.v1.values, type: tank }
     entities:
-      - id: "urn:ngsi-ld:WaterQualityObserved:{{nameOrID}}"
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
         type: WaterQualityObserved
         properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: temperature, type: Number, field: values.temperature.value, observedAt: "field:values.temperature.observedAt", required: true }
           - { target: pH, type: Number, field: values.ph.value, observedAt: "field:values.ph.observedAt" }
           - { target: location, type: Geo, field: location, required: true }

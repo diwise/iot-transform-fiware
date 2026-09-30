@@ -49,7 +49,7 @@ func TestValidateAllowsDynamicFieldInFirstPresent(t *testing.T) {
 
 	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observer:a", Type: "Observer",
-		Properties: []Property{{Target: "x", Type: TypeText, Source: Source{Value: "{{firstPresent(bogus, nameOrID)}}"}}},
+		Properties: []Property{{Target: "x", Type: TypeText, Source: Source{Value: "{{firstPresent(bogus, id)}}"}}},
 	}}}
 
 	is.NoErr(Validate([]Rule{r}))
@@ -59,7 +59,7 @@ func TestValidateAcceptsFieldAndFirstPresent(t *testing.T) {
 	is := is.New(t)
 
 	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
-		ID: "urn:ngsi-ld:Observer:{{firstPresent(field:current.ref, nameOrID)}}", Type: "Observer",
+		ID: "urn:ngsi-ld:Observer:{{firstPresent(current.ref, id)}}", Type: "Observer",
 		Properties: []Property{{
 			Target: "refTarget", Type: TypeRelationship,
 			Source: Source{Value: "urn:ngsi-ld:Device:{{safeURI(field:current.ref)}}"},

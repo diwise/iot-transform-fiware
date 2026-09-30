@@ -71,14 +71,21 @@ innehåller en modellberoende URN. Dessa är inte källkontraktets begränsninga
 
 ## Uttryck och frånvaro
 
-`nameOrID` är rå alternativeName, annars rå name, annars fullständigt käll-ID.
-Ingen URI-normalisering sker implicit. `type` är rå thingType; `typeName` är
+Standardmallar använder `{{id}}`: rått `thingId` för things och rått `deviceID`
+för measurements. En befintlig GUID/UUID bevaras; ingen ny identitet skapas.
+Namn och alternativnamn är separata attribut, utan fallback till ID.
+`nameOrID` har tagits bort. Ingen URI-normalisering sker implicit.
+`type` är rå thingType; `typeName` är
 den generella genvägen subType om satt, annars type. `uuid` är sista segmentet
 efter kolon eller slash och garanterar inte UUID-format eller unikhet.
 `id`, `name`, `alternativeName` och `subType` bevaras råa. Measurements har
-deviceID, sensorType, object, env, tenant och timestamp; saker har id, type,
-typeName, subType, name, alternativeName, nameOrID, uuid, tenant och timestamp.
-Variabler som källtypen inte kan ge ska avvisas vid regelvalidering.
+id, deviceID, sensorType, object, env, tenant och timestamp; saker har id, type,
+typeName, subType, name, alternativeName, uuid, tenant och timestamp.
+Detta är standardgenvägar, inte en sluten lista. `{{variabel}}` kan slå upp
+vilket exponerat källfält som helst via samma parser som `{{field:variabel}}`,
+inklusive nästlade vägar, citerade nycklar och index. Syntax och funktioner
+valideras i förväg; dynamiska fälts närvaro kan endast avgöras mot indata.
+Källspecifika värdekällor/matchningsfält kontrolleras fortfarande per kind.
 
 `safeURI(expr)` tar exakt ett uttryck och returnerar dess trimmade text
 procentkodad med Go `url.PathEscape`. Det är ett segmenthjälpmedel, inte
@@ -103,8 +110,12 @@ saknad källa, anyTrue/allTrue utan ingång ger false om inte present krävs.
 Derive coalesce/firstPresent väljer första icke-tomma närvarande värde.
 Alltså finns ingen implicit fallback till en Smart Data Model.
 
-Detta är fastställd semantik; äldre sanering av nameOrID och implicit
-ersättning av type måste rättas tillsammans med medföljande regler.
+Objekt/listor i malluttryck renderas som JSON; tal/booleska värden som
+JSON-skalärer och strängar som rå text. Identitets-/metadatagenvägar har
+företräde framför dynamiska fält. Namn får användas uttryckligen i en egen
+ID-mall, men dess författare ansvarar då för kollisioner, namnbyten och
+tidigare målentiteter. Ingen automatisk rensning eller målidentitetshistorik
+införs; samma ansvar gäller vid byte av ID-mall eller modellprefix.
 
 ## Regelval
 
