@@ -30,7 +30,7 @@ func (s *stubRuleStore) snapshot() []rules.StoredRule {
 	return out
 }
 
-func (s *stubRuleStore) ListRules() ([]rules.StoredRule, error) {
+func (s *stubRuleStore) ListRules(ctx context.Context) ([]rules.StoredRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failList != nil {
@@ -51,7 +51,7 @@ func (s *stubRuleStore) LoadRules(ctx context.Context) ([]rules.StoredRule, int6
 	return s.snapshot(), s.version, nil
 }
 
-func (s *stubRuleStore) GetRule(id string) (rules.StoredRule, error) {
+func (s *stubRuleStore) GetRule(ctx context.Context, id string) (rules.StoredRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, st := range s.envelopes {
@@ -62,7 +62,7 @@ func (s *stubRuleStore) GetRule(id string) (rules.StoredRule, error) {
 	return rules.StoredRule{}, rules.ErrNotFound
 }
 
-func (s *stubRuleStore) InsertRule(r transform.Rule) (rules.StoredRule, error) {
+func (s *stubRuleStore) InsertRule(ctx context.Context, r transform.Rule) (rules.StoredRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.version++
@@ -77,7 +77,7 @@ func (s *stubRuleStore) InsertRule(r transform.Rule) (rules.StoredRule, error) {
 	return st, nil
 }
 
-func (s *stubRuleStore) UpdateRule(id string, r transform.Rule, rev int64) (rules.StoredRule, error) {
+func (s *stubRuleStore) UpdateRule(ctx context.Context, id string, r transform.Rule, rev int64) (rules.StoredRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, st := range s.envelopes {
@@ -96,7 +96,7 @@ func (s *stubRuleStore) UpdateRule(id string, r transform.Rule, rev int64) (rule
 	return rules.StoredRule{}, rules.ErrNotFound
 }
 
-func (s *stubRuleStore) DeleteRule(id string, rev int64) error {
+func (s *stubRuleStore) DeleteRule(ctx context.Context, id string, rev int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i, st := range s.envelopes {
@@ -113,7 +113,7 @@ func (s *stubRuleStore) DeleteRule(id string, rev int64) error {
 	return rules.ErrNotFound
 }
 
-func (s *stubRuleStore) RuleVersion() (int64, error) {
+func (s *stubRuleStore) RuleVersion(ctx context.Context) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.failList != nil {
@@ -138,8 +138,8 @@ func TestSnapshotSyncAcrossInstances(t *testing.T) {
 
 	a := NewModels(store, nil)
 	b := NewModels(store, nil)
-	is.NoErr(a.Refresh())
-	is.NoErr(b.Refresh())
+	is.NoErr(a.Refresh(t.Context()))
+	is.NoErr(b.Refresh(t.Context()))
 
 	// Båda tomma: ingen matchning någonstans.
 	_, err := b.Snapshot().Things.Transform(stubThing())
@@ -147,16 +147,16 @@ func TestSnapshotSyncAcrossInstances(t *testing.T) {
 
 	// Mutation via A (direkt i lagret + lokal refresh, som mutate gör).
 	r := testRule()
-	st, err := store.InsertRule(r)
+	st, err := store.InsertRule(t.Context(), r)
 	is.NoErr(err)
-	is.NoErr(a.Refresh())
+	is.NoErr(a.Refresh(t.Context()))
 	is.Equal(a.Snapshot().Version, int64(1))
 
 	// B ser inget förrän synk.
 	_, err = b.Snapshot().Things.Transform(stubThing())
 	is.True(errors.Is(err, transform.ErrNoMatchingRule))
 
-	is.NoErr(b.SyncOnce())
+	is.NoErr(b.SyncOnce(t.Context()))
 	is.Equal(b.Snapshot().Version, int64(1))
 	writes, err := b.Snapshot().Things.Transform(stubThing())
 	is.NoErr(err)
@@ -175,10 +175,10 @@ func TestSnapshotSyncRecoversAfterFailure(t *testing.T) {
 	is := is.New(t)
 	store := &stubRuleStore{}
 	m := NewModels(store, nil)
-	is.NoErr(m.Refresh())
+	is.NoErr(m.Refresh(t.Context()))
 	is.Equal(m.Snapshot().Version, int64(0))
 
-	if _, err := store.InsertRule(testRule()); err != nil {
+	if _, err := store.InsertRule(t.Context(), testRule()); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 
@@ -186,7 +186,7 @@ func TestSnapshotSyncRecoversAfterFailure(t *testing.T) {
 	store.failList = errors.New("database unavailable")
 	store.mu.Unlock()
 
-	if err := m.SyncOnce(); err == nil {
+	if err := m.SyncOnce(t.Context()); err == nil {
 		t.Fatal("SyncOnce must fail while store fails")
 	}
 	is.Equal(m.Snapshot().Version, int64(0))
@@ -197,7 +197,7 @@ func TestSnapshotSyncRecoversAfterFailure(t *testing.T) {
 	store.failList = nil
 	store.mu.Unlock()
 
-	is.NoErr(m.SyncOnce())
+	is.NoErr(m.SyncOnce(t.Context()))
 	is.Equal(m.Snapshot().Version, int64(1))
 	writes, err := m.Snapshot().Things.Transform(stubThing())
 	is.NoErr(err)
@@ -209,9 +209,9 @@ func TestSnapshotSyncNoopWithoutChange(t *testing.T) {
 	is := is.New(t)
 	store := &stubRuleStore{}
 	m := NewModels(store, nil)
-	is.NoErr(m.Refresh())
+	is.NoErr(m.Refresh(t.Context()))
 	before := m.Snapshot()
-	is.NoErr(m.SyncOnce())
+	is.NoErr(m.SyncOnce(t.Context()))
 	if m.Snapshot() != before {
 		t.Fatal("SyncOnce without change must keep snapshot pointer")
 	}
@@ -221,11 +221,11 @@ func TestSnapshotSyncNoopWithoutChange(t *testing.T) {
 // alltid komplett snapshot.
 func TestSnapshotConcurrentAccess(t *testing.T) {
 	store := &stubRuleStore{}
-	if _, err := store.InsertRule(testRule()); err != nil {
+	if _, err := store.InsertRule(t.Context(), testRule()); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	m := NewModels(store, nil)
-	if err := m.Refresh(); err != nil {
+	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 
@@ -247,11 +247,11 @@ func TestSnapshotConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 10; j++ {
-				if err := m.SyncOnce(); err != nil {
+				if err := m.SyncOnce(t.Context()); err != nil {
 					errs <- err
 					return
 				}
-				if err := m.Refresh(); err != nil {
+				if err := m.Refresh(t.Context()); err != nil {
 					errs <- err
 					return
 				}
@@ -270,12 +270,12 @@ func TestRunSyncPicksUpChanges(t *testing.T) {
 	is := is.New(t)
 	store := &stubRuleStore{}
 	m := NewModels(store, nil)
-	is.NoErr(m.Refresh())
+	is.NoErr(m.Refresh(t.Context()))
 
 	stop := m.RunSync(context.Background(), 5*time.Millisecond, slog.Default())
 	defer stop()
 
-	if _, err := store.InsertRule(testRule()); err != nil {
+	if _, err := store.InsertRule(t.Context(), testRule()); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 	deadline := time.Now().Add(2 * time.Second)
@@ -319,12 +319,12 @@ func TestRefreshCannotPublishOlderSnapshot(t *testing.T) {
 	store := &delayedSnapshotStore{stubRuleStore: &stubRuleStore{}, captured: make(chan struct{}), release: make(chan struct{})}
 	m := NewModels(store, nil)
 	older := make(chan error, 1)
-	go func() { older <- m.Refresh() }()
+	go func() { older <- m.Refresh(t.Context()) }()
 	<-store.captured
-	if _, err := store.InsertRule(testRule()); err != nil {
+	if _, err := store.InsertRule(t.Context(), testRule()); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Refresh(); err != nil {
+	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	newer := m.Snapshot()
@@ -342,21 +342,21 @@ func TestRefreshCannotPublishOlderSnapshot(t *testing.T) {
 
 func TestRefreshRejectsInvalidCandidate(t *testing.T) {
 	store := &stubRuleStore{}
-	st, err := store.InsertRule(testRule())
+	st, err := store.InsertRule(t.Context(), testRule())
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := NewModels(store, nil)
-	if err := m.Refresh(); err != nil {
+	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	before := m.Snapshot()
 	bad := testRule()
 	bad.Entities[0].Properties[0].Type = "unsupported"
-	if _, err := store.UpdateRule(st.ID, bad, st.Revision); err != nil {
+	if _, err := store.UpdateRule(t.Context(), st.ID, bad, st.Revision); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.Refresh(); err == nil {
+	if err := m.Refresh(t.Context()); err == nil {
 		t.Fatal("invalid candidate was published")
 	}
 	if m.Snapshot() != before {
@@ -364,5 +364,22 @@ func TestRefreshRejectsInvalidCandidate(t *testing.T) {
 	}
 	if _, err := m.Snapshot().Things.Transform(stubThing()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRefreshCancellationKeepsSnapshot(t *testing.T) {
+	store := &stubRuleStore{}
+	m := NewModels(store, nil)
+	if err := m.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	before := m.Snapshot()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := m.Refresh(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation lost: %v", err)
+	}
+	if m.Snapshot() != before {
+		t.Fatal("canceled load replaced snapshot")
 	}
 }

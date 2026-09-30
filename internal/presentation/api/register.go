@@ -311,14 +311,14 @@ func requireIfMatch(r *http.Request) (int64, error) {
 // mutate serialiserar skrivning + omladdning: DB-skrivning, sedan rebuild
 // av snapshoten. Misslyckad omladdning efter committad skrivning ger 500;
 // nästa synk läker (snapshot byggs alltid från DB).
-func (m *Models) mutate(fn func() (StoredResult, error)) (StoredResult, error) {
+func (m *Models) mutate(ctx context.Context, fn func() (StoredResult, error)) (StoredResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	res, err := fn()
 	if err != nil {
 		return StoredResult{}, err
 	}
-	if err := m.Refresh(); err != nil {
+	if err := m.Refresh(ctx); err != nil {
 		return StoredResult{}, err
 	}
 	return res, nil
@@ -335,7 +335,7 @@ func (h *handler) listModels(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	stored, err := h.models.store.ListRules()
+	stored, err := h.models.store.ListRules(r.Context())
 	if err != nil {
 		writeAPIError(w, err)
 		return
@@ -406,7 +406,7 @@ func (h *handler) getModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	st, err := h.models.store.GetRule(id)
+	st, err := h.models.store.GetRule(r.Context(), id)
 	if err != nil {
 		writeAPIError(w, err)
 		return
@@ -435,8 +435,8 @@ func (h *handler) createModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	res, err := h.models.mutate(func() (StoredResult, error) {
-		st, err := h.models.store.InsertRule(rule)
+	res, err := h.models.mutate(r.Context(), func() (StoredResult, error) {
+		st, err := h.models.store.InsertRule(r.Context(), rule)
 		if err != nil {
 			return StoredResult{}, err
 		}
@@ -476,8 +476,8 @@ func (h *handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	res, err := h.models.mutate(func() (StoredResult, error) {
-		st, err := h.models.store.GetRule(id)
+	res, err := h.models.mutate(r.Context(), func() (StoredResult, error) {
+		st, err := h.models.store.GetRule(r.Context(), id)
 		if err != nil {
 			return StoredResult{}, err
 		}
@@ -490,7 +490,7 @@ func (h *handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		// Både gammalt och nytt ägarskap är kontrollerat. SQL kräver
 		// samma revision, så en samtidig ändring kan inte ersätta den
 		// kontrollerade regeln före skrivningen.
-		st, err = h.models.store.UpdateRule(id, rule, rev)
+		st, err = h.models.store.UpdateRule(r.Context(), id, rule, rev)
 		if err != nil {
 			return StoredResult{}, err
 		}
@@ -521,8 +521,8 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	_, err = h.models.mutate(func() (StoredResult, error) {
-		st, err := h.models.store.GetRule(id)
+	_, err = h.models.mutate(r.Context(), func() (StoredResult, error) {
+		st, err := h.models.store.GetRule(r.Context(), id)
 		if err != nil {
 			return StoredResult{}, err
 		}
@@ -534,7 +534,7 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		}
 		// Revisionen jämförs atomärt i SQL (TF-04): ingen TOCTOU-glipa
 		// mellan läsning och radering, även mellan instanser.
-		if err := h.models.store.DeleteRule(id, rev); err != nil {
+		if err := h.models.store.DeleteRule(r.Context(), id, rev); err != nil {
 			return StoredResult{}, err
 		}
 		return StoredResult{Rule: st}, nil

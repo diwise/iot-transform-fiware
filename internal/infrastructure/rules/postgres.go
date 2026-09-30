@@ -113,7 +113,14 @@ func (s *PgStore) migrate(ctx context.Context) error {
 	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(6193027748113459)`); err != nil {
 		return err
 	}
-	defer conn.Exec(ctx, `SELECT pg_advisory_unlock(6193027748113459)`)
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
+		defer cancel()
+		if _, err := conn.Exec(cleanup, `SELECT pg_advisory_unlock(6193027748113459)`); err != nil {
+			// En anslutning med kvarvarande sessionslås får inte återgå till poolen.
+			_ = conn.Conn().Close(cleanup)
+		}
+	}()
 	entries, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return err
@@ -137,8 +144,8 @@ func (s *PgStore) migrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *PgStore) ctx() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), queryTimeout)
+func (s *PgStore) ctx(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, queryTimeout)
 }
 
 func scanRule(id, seedKey, kind, source string, revision, position int64, raw []byte) (StoredRule, error) {
@@ -153,8 +160,8 @@ func scanRule(id, seedKey, kind, source string, revision, position int64, raw []
 // som deterministisk tiebreak): seed i filordning, API-regler sist.
 // Motorn väljer första regeln vid lika poäng, så denna ordning definierar
 // precedens oberoende av UUID.
-func (s *PgStore) ListRules() ([]StoredRule, error) {
-	ctx, cancel := s.ctx()
+func (s *PgStore) ListRules(ctx context.Context) ([]StoredRule, error) {
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	return listRules(ctx, s.pool)
 }
@@ -217,8 +224,8 @@ func (s *PgStore) LoadRules(ctx context.Context) ([]StoredRule, int64, error) {
 }
 
 // GetRule hämtar en regel på id.
-func (s *PgStore) GetRule(id string) (StoredRule, error) {
-	ctx, cancel := s.ctx()
+func (s *PgStore) GetRule(ctx context.Context, id string) (StoredRule, error) {
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	var st StoredRule
 	var raw []byte
@@ -266,11 +273,17 @@ func lockRuleSet(ctx context.Context, tx pgx.Tx) error {
 	return err
 }
 
+func rollback(ctx context.Context, tx pgx.Tx) {
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
+	defer cancel()
+	_ = tx.Rollback(cleanup)
+}
+
 // RuleVersion returnerar den globala versionsräknaren för regelregistret.
 // Saknad rad betyder version 0. Varje mutation bumpar den i samma
 // transaktion, så pollande instanser ser ändringar utan att missa.
-func (s *PgStore) RuleVersion() (int64, error) {
-	ctx, cancel := s.ctx()
+func (s *PgStore) RuleVersion(ctx context.Context) (int64, error) {
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	var v int64
 	err := s.pool.QueryRow(ctx, `SELECT COALESCE((SELECT version FROM rule_version WHERE id=1), 0)`).Scan(&v)
@@ -290,18 +303,18 @@ func bumpVersionTx(ctx context.Context, tx pgx.Tx) error {
 
 // InsertRule lagrar en ny API-regel (källa api, revision 1) och returnerar
 // den med genererat UUID. Ogiltiga regler nekas före skrivning.
-func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
+func (s *PgStore) InsertRule(ctx context.Context, r transform.Rule) (StoredRule, error) {
 	raw, err := marshalRule(r)
 	if err != nil {
 		return StoredRule{}, err
 	}
-	ctx, cancel := s.ctx()
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return StoredRule{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer rollback(ctx, tx)
 	if err := lockRuleSet(ctx, tx); err != nil {
 		return StoredRule{}, err
 	}
@@ -329,18 +342,18 @@ func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
 // UpdateRule ersätter en regel vid matchande revision (optimistisk låsning:
 // fel revision ger ErrConflict, okänt id ErrNotFound) och flippar källan
 // till api så att framtida seed aldrig skriver över manuella ändringar.
-func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (StoredRule, error) {
+func (s *PgStore) UpdateRule(ctx context.Context, id string, r transform.Rule, expectedRev int64) (StoredRule, error) {
 	raw, err := marshalRule(r)
 	if err != nil {
 		return StoredRule{}, err
 	}
-	ctx, cancel := s.ctx()
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return StoredRule{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer rollback(ctx, tx)
 	if err := lockRuleSet(ctx, tx); err != nil {
 		return StoredRule{}, err
 	}
@@ -355,7 +368,10 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
 		if qerr := tx.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
-			return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+			if errors.Is(qerr, pgx.ErrNoRows) {
+				return StoredRule{}, fmt.Errorf("%w: %s", ErrNotFound, id)
+			}
+			return StoredRule{}, qerr
 		}
 		return StoredRule{}, fmt.Errorf("%w: %s", ErrConflict, id)
 	}
@@ -379,14 +395,14 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 // TOCTOU-glipa mellan läsning och radering, även mellan instanser).
 // Borttagning av en seed-rad registreras som tombstone så att seed inte
 // återupplivar den (TF-03); API-rader utan seed_key lämnar inget spår.
-func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
-	ctx, cancel := s.ctx()
+func (s *PgStore) DeleteRule(ctx context.Context, id string, expectedRev int64) error {
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer rollback(ctx, tx)
 	if err := lockRuleSet(ctx, tx); err != nil {
 		return err
 	}
@@ -397,7 +413,10 @@ func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		var exists bool
 		if qerr := tx.QueryRow(ctx, `SELECT true FROM transform_rules WHERE id=$1`, id).Scan(&exists); qerr != nil {
-			return fmt.Errorf("%w: %s", ErrNotFound, id)
+			if errors.Is(qerr, pgx.ErrNoRows) {
+				return fmt.Errorf("%w: %s", ErrNotFound, id)
+			}
+			return qerr
 		}
 		return fmt.Errorf("%w: %s", ErrConflict, id)
 	}
@@ -431,14 +450,14 @@ func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 // Seed och API serialiseras med samma transaktionslås. Hela kandidaten
 // valideras innan commit; seed-rader, prune och versionsbump är atomiska.
 // API-ägda och tombstonade seed-nycklar skrivs aldrig över.
-func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
-	ctx, cancel := s.ctx()
+func (s *PgStore) SeedRules(ctx context.Context, entries []SeedEntry) (SeedResult, error) {
+	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return SeedResult{}, err
 	}
-	defer tx.Rollback(ctx)
+	defer rollback(ctx, tx)
 	if err := lockRuleSet(ctx, tx); err != nil {
 		return SeedResult{}, err
 	}

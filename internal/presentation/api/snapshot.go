@@ -15,12 +15,12 @@ import (
 // den; tester stoppar in stubbar för felinjicering.
 type RuleStore interface {
 	LoadRules(ctx context.Context) ([]rules.StoredRule, int64, error)
-	ListRules() ([]rules.StoredRule, error)
-	GetRule(id string) (rules.StoredRule, error)
-	InsertRule(r transform.Rule) (rules.StoredRule, error)
-	UpdateRule(id string, r transform.Rule, rev int64) (rules.StoredRule, error)
-	DeleteRule(id string, rev int64) error
-	RuleVersion() (int64, error)
+	ListRules(ctx context.Context) ([]rules.StoredRule, error)
+	GetRule(ctx context.Context, id string) (rules.StoredRule, error)
+	InsertRule(ctx context.Context, r transform.Rule) (rules.StoredRule, error)
+	UpdateRule(ctx context.Context, id string, r transform.Rule, rev int64) (rules.StoredRule, error)
+	DeleteRule(ctx context.Context, id string, rev int64) error
+	RuleVersion(ctx context.Context) (int64, error)
 }
 
 // Snapshot är en oföränderlig regeluppsättning med förbyggda motorer.
@@ -48,21 +48,21 @@ func buildSnapshot(stored []rules.StoredRule, resolver measurements.SensorTypeRe
 // SyncOnce laddar om snapshoten om lagrets version ändrats. Idempotent:
 // utan ändring händer inget. Fel propageras; anroparen (mutate, RunSync)
 // avgör återhämtning.
-func (m *Models) SyncOnce() error {
-	v, err := m.store.RuleVersion()
+func (m *Models) SyncOnce(ctx context.Context) error {
+	v, err := m.store.RuleVersion(ctx)
 	if err != nil {
 		return err
 	}
 	if snap := m.snap.Load(); snap != nil && snap.Version == v {
 		return nil
 	}
-	return m.Refresh()
+	return m.Refresh(ctx)
 }
 
 // Refresh bygger om snapshoten från lagret villkorslöst och byter den
 // atomärt. Används vid start, efter egna mutationer och vid poll-träff.
-func (m *Models) Refresh() error {
-	stored, v, err := m.store.LoadRules(context.Background())
+func (m *Models) Refresh(ctx context.Context) error {
+	stored, v, err := m.store.LoadRules(ctx)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (m *Models) RunSync(ctx context.Context, interval time.Duration, log *slog.
 				if snap := m.snap.Load(); snap != nil {
 					before = snap.Version
 				}
-				if err := m.SyncOnce(); err != nil {
+				if err := m.SyncOnce(ctx); err != nil {
 					log.Warn("rule sync failed, retrying", "err", err.Error())
 					continue
 				}

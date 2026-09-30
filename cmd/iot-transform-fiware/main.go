@@ -108,7 +108,7 @@ func main() {
 	// YAML-filerna är seed som läggs in idempotent vid start.
 	ruleStore, err := rules.NewPostgres(ctx, storageConfigFromFlags(flags))
 	exitIf(err, logger, "failed to connect to rule storage")
-	seeded, err := rules.SeedDir(ruleStore, flags[modelsDir])
+	seeded, err := rules.SeedDir(ctx, ruleStore, flags[modelsDir])
 	exitIf(err, logger, "failed to seed model configuration")
 	if seeded.Added+seeded.Updated+seeded.Pruned > 0 {
 		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "pruned", seeded.Pruned, "skipped", seeded.Skipped)
@@ -120,7 +120,7 @@ func main() {
 	}
 
 	models := api.NewModels(ruleStore, sensorTypes)
-	if err := models.Refresh(); err != nil {
+	if err := models.Refresh(ctx); err != nil {
 		exitIf(err, logger, "failed to build initial rule snapshot")
 	}
 	stopSync := models.RunSync(ctx, ruleSyncInterval, logger)

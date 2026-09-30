@@ -63,17 +63,17 @@ func pgTestModels(t *testing.T) *Models {
 	}
 	t.Cleanup(func() { store.Close() })
 	// Töm via list+delete (samma API-yta som koden använder).
-	list, err := store.ListRules()
+	list, err := store.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	for _, st := range list {
-		if err := store.DeleteRule(st.ID, st.Revision); err != nil {
+		if err := store.DeleteRule(t.Context(), st.ID, st.Revision); err != nil {
 			t.Fatalf("truncate %s: %v", st.ID, err)
 		}
 	}
 	m := NewModels(store, nil)
-	if err := m.Refresh(); err != nil {
+	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
 	return m
@@ -365,7 +365,7 @@ func TestModelsTenantIsolation(t *testing.T) {
 		t.Helper()
 		r := testRule()
 		r.Match.Tenant = tenant
-		st, err := m.store.InsertRule(r)
+		st, err := m.store.InsertRule(t.Context(), r)
 		if err != nil {
 			t.Fatalf("seed tenant %q: %v", tenant, err)
 		}
@@ -429,7 +429,7 @@ func TestModelsTenantIsolation(t *testing.T) {
 	// En synlig global regel får inte tas över genom att body anger A.
 	rr = doModelAs(h.updateModel, http.MethodPut, global.ID, ra, map[string]string{"If-Match": `"rev-1"`}, ctxA)
 	is.Equal(rr.Code, http.StatusForbidden)
-	unchanged, err := m.store.GetRule(global.ID)
+	unchanged, err := m.store.GetRule(t.Context(), global.ID)
 	is.NoErr(err)
 	is.Equal(unchanged.Rule.Match.Tenant, "")
 	is.Equal(unchanged.Revision, int64(1))
@@ -458,7 +458,7 @@ func TestModelsTenantTransferAndConcurrentRevision(t *testing.T) {
 	h := &handler{models: m}
 	initial := testRule()
 	initial.Match.Tenant = "a"
-	st, err := m.store.InsertRule(initial)
+	st, err := m.store.InsertRule(t.Context(), initial)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +489,7 @@ func TestModelsTenantTransferAndConcurrentRevision(t *testing.T) {
 	if counts[http.StatusOK] != 1 || counts[http.StatusConflict] != 1 {
 		t.Fatalf("expected one winner and one revision conflict: %v", counts)
 	}
-	final, err := m.store.GetRule(st.ID)
+	final, err := m.store.GetRule(t.Context(), st.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -515,7 +515,7 @@ func TestListModelsFilters(t *testing.T) {
 		}},
 	}
 	for _, r := range []transform.Rule{thing, meas} {
-		if _, err := m.store.InsertRule(r); err != nil {
+		if _, err := m.store.InsertRule(t.Context(), r); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
 	}

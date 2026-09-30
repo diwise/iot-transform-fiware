@@ -60,7 +60,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       Seed, API och omladdning ska använda samma regler för giltighet.
 - [x] Gör seedändringar och versionsbump atomiska. Verifiera rollback vid fel
       mitt i seedningen och att andra instanser ser en komplett uppsättning.
-- [ ] För context genom API, regelgränssnitt och lagring. Bevara cancellation,
+- [x] För context genom API, regelgränssnitt och lagring. Bevara cancellation,
       tidsbudget och spårningskedja; skilj DB-fel från saknad rad och konflikt.
 - [ ] Behåll regel-ID, revision och uppsättningsversion som körningsmetadata.
       Säkerställ att den publicerade konfigurationen är oföränderlig under körning.

@@ -167,7 +167,7 @@ func TestLoadRulesConsistentDuringCommit(t *testing.T) {
 func TestWholeCandidateValidation(t *testing.T) {
 	s := pgTestRules(t)
 	first := testRule()
-	if _, err := s.InsertRule(first); err != nil {
+	if _, err := s.InsertRule(t.Context(), first); err != nil {
 		t.Fatal(err)
 	}
 	conflicting := testRule()
@@ -175,10 +175,10 @@ func TestWholeCandidateValidation(t *testing.T) {
 	if err := transform.Validate([]transform.Rule{conflicting}); err != nil {
 		t.Fatalf("fixture must be independently valid: %v", err)
 	}
-	if _, err := s.InsertRule(conflicting); !errors.Is(err, ErrInvalidRule) {
+	if _, err := s.InsertRule(t.Context(), conflicting); !errors.Is(err, ErrInvalidRule) {
 		t.Fatalf("conflicting API candidate: %v", err)
 	}
-	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "conflict#0", Rule: conflicting}}); !errors.Is(err, ErrInvalidRule) {
+	if _, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "conflict#0", Rule: conflicting}}); !errors.Is(err, ErrInvalidRule) {
 		t.Fatalf("conflicting seed candidate: %v", err)
 	}
 	r, v, err := s.LoadRules(context.Background())
@@ -191,7 +191,7 @@ func TestSeedRollbackMidBatch(t *testing.T) {
 	s := pgTestRules(t)
 	first := testRule()
 	initial := []SeedEntry{{SeedKey: "a#0", Rule: first}}
-	if _, err := s.SeedRules(initial); err != nil {
+	if _, err := s.SeedRules(t.Context(), initial); err != nil {
 		t.Fatal(err)
 	}
 	before, version, err := s.LoadRules(context.Background())
@@ -203,7 +203,7 @@ func TestSeedRollbackMidBatch(t *testing.T) {
 	bad := testRule()
 	bad.Entities[0].Properties[0].Type = "unsupported"
 	// Första raden ändras i transaktionen innan andra raden felar.
-	res, err := s.SeedRules([]SeedEntry{{SeedKey: "a#0", Rule: changed}, {SeedKey: "b#0", Rule: bad}})
+	res, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a#0", Rule: changed}, {SeedKey: "b#0", Rule: bad}})
 	if err == nil || res != (SeedResult{}) {
 		t.Fatalf("failed seed reported success: %+v %v", res, err)
 	}
@@ -220,7 +220,7 @@ func TestSeedRollbackMidBatch(t *testing.T) {
 	}
 	defer other.Close()
 	complete := []SeedEntry{{SeedKey: "a#0", Rule: changed}, {SeedKey: "b#0", Rule: first}}
-	res, err = s.SeedRules(complete)
+	res, err = s.SeedRules(t.Context(), complete)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,10 +230,40 @@ func TestSeedRollbackMidBatch(t *testing.T) {
 	}
 }
 
+func TestRuleOperationsPreserveCancellation(t *testing.T) {
+	s := pgTestRules(t)
+	st, err := s.InsertRule(t.Context(), testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	checks := map[string]func() error{
+		"list":    func() error { _, err := s.ListRules(ctx); return err },
+		"get":     func() error { _, err := s.GetRule(ctx, st.ID); return err },
+		"version": func() error { _, err := s.RuleVersion(ctx); return err },
+		"insert":  func() error { _, err := s.InsertRule(ctx, testRule()); return err },
+		"update":  func() error { _, err := s.UpdateRule(ctx, st.ID, testRule(), st.Revision); return err },
+		"delete":  func() error { return s.DeleteRule(ctx, st.ID, st.Revision) },
+		"seed":    func() error { _, err := s.SeedRules(ctx, []SeedEntry{{SeedKey: "x#0", Rule: testRule()}}); return err },
+	}
+	for name, check := range checks {
+		t.Run(name, func(t *testing.T) {
+			if err := check(); !errors.Is(err, context.Canceled) {
+				t.Fatalf("cancellation lost: %v", err)
+			}
+		})
+	}
+	r, v, err := s.LoadRules(t.Context())
+	if err != nil || len(r) != 1 || v != 1 {
+		t.Fatalf("canceled operations mutated state: %d %d %v", len(r), v, err)
+	}
+}
+
 func TestRuleCRUD(t *testing.T) {
 	s := pgTestRules(t)
 
-	stored, err := s.InsertRule(testRule())
+	stored, err := s.InsertRule(t.Context(), testRule())
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -244,7 +274,7 @@ func TestRuleCRUD(t *testing.T) {
 		t.Fatalf("kind=%q, want thing", stored.Kind)
 	}
 
-	got, err := s.GetRule(stored.ID)
+	got, err := s.GetRule(t.Context(), stored.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -254,7 +284,7 @@ func TestRuleCRUD(t *testing.T) {
 
 	r := testRule()
 	r.Match.Type = "hall"
-	updated, err := s.UpdateRule(stored.ID, r, 1)
+	updated, err := s.UpdateRule(t.Context(), stored.ID, r, 1)
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -262,30 +292,30 @@ func TestRuleCRUD(t *testing.T) {
 		t.Fatalf("updated=%+v", updated)
 	}
 
-	if _, err := s.UpdateRule(stored.ID, r, 1); !errors.Is(err, ErrConflict) {
+	if _, err := s.UpdateRule(t.Context(), stored.ID, r, 1); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale revision must conflict, got %v", err)
 	}
-	if _, err := s.UpdateRule("00000000-0000-0000-0000-000000000000", r, 1); !errors.Is(err, ErrNotFound) {
+	if _, err := s.UpdateRule(t.Context(), "00000000-0000-0000-0000-000000000000", r, 1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown id must be not found, got %v", err)
 	}
 
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v, want 1", list, err)
 	}
 
 	// TF-04: revisionen jämförs atomärt i SQL — gammal revision ger
 	// konflikt även om raden finns, okänt id ger not found.
-	if err := s.DeleteRule(stored.ID, 1); !errors.Is(err, ErrConflict) {
+	if err := s.DeleteRule(t.Context(), stored.ID, 1); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale revision delete must conflict, got %v", err)
 	}
-	if err := s.DeleteRule(stored.ID, 2); err != nil {
+	if err := s.DeleteRule(t.Context(), stored.ID, 2); err != nil {
 		t.Fatalf("delete rev 2: %v", err)
 	}
-	if err := s.DeleteRule(stored.ID, 2); !errors.Is(err, ErrNotFound) {
+	if err := s.DeleteRule(t.Context(), stored.ID, 2); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete must be not found, got %v", err)
 	}
-	if _, err := s.GetRule(stored.ID); !errors.Is(err, ErrNotFound) {
+	if _, err := s.GetRule(t.Context(), stored.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get after delete must be not found, got %v", err)
 	}
 }
@@ -298,7 +328,7 @@ func TestRuleSeedIdempotent(t *testing.T) {
 		{SeedKey: "b.yaml#0", Kind: "thing", Rule: r},
 	}
 
-	res, err := s.SeedRules(entries)
+	res, err := s.SeedRules(t.Context(), entries)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -306,7 +336,7 @@ func TestRuleSeedIdempotent(t *testing.T) {
 		t.Fatalf("seed=%+v, want 2 added", res)
 	}
 
-	res, err = s.SeedRules(entries)
+	res, err = s.SeedRules(t.Context(), entries)
 	if err != nil {
 		t.Fatalf("reseed: %v", err)
 	}
@@ -317,7 +347,7 @@ func TestRuleSeedIdempotent(t *testing.T) {
 	// Ändrad seed-fil uppdaterar seed-raden.
 	r2 := testRule()
 	r2.Match.Type = "hall"
-	res, err = s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r2}})
+	res, err = s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r2}})
 	if err != nil {
 		t.Fatalf("reseed edited: %v", err)
 	}
@@ -326,7 +356,7 @@ func TestRuleSeedIdempotent(t *testing.T) {
 	}
 
 	// API-ändring skyddar raden mot framtida seed.
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -341,17 +371,17 @@ func TestRuleSeedIdempotent(t *testing.T) {
 	}
 	r3 := testRule()
 	r3.Match.Type = "api-edited"
-	if _, err := s.UpdateRule(target.ID, r3, target.Revision); err != nil {
+	if _, err := s.UpdateRule(t.Context(), target.ID, r3, target.Revision); err != nil {
 		t.Fatalf("api update: %v", err)
 	}
-	res, err = s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r2}})
+	res, err = s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r2}})
 	if err != nil {
 		t.Fatalf("reseed after api edit: %v", err)
 	}
 	if res.Skipped != 1 || res.Updated != 0 {
 		t.Fatalf("reseed after api edit=%+v, want 1 skipped", res)
 	}
-	got, err := s.GetRule(target.ID)
+	got, err := s.GetRule(t.Context(), target.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -368,19 +398,19 @@ func TestRuleSeedPrunesRemovedFiles(t *testing.T) {
 		{SeedKey: "b.yaml#0", Kind: "thing", Rule: r},
 	}
 
-	if _, err := s.SeedRules(entries); err != nil {
+	if _, err := s.SeedRules(t.Context(), entries); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
 	// Borttagen seed-fil tar bort raden och räknas som ändring.
-	res, err := s.SeedRules(entries[:1])
+	res, err := s.SeedRules(t.Context(), entries[:1])
 	if err != nil {
 		t.Fatalf("reseed without b: %v", err)
 	}
 	if res.Pruned != 1 {
 		t.Fatalf("prune=%+v, want 1 pruned", res)
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -389,7 +419,7 @@ func TestRuleSeedPrunesRemovedFiles(t *testing.T) {
 	}
 
 	// Upprepad seed är stabil (ingen ny prune).
-	res, err = s.SeedRules(entries[:1])
+	res, err = s.SeedRules(t.Context(), entries[:1])
 	if err != nil {
 		t.Fatalf("reseed stable: %v", err)
 	}
@@ -402,10 +432,10 @@ func TestRuleSeedPrunePreservesAPIRows(t *testing.T) {
 	s := pgTestRules(t)
 	r := testRule()
 
-	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}); err != nil {
+	if _, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%+v, err=%v", list, err)
 	}
@@ -413,19 +443,19 @@ func TestRuleSeedPrunePreservesAPIRows(t *testing.T) {
 	// API-övertag raden (samma seed_key, source='api').
 	r2 := testRule()
 	r2.Match.Type = "api-owned"
-	if _, err := s.UpdateRule(list[0].ID, r2, list[0].Revision); err != nil {
+	if _, err := s.UpdateRule(t.Context(), list[0].ID, r2, list[0].Revision); err != nil {
 		t.Fatalf("api update: %v", err)
 	}
 
 	// Filen försvinner ur seed — API-raden bevaras ändå.
-	res, err := s.SeedRules([]SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: r}})
+	res, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: r}})
 	if err != nil {
 		t.Fatalf("reseed: %v", err)
 	}
 	if res.Pruned != 0 {
 		t.Fatalf("prune=%+v, API-owned row must survive", res)
 	}
-	got, err := s.GetRule(list[0].ID)
+	got, err := s.GetRule(t.Context(), list[0].ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -436,14 +466,14 @@ func TestRuleSeedPrunePreservesAPIRows(t *testing.T) {
 
 func TestRuleSeedDirShippedModels(t *testing.T) {
 	s := pgTestRules(t)
-	res, err := SeedDir(s, "../../../deployments/models")
+	res, err := SeedDir(t.Context(), s, "../../../deployments/models")
 	if err != nil {
 		t.Fatalf("seed dir: %v", err)
 	}
 	if res.Added == 0 {
 		t.Fatal("shipped models must seed rows")
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -460,7 +490,7 @@ func TestRuleSeedDirShippedModels(t *testing.T) {
 		}
 		seen[st.SeedKey] = true
 	}
-	res2, err := SeedDir(s, "../../../deployments/models")
+	res2, err := SeedDir(t.Context(), s, "../../../deployments/models")
 	if err != nil {
 		t.Fatalf("reseed dir: %v", err)
 	}
@@ -495,7 +525,7 @@ func tieInput() transform.Measurement {
 
 func listedIDs(t *testing.T, s *PgStore) []string {
 	t.Helper()
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -516,7 +546,7 @@ func TestSeedOrderDefinesPrecedence(t *testing.T) {
 	a := tieRule("urn:ngsi-ld:Thing:first")
 	b := tieRule("urn:ngsi-ld:Thing:second")
 
-	res, err := s.SeedRules([]SeedEntry{
+	res, err := s.SeedRules(t.Context(), []SeedEntry{
 		{SeedKey: "a.yaml#0", Kind: "measurement", Rule: a},
 		{SeedKey: "b.yaml#0", Kind: "measurement", Rule: b},
 	})
@@ -531,7 +561,7 @@ func TestSeedOrderDefinesPrecedence(t *testing.T) {
 	}
 
 	// Omladdning: motorn byggd från ListRules väljer första regeln.
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -571,14 +601,14 @@ func TestAPIAppendAfterSeed(t *testing.T) {
 	s := pgTestRules(t)
 	a := tieRule("urn:ngsi-ld:Thing:first")
 	b := tieRule("urn:ngsi-ld:Thing:second")
-	if _, err := s.SeedRules([]SeedEntry{
+	if _, err := s.SeedRules(t.Context(), []SeedEntry{
 		{SeedKey: "a.yaml#0", Kind: "measurement", Rule: a},
 		{SeedKey: "b.yaml#0", Kind: "measurement", Rule: b},
 	}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	c, err := s.InsertRule(tieRule("urn:ngsi-ld:Thing:third"))
+	c, err := s.InsertRule(t.Context(), tieRule("urn:ngsi-ld:Thing:third"))
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -587,7 +617,7 @@ func TestAPIAppendAfterSeed(t *testing.T) {
 	}
 
 	d := tieRule("urn:ngsi-ld:Thing:third-v2")
-	updated, err := s.UpdateRule(c.ID, d, c.Revision)
+	updated, err := s.UpdateRule(t.Context(), c.ID, d, c.Revision)
 	if err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -605,7 +635,7 @@ func TestSeedShiftReorders(t *testing.T) {
 	s := pgTestRules(t)
 	a := tieRule("urn:ngsi-ld:Thing:first")
 	b := tieRule("urn:ngsi-ld:Thing:second")
-	if _, err := s.SeedRules([]SeedEntry{
+	if _, err := s.SeedRules(t.Context(), []SeedEntry{
 		{SeedKey: "a.yaml#0", Kind: "measurement", Rule: a},
 		{SeedKey: "b.yaml#0", Kind: "measurement", Rule: b},
 	}); err != nil {
@@ -613,7 +643,7 @@ func TestSeedShiftReorders(t *testing.T) {
 	}
 
 	z := tieRule("urn:ngsi-ld:Thing:zeroth")
-	res, err := s.SeedRules([]SeedEntry{
+	res, err := s.SeedRules(t.Context(), []SeedEntry{
 		{SeedKey: "0.yaml#0", Kind: "measurement", Rule: z},
 		{SeedKey: "a.yaml#0", Kind: "measurement", Rule: a},
 		{SeedKey: "b.yaml#0", Kind: "measurement", Rule: b},
@@ -637,24 +667,24 @@ func TestSeedDeleteTombstoned(t *testing.T) {
 	s := pgTestRules(t)
 	r := testRule()
 	entries := []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}
-	if _, err := s.SeedRules(entries); err != nil {
+	if _, err := s.SeedRules(t.Context(), entries); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v, want 1", list, err)
 	}
-	if err := s.DeleteRule(list[0].ID, list[0].Revision); err != nil {
+	if err := s.DeleteRule(t.Context(), list[0].ID, list[0].Revision); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	res, err := s.SeedRules(entries)
+	res, err := s.SeedRules(t.Context(), entries)
 	if err != nil {
 		t.Fatalf("reseed: %v", err)
 	}
 	if res.Added != 0 || res.Updated != 0 || res.Skipped != 1 {
 		t.Fatalf("reseed=%+v, want 1 skipped (tombstoned)", res)
 	}
-	list, err = s.ListRules()
+	list, err = s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -678,7 +708,7 @@ func TestSeedConcurrentBoots(t *testing.T) {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
-			_, err := s.SeedRules(entries)
+			_, err := s.SeedRules(t.Context(), entries)
 			errs[n] = err
 		}(i)
 	}
@@ -686,7 +716,7 @@ func TestSeedConcurrentBoots(t *testing.T) {
 	if errs[0] != nil || errs[1] != nil {
 		t.Fatalf("concurrent seeds failed: %v %v", errs[0], errs[1])
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -708,22 +738,22 @@ func TestSeedTombstonePrune(t *testing.T) {
 	s := pgTestRules(t)
 	r := testRule()
 	a := []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: r}}
-	if _, err := s.SeedRules(a); err != nil {
+	if _, err := s.SeedRules(t.Context(), a); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	list, err := s.ListRules()
+	list, err := s.ListRules(t.Context())
 	if err != nil || len(list) != 1 {
 		t.Fatalf("list=%v err=%v", list, err)
 	}
-	if err := s.DeleteRule(list[0].ID, list[0].Revision); err != nil {
+	if err := s.DeleteRule(t.Context(), list[0].ID, list[0].Revision); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	b := testRule()
 	b.Match.Type = "other"
-	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: b}}); err != nil {
+	if _, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "b.yaml#0", Kind: "thing", Rule: b}}); err != nil {
 		t.Fatalf("seed b: %v", err)
 	}
-	res, err := s.SeedRules(a)
+	res, err := s.SeedRules(t.Context(), a)
 	if err != nil {
 		t.Fatalf("reseed a: %v", err)
 	}
@@ -736,7 +766,7 @@ func TestSeedTombstonePrune(t *testing.T) {
 func TestRuleVersionBumpsOnMutationOnly(t *testing.T) {
 	s := pgTestRules(t)
 
-	v, err := s.RuleVersion()
+	v, err := s.RuleVersion(t.Context())
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
@@ -744,49 +774,49 @@ func TestRuleVersionBumpsOnMutationOnly(t *testing.T) {
 		t.Fatalf("version=%d, want 0 on fresh store", v)
 	}
 
-	stored, err := s.InsertRule(testRule())
+	stored, err := s.InsertRule(t.Context(), testRule())
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	if v, _ := s.RuleVersion(); v != 1 {
+	if v, _ := s.RuleVersion(t.Context()); v != 1 {
 		t.Fatalf("version=%d, want 1 after insert", v)
 	}
 
 	r := testRule()
 	r.Match.Type = "Hall"
-	if _, err := s.UpdateRule(stored.ID, r, stored.Revision); err != nil {
+	if _, err := s.UpdateRule(t.Context(), stored.ID, r, stored.Revision); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	if v, _ := s.RuleVersion(); v != 2 {
+	if v, _ := s.RuleVersion(t.Context()); v != 2 {
 		t.Fatalf("version=%d, want 2 after update", v)
 	}
 
-	if err := s.DeleteRule(stored.ID, 2); err != nil {
+	if err := s.DeleteRule(t.Context(), stored.ID, 2); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if v, _ := s.RuleVersion(); v != 3 {
+	if v, _ := s.RuleVersion(t.Context()); v != 3 {
 		t.Fatalf("version=%d, want 3 after delete", v)
 	}
 
 	// Seed utan ändring bumpar inte.
-	res, err := s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
+	res, err := s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	if res.Added != 1 {
 		t.Fatalf("seed=%+v, want 1 added", res)
 	}
-	if v, _ := s.RuleVersion(); v != 4 {
+	if v, _ := s.RuleVersion(t.Context()); v != 4 {
 		t.Fatalf("version=%d, want 4 after seed insert", v)
 	}
-	res, err = s.SeedRules([]SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
+	res, err = s.SeedRules(t.Context(), []SeedEntry{{SeedKey: "a.yaml#0", Kind: "thing", Rule: testRule()}})
 	if err != nil {
 		t.Fatalf("reseed: %v", err)
 	}
 	if res.Added+res.Updated != 0 {
 		t.Fatalf("reseed=%+v, want no changes", res)
 	}
-	if v, _ := s.RuleVersion(); v != 4 {
+	if v, _ := s.RuleVersion(t.Context()); v != 4 {
 		t.Fatalf("version=%d, want still 4 after no-op seed", v)
 	}
 }

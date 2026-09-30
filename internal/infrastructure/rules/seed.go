@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 // SeedDir läser alla .yaml/.yml-filer i dir i lexikografisk ordning (samma
 // ordning som LoadModelsDir) och seedar dem via store.SeedRules med stabil
 // nyckel <fil>#<index>. Anropas vid start; idempotent.
-func SeedDir(s *PgStore, dir string) (SeedResult, error) {
+func SeedDir(ctx context.Context, s *PgStore, dir string) (SeedResult, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return SeedResult{}, fmt.Errorf("could not read models directory %s: %w", dir, err)
@@ -50,5 +51,5 @@ func SeedDir(s *PgStore, dir string) (SeedResult, error) {
 	if len(seed) == 0 {
 		return SeedResult{}, fmt.Errorf("no model rules found in %s", dir)
 	}
-	return s.SeedRules(seed)
+	return s.SeedRules(ctx, seed)
 }
