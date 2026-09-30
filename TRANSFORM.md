@@ -35,7 +35,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 - [x] Fastställ dokumenterad semantik för `nameOrID`, typvariabler, URI-kodning,
       `firstPresent`, tomma värden och saknade källor. Behåll användbara generella
       genvägar utan att ersätta åtkomsten till råa källfält.
-- [ ] Definiera matchningskontraktet: en vinnande regel per observation/händelse,
+- [x] Definiera matchningskontraktet: en vinnande regel per observation/händelse,
       prioritet, tie-break och beteende när ingen regel matchar. Flera entiteter
       inom en regel stöds; flera matchande regler kombineras inte i denna etapp.
 - [ ] Definiera utfall för saknad källa, felaktig indata, ogiltig regel,

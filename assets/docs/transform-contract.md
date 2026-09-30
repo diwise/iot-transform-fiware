@@ -105,3 +105,27 @@ Alltså finns ingen implicit fallback till en Smart Data Model.
 
 Detta är fastställd semantik; äldre sanering av nameOrID och implicit
 ersättning av type måste rättas tillsammans med medföljande regler.
+
+## Regelval
+
+Exakt en regel vinner per partitionerad measurement-observation eller things-
+händelse. Alla matchningsvillkor är AND-villkor. Högsta explicita heltals-
+`priority` vinner (default 0), därefter högsta specificitet och slutligen
+första regeln i snapshotens stabila ordning. DB-snapshots ordnas på regel-ID;
+offline YAML använder fil-/regelordning. Prioritet ändrar aldrig tenantgrinden.
+
+Specificitet: device/subType ger 4 vardera, sensorType/type ger 2 vardera,
+object/resource/env/tenant och relationens måltyp ger 1 vardera. Event,
+relationRemoved och lifecycle är hårda filter. SensorType jämförs
+case-insensitivt, övriga värden exakt. Port stöds inte av accepted-källan.
+Lifecycle-regler kräver explicit created/updated/deleted, inget wildcard.
+Things kräver exakt en dokumenterad eventkälla. Relationens målsida måste
+kunna avgränsas separat från from-sidan.
+
+En regel får producera flera entiteter i deklarerad ordning. Namngivna
+entitetsreferenser måste avse ett tidigare deklarerat ID; själv-/framåt-
+referenser i ID och cykler avvisas. En entitets övriga uttryck kan använda
+dess eget redan renderade ID. Alla uttrycksplatser har samma referensregler.
+Matchande regler kombineras inte. Ingen match ger ett förklarbart skip utan
+broker-/tokenkontakt. En match utan skrivbara properties ger inga skrivningar.
+Överlapp/skuggning ska vara diagnostik, inte falska konflikter mellan tenants.
