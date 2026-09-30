@@ -12,7 +12,7 @@ func relationRef(id, value string) Entity {
 	}}}
 }
 
-func TestValidateAllowsForwardReferenceToNonCreatedEntity(t *testing.T) {
+func TestValidateRejectsForwardReferenceToNonCreatedEntity(t *testing.T) {
 	is := is.New(t)
 
 	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{
@@ -20,13 +20,13 @@ func TestValidateAllowsForwardReferenceToNonCreatedEntity(t *testing.T) {
 		{Name: "target", ID: "urn:ngsi-ld:Target:b", Type: "Target"},
 	}}
 
-	is.NoErr(Validate([]Rule{r}))
+	is.True(Validate([]Rule{r}) != nil)
 }
 
 func TestValidateRejectsUnknownReferenceInRelationValue(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{
 		relationRef("urn:ngsi-ld:Observer:a", "{{entities.missing.id}}"),
 	}}
 
@@ -36,7 +36,7 @@ func TestValidateRejectsUnknownReferenceInRelationValue(t *testing.T) {
 func TestValidateRejectsEmptyFieldPath(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observer:a", Type: "Observer",
 		Properties: []Property{{Target: "x", Type: TypeText, Source: Source{Value: "{{field:}}"}}},
 	}}}
@@ -47,7 +47,7 @@ func TestValidateRejectsEmptyFieldPath(t *testing.T) {
 func TestValidateRejectsUnknownVariableInFirstPresent(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observer:a", Type: "Observer",
 		Properties: []Property{{Target: "x", Type: TypeText, Source: Source{Value: "{{firstPresent(bogus, nameOrID)}}"}}},
 	}}}
@@ -72,7 +72,7 @@ func TestValidateAcceptsFieldAndFirstPresent(t *testing.T) {
 func TestValidateRejectsDuplicateEntityNames(t *testing.T) {
 	is := is.New(t)
 
-	r := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{
+	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{
 		{Name: "same", ID: "urn:a", Type: "A"},
 		{Name: "same", ID: "urn:b", Type: "B"},
 	}}

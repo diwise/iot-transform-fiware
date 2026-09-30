@@ -3,11 +3,8 @@ package transform
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 )
-
-var entityRefRe = regexp.MustCompile(`\{\{entities\.([A-Za-z0-9_-]+)\.id\}\}`)
 
 var validPropertyTypes = map[PropertyType]bool{
 	TypeNumber:       true,
@@ -92,8 +89,7 @@ func (r Rule) validate() error {
 }
 
 // validateReferences kontrollerar att {{entities.<namn>.id}} pekar på en
-// deklarerad entitet i samma regel och att en create-entitet skapas innan den
-// refereras.
+// deklarerad entitet i samma regel, vars ID redan har renderats.
 func (r Rule) validateReferences() error {
 	index := map[string]int{}
 	for i, e := range r.Entities {
@@ -107,19 +103,30 @@ func (r Rule) validateReferences() error {
 	}
 
 	for i, e := range r.Entities {
-		refs := entityRefRe.FindAllStringSubmatch(e.ID, -1)
+		refs, err := entityReferences(e.ID)
+		if err != nil {
+			return fmt.Errorf("entity %d ID: %w", i, err)
+		}
+		for _, ref := range refs {
+			if j, ok := index[ref]; ok && j == i {
+				return fmt.Errorf("entity %d ID references itself", i)
+			}
+		}
 		for _, p := range e.Properties {
-			refs = append(refs, entityRefRe.FindAllStringSubmatch(p.Value, -1)...)
+			names, err := entityReferences(p.Value)
+			if err != nil {
+				return fmt.Errorf("entity %d property %s: %w", i, p.Target, err)
+			}
+			refs = append(refs, names...)
 		}
 
-		for _, m := range refs {
-			name := m[1]
+		for _, name := range refs {
 			j, ok := index[name]
 			if !ok {
 				return fmt.Errorf("entity %d references unknown entity %q", i, name)
 			}
-			if r.Entities[j].Create && j > i {
-				return fmt.Errorf("entity %q is created after it is referenced by entity %d", name, i)
+			if j > i {
+				return fmt.Errorf("entity %q is declared after it is referenced by entity %d", name, i)
 			}
 		}
 	}

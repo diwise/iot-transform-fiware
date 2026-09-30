@@ -77,3 +77,32 @@ func TestTemplateVariablesAreSourceSpecific(t *testing.T) {
 		}
 	}
 }
+
+func TestEntityIDsRequireDeclarationOrder(t *testing.T) {
+	rule := expressionRule()
+	first := rule.Entities[0]
+	first.Name = "first"
+	second := rule.Entities[0]
+	second.Name = "second"
+	second.ID = "urn:example:second"
+	rule.Entities = []Entity{first, second}
+	if err := Validate([]Rule{rule}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	rule.Entities[0].ID = "{{entities.second.id}}"
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("forward ID reference accepted for non-create entity")
+	}
+	rule.Entities[0].ID = "{{entities.first.id}}"
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("self-referential ID accepted")
+	}
+	rule.Entities[0].ID = "urn:example:first"
+	rule.Entities[1].Properties[0].Value = "{{entities.first.id}}"
+	if err := Validate([]Rule{rule}); err != nil {
+		t.Fatalf("valid backward reference: %v", err)
+	}
+	if _, err := NewEngine([]Rule{rule}).Transform(Thing{Event: EventThingsV1Values, Name: "value"}); err != nil {
+		t.Fatalf("accepted reference failed at runtime: %v", err)
+	}
+}

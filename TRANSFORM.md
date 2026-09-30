@@ -76,7 +76,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       felaktigt balanserade eller otillåtna uttryck.
 - [x] Registrera generella funktioner med dokumenterade argument, returtyper
       och beteende vid saknad källa. Validera tillgängliga variabler per källtyp.
-- [ ] Definiera och implementera konsekvent referenshantering för entitets-ID:n.
+- [x] Definiera och implementera konsekvent referenshantering för entitets-ID:n.
       Välj explicit ordningskrav eller beroendeupplösning; valideringen får inte
       godkänna framåtreferenser som körningen inte kan lösa.
 - [ ] Kontrollera referenser i samtliga relevanta uttryck, inklusive ID, typ,

@@ -77,3 +77,38 @@ func validateExpr(expr string) error {
 	}
 	return nil
 }
+
+func entityReferences(template string) ([]string, error) {
+	parts, err := parseTemplate(template)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	var visit func(string) error
+	visit = func(expr string) error {
+		if ref := entityRefExpr.FindStringSubmatch(expr); ref != nil {
+			names = append(names, ref[1])
+			return nil
+		}
+		_, args, call, err := templateCall(expr)
+		if err != nil {
+			return err
+		}
+		if call {
+			for _, arg := range args {
+				if err := visit(arg); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	for _, part := range parts {
+		if part.expression != "" {
+			if err := visit(part.expression); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return names, nil
+}
