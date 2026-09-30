@@ -97,6 +97,72 @@ func testRule() transform.Rule {
 	}
 }
 
+func TestLoadRulesConsistentDuringCommit(t *testing.T) {
+	s := pgTestRules(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	// Läsaren kan läsa den gamla versionen men blockeras sedan på raderna.
+	if _, err := tx.Exec(ctx, `LOCK TABLE transform_rules IN ACCESS EXCLUSIVE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := marshalRule(testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO transform_rules(kind, rule, source) VALUES('thing',$1,'api')`, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := bumpVersionTx(ctx, tx); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		rules   []StoredRule
+		version int64
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		r, v, err := s.LoadRules(ctx)
+		done <- result{r, v, err}
+	}()
+	for {
+		var waiting bool
+		err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'SELECT id::text%')`).Scan(&waiting)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("snapshot reader did not reach blocked row query")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	got := <-done
+	if got.err != nil || got.version != 0 || len(got.rules) != 0 {
+		t.Fatalf("mixed snapshot: %+v", got)
+	}
+	r, v, err := s.LoadRules(ctx)
+	if err != nil || v != 1 || len(r) != 1 {
+		t.Fatalf("new snapshot: rules=%d version=%d err=%v", len(r), v, err)
+	}
+	canceled, stop := context.WithCancel(ctx)
+	stop()
+	if _, _, err := s.LoadRules(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation: %v", err)
+	}
+}
+
 func TestRuleCRUD(t *testing.T) {
 	s := pgTestRules(t)
 

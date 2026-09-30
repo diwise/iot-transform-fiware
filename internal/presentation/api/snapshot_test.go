@@ -39,6 +39,18 @@ func (s *stubRuleStore) ListRules() ([]rules.StoredRule, error) {
 	return s.snapshot(), nil
 }
 
+func (s *stubRuleStore) LoadRules(ctx context.Context) ([]rules.StoredRule, int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	if s.failList != nil {
+		return nil, 0, s.failList
+	}
+	return s.snapshot(), s.version, nil
+}
+
 func (s *stubRuleStore) GetRule(id string) (rules.StoredRule, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

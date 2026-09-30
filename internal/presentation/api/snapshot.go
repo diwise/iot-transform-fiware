@@ -14,6 +14,7 @@ import (
 // RuleStore är den persistensyta Models behöver. *rules.PgStore uppfyller
 // den; tester stoppar in stubbar för felinjicering.
 type RuleStore interface {
+	LoadRules(ctx context.Context) ([]rules.StoredRule, int64, error)
 	ListRules() ([]rules.StoredRule, error)
 	GetRule(id string) (rules.StoredRule, error)
 	InsertRule(r transform.Rule) (rules.StoredRule, error)
@@ -61,11 +62,7 @@ func (m *Models) SyncOnce() error {
 // Refresh bygger om snapshoten från lagret villkorslöst och byter den
 // atomärt. Används vid start, efter egna mutationer och vid poll-träff.
 func (m *Models) Refresh() error {
-	stored, err := m.store.ListRules()
-	if err != nil {
-		return err
-	}
-	v, err := m.store.RuleVersion()
+	stored, v, err := m.store.LoadRules(context.Background())
 	if err != nil {
 		return err
 	}

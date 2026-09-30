@@ -111,7 +111,8 @@ ersättning av type måste rättas tillsammans med medföljande regler.
 Exakt en regel vinner per partitionerad measurement-observation eller things-
 händelse. Alla matchningsvillkor är AND-villkor. Högsta explicita heltals-
 `priority` vinner (default 0), därefter högsta specificitet och slutligen
-första regeln i snapshotens stabila ordning. DB-snapshots ordnas på regel-ID;
+första regeln i snapshotens stabila ordning. DB-snapshots ordnas på position
+och därefter regel-ID (seed i filordning, API i skapandeordning);
 offline YAML använder fil-/regelordning. Prioritet ändrar aldrig tenantgrinden.
 
 Specificitet: device/subType ger 4 vardera, sensorType/type ger 2 vardera,

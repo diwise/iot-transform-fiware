@@ -155,7 +155,15 @@ func scanRule(id, seedKey, kind, source string, revision, position int64, raw []
 func (s *PgStore) ListRules() ([]StoredRule, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	rows, err := s.pool.Query(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, position, rule FROM transform_rules ORDER BY position, id`)
+	return listRules(ctx, s.pool)
+}
+
+type ruleQuerier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
+func listRules(ctx context.Context, q ruleQuerier) ([]StoredRule, error) {
+	rows, err := q.Query(ctx, `SELECT id::text, COALESCE(seed_key,''), kind, source, revision, position, rule FROM transform_rules ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +185,34 @@ func (s *PgStore) ListRules() ([]StoredRule, error) {
 		out = []StoredRule{}
 	}
 	return out, rows.Err()
+}
+
+// LoadRules läser version och rader ur samma MVCC-snapshot. Read Committed
+// räcker inte: separata SELECT kan annars se olika committade mutationer.
+func (s *PgStore) LoadRules(ctx context.Context) ([]StoredRule, int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
+		defer cancel()
+		_ = tx.Rollback(cleanup)
+	}()
+	var version int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT version FROM rule_version WHERE id=1), 0)`).Scan(&version); err != nil {
+		return nil, 0, err
+	}
+	stored, err := listRules(ctx, tx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, 0, err
+	}
+	return stored, version, nil
 }
 
 // GetRule hämtar en regel på id.
