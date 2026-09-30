@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -183,6 +184,49 @@ func TestWholeCandidateValidation(t *testing.T) {
 	r, v, err := s.LoadRules(context.Background())
 	if err != nil || len(r) != 1 || v != 1 {
 		t.Fatalf("failed candidate affected rows/version: %d %d %v", len(r), v, err)
+	}
+}
+
+func TestSeedRollbackMidBatch(t *testing.T) {
+	s := pgTestRules(t)
+	first := testRule()
+	initial := []SeedEntry{{SeedKey: "a#0", Rule: first}}
+	if _, err := s.SeedRules(initial); err != nil {
+		t.Fatal(err)
+	}
+	before, version, err := s.LoadRules(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := testRule()
+	changed.Entities[0].Properties[0].Source = transform.Source{Const: "new"}
+	bad := testRule()
+	bad.Entities[0].Properties[0].Type = "unsupported"
+	// Första raden ändras i transaktionen innan andra raden felar.
+	res, err := s.SeedRules([]SeedEntry{{SeedKey: "a#0", Rule: changed}, {SeedKey: "b#0", Rule: bad}})
+	if err == nil || res != (SeedResult{}) {
+		t.Fatalf("failed seed reported success: %+v %v", res, err)
+	}
+	after, nextVersion, err := s.LoadRules(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, after) || nextVersion != version {
+		t.Fatalf("partial seed committed: before=%+v after=%+v versions=%d/%d", before, after, version, nextVersion)
+	}
+	other, err := NewPostgres(context.Background(), pgTestConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	complete := []SeedEntry{{SeedKey: "a#0", Rule: changed}, {SeedKey: "b#0", Rule: first}}
+	res, err = s.SeedRules(complete)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible, visibleVersion, err := other.LoadRules(context.Background())
+	if err != nil || len(visible) != 2 || visibleVersion != version+1 || res.Added != 1 || res.Updated != 1 {
+		t.Fatalf("other instance did not see complete seed: %+v %d %+v %v", visible, visibleVersion, res, err)
 	}
 }
 

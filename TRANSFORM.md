@@ -58,7 +58,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       publiceras efter en nyare. Behåll föregående fungerande snapshot vid fel.
 - [x] Validera/kompilera hela kandidatuppsättningen före publicering.
       Seed, API och omladdning ska använda samma regler för giltighet.
-- [ ] Gör seedändringar och versionsbump atomiska. Verifiera rollback vid fel
+- [x] Gör seedändringar och versionsbump atomiska. Verifiera rollback vid fel
       mitt i seedningen och att andra instanser ser en komplett uppsättning.
 - [ ] För context genom API, regelgränssnitt och lagring. Bevara cancellation,
       tidsbudget och spårningskedja; skilj DB-fel från saknad rad och konflikt.
