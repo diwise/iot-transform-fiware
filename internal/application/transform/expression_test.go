@@ -106,3 +106,48 @@ func TestEntityIDsRequireDeclarationOrder(t *testing.T) {
 		t.Fatalf("accepted reference failed at runtime: %v", err)
 	}
 }
+
+func TestReferencesValidatedAtEveryExpressionSite(t *testing.T) {
+	sites := map[string]func(*Rule, string){
+		"type": func(r *Rule, expr string) { r.Entities[0].Type = expr },
+		"observedBy": func(r *Rule, expr string) {
+			r.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Source: Source{Field: "reading"}, ObservedBy: expr}}
+		},
+		"subproperty": func(r *Rule, expr string) {
+			r.Entities[0].Properties = []Property{{Target: "structured", Type: TypeStructured, Subproperties: []Property{{Target: "label", Type: TypeText, Source: Source{Value: expr}}}}}
+		},
+	}
+	for site, set := range sites {
+		t.Run(site, func(t *testing.T) {
+			rule := expressionRule()
+			set(&rule, "urn:example:neutral")
+			if err := Validate([]Rule{rule}); err != nil {
+				t.Fatalf("valid baseline: %v", err)
+			}
+			set(&rule, "{{ firstPresent(entities.unknown.id, name) }}")
+			if err := Validate([]Rule{rule}); err == nil {
+				t.Fatal("unknown nested reference accepted")
+			}
+		})
+	}
+}
+
+func TestObservedByCanUseRenderedEntityID(t *testing.T) {
+	rule := expressionRule()
+	rule.Entities[0].Name = "self"
+	rule.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Source: Source{Field: "reading"}, ObservedBy: "{{ entities.self.id }}"}}
+	if err := Validate([]Rule{rule}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewEngine([]Rule{rule}).Transform(Thing{ID: "neutral", Event: EventThingsV1Values, Fields: map[string]any{"reading": 4.0}}); err != nil {
+		t.Fatalf("accepted observedBy reference failed: %v", err)
+	}
+	other := rule.Entities[0]
+	other.Name = "other"
+	other.ID = "{{entities.self.id}}"
+	rule.Entities = append(rule.Entities, other)
+	rule.Entities[0].ID = "{{ firstPresent(entities.other.id,id) }}"
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("cyclic nested entity IDs accepted")
+	}
+}

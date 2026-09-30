@@ -79,7 +79,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
 - [x] Definiera och implementera konsekvent referenshantering för entitets-ID:n.
       Välj explicit ordningskrav eller beroendeupplösning; valideringen får inte
       godkänna framåtreferenser som körningen inte kan lösa.
-- [ ] Kontrollera referenser i samtliga relevanta uttryck, inklusive ID, typ,
+- [x] Kontrollera referenser i samtliga relevanta uttryck, inklusive ID, typ,
       property-värden, subproperties och `observedBy`. Upptäck okända namn och cykler.
 - [ ] Avvisa kombinationer som saknar effekt eller bryter typkontraktet,
       exempelvis `latlon` på annan måltyp än Geo och metadata som inte stöds.

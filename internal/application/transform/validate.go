@@ -112,10 +112,24 @@ func (r Rule) validateReferences() error {
 				return fmt.Errorf("entity %d ID references itself", i)
 			}
 		}
-		for _, p := range e.Properties {
-			names, err := entityReferences(p.Value)
+		expressions := []string{e.Type}
+		var properties func([]Property)
+		properties = func(props []Property) {
+			for _, p := range props {
+				expressions = append(expressions, p.Value, p.ObservedBy)
+				if p.Derive != nil {
+					for _, source := range p.Derive.Of {
+						expressions = append(expressions, source.Value)
+					}
+				}
+				properties(p.Subproperties)
+			}
+		}
+		properties(e.Properties)
+		for _, expression := range expressions {
+			names, err := entityReferences(expression)
 			if err != nil {
-				return fmt.Errorf("entity %d property %s: %w", i, p.Target, err)
+				return fmt.Errorf("entity %d expression %q: %w", i, expression, err)
 			}
 			refs = append(refs, names...)
 		}

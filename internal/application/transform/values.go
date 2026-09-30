@@ -20,7 +20,7 @@ import (
 // required.
 func buildProperty(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
 	if p.Derive != nil {
-		return buildDerived(p, in)
+		return buildDerived(p, in, ids)
 	}
 
 	if p.Type == TypeStructured {
@@ -46,7 +46,7 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 			return nil, err
 		}
 
-		observedBy, err := renderObservedBy(p, in)
+		observedBy, err := renderObservedBy(p, in, ids)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +95,7 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 		return nil, err
 	}
 
-	observedBy, err := renderObservedBy(p, in)
+	observedBy, err := renderObservedBy(p, in, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +128,11 @@ func applyPrefix(p Property, raw any) any {
 	}
 }
 
-func renderObservedBy(p Property, in Input) (string, error) {
+func renderObservedBy(p Property, in Input, ids map[string]string) (string, error) {
 	if p.ObservedBy == "" {
 		return "", nil
 	}
-	return renderTemplate(p.ObservedBy, in, nil)
+	return renderTemplate(p.ObservedBy, in, ids)
 }
 
 func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
@@ -607,7 +607,7 @@ func applyTransform(t Transform, raw any) (any, error) {
 }
 
 // buildDerived kombinerar flera källor med en namngiven funktion.
-func buildDerived(p Property, in Input) (entities.EntityDecoratorFunc, error) {
+func buildDerived(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
 	values := make([]any, 0, len(p.Derive.Of))
 
 	for _, s := range p.Derive.Of {
@@ -643,7 +643,7 @@ func buildDerived(p Property, in Input) (entities.EntityDecoratorFunc, error) {
 		return nil, nil
 	}
 
-	observedBy, err := renderObservedBy(p, in)
+	observedBy, err := renderObservedBy(p, in, ids)
 	if err != nil {
 		return nil, err
 	}
