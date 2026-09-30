@@ -249,12 +249,31 @@ func (e Entity) validate() error {
 		return fmt.Errorf("entity.type: %w", err)
 	}
 
+	seen := map[string]bool{}
 	for i, p := range e.Properties {
+		if err := validateAttributeName(p.Target); err != nil {
+			return fmt.Errorf("property %d: %w", i, err)
+		}
+		if seen[p.Target] {
+			return fmt.Errorf("duplicate property target %q", p.Target)
+		}
+		seen[p.Target] = true
 		if err := p.validate(); err != nil {
 			return fmt.Errorf("property %d (%s): %w", i, p.Target, err)
 		}
 	}
 
+	return nil
+}
+
+func validateAttributeName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("attribute name must not be empty")
+	}
+	switch name {
+	case "id", "type", "@context", "createdAt", "modifiedAt", "deletedAt":
+		return fmt.Errorf("attribute %q collides with NGSI-LD structural field", name)
+	}
 	return nil
 }
 
@@ -359,10 +378,15 @@ func (e Entity) validateForRule(kind Kind) error {
 	if kind != KindThing {
 		return errors.New("removeAttributes is only valid for things")
 	}
+	seen := map[string]bool{}
 	for _, name := range e.RemoveAttributes {
-		if strings.TrimSpace(name) == "" {
-			return errors.New("removeAttributes must name attributes")
+		if err := validateAttributeName(name); err != nil {
+			return err
 		}
+		if seen[name] {
+			return fmt.Errorf("duplicate removeAttributes target %q", name)
+		}
+		seen[name] = true
 	}
 	if e.Create {
 		return errors.New("removeAttributes cannot be combined with create")
@@ -452,7 +476,12 @@ func (p Property) validate() error {
 		if len(p.Subproperties) == 0 {
 			return errors.New("a structured property must declare subproperties")
 		}
+		seen := map[string]bool{}
 		for i, sp := range p.Subproperties {
+			if seen[sp.Target] {
+				return fmt.Errorf("duplicate subproperty target %q", sp.Target)
+			}
+			seen[sp.Target] = true
 			if sp.Type == TypeStructured {
 				return fmt.Errorf("subproperty %d (%s): structured may not be nested", i, sp.Target)
 			}

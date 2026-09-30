@@ -83,7 +83,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       property-värden, subproperties och `observedBy`. Upptäck okända namn och cykler.
 - [x] Avvisa kombinationer som saknar effekt eller bryter typkontraktet,
       exempelvis `latlon` på annan måltyp än Geo och metadata som inte stöds.
-- [ ] Kontrollera dubbletter och konflikter mellan attribut, samt kollisioner
+- [x] Kontrollera dubbletter och konflikter mellan attribut, samt kollisioner
       med NGSI-LD-strukturfält såsom `id`, `type` och `@context`.
 - [ ] Kontrollera statiska konstanter, URI:er, datum och transformargument där
       felet kan upptäckas utan indata, inklusive division med konstant noll.

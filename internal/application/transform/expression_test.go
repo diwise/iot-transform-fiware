@@ -168,3 +168,28 @@ func TestUnsupportedPropertyCombinationsRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestAttributeConflictsRejected(t *testing.T) {
+	for _, target := range []string{"id", "type", "@context"} {
+		rule := expressionRule()
+		rule.Entities[0].Properties[0].Target = target
+		if err := Validate([]Rule{rule}); err == nil {
+			t.Fatalf("reserved target %s accepted", target)
+		}
+	}
+	rule := expressionRule()
+	rule.Entities[0].Properties = append(rule.Entities[0].Properties, Property{Target: "label", Type: TypeNumber, Source: Source{Const: 2.0}})
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("duplicate/conflicting attribute accepted")
+	}
+	rule = expressionRule()
+	rule.Entities[0].Properties = nil
+	rule.Entities[0].RemoveAttributes = []string{"label", "label"}
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("duplicate attribute removal accepted")
+	}
+	rule.Entities[0].RemoveAttributes = []string{"id"}
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("structural ID removal accepted")
+	}
+}
