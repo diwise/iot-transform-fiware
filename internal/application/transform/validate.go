@@ -481,6 +481,9 @@ func (p Property) validate() error {
 		}
 		seen := map[string]bool{}
 		for i, sp := range p.Subproperties {
+			if sp.Array {
+				return fmt.Errorf("subproperty %d (%s): array is only supported on NGSI-LD Relationship attributes", i, sp.Target)
+			}
 			if seen[sp.Target] {
 				return fmt.Errorf("duplicate subproperty target %q", sp.Target)
 			}

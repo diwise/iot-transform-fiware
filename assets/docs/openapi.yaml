@@ -335,7 +335,7 @@ components:
         array:
           type: boolean
           default: false
-          description: 'Endast Relationship. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
+          description: 'Endast NGSI-LD Relationship-attribut, inte Structured-delvärden. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
         unit: { type: string }
         observedAt:
           type: string

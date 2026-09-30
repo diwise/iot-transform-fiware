@@ -58,3 +58,15 @@ func TestRelationshipReferencesAreStrict(t *testing.T) {
 		t.Fatal("array accepted on non-Relationship target")
 	}
 }
+
+func TestRelationshipArrayIsNotIgnoredInStructuredSubvalues(t *testing.T) {
+	rule := expressionRule()
+	rule.Entities[0].Properties = []Property{{Target: "document", Type: TypeStructured, Subproperties: []Property{{Target: "reference", Type: TypeRelationship, Source: Source{Const: "urn:example:target"}}}}}
+	if err := Validate([]Rule{rule}); err != nil {
+		t.Fatalf("otherwise valid rule: %v", err)
+	}
+	rule.Entities[0].Properties[0].Subproperties[0].Array = true
+	if err := Validate([]Rule{rule}); err == nil {
+		t.Fatal("unsupported array modifier silently accepted for structured subvalue")
+	}
+}
