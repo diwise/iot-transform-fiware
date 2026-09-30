@@ -151,3 +151,20 @@ func TestObservedByCanUseRenderedEntityID(t *testing.T) {
 		t.Fatal("cyclic nested entity IDs accepted")
 	}
 }
+
+func TestUnsupportedPropertyCombinationsRejected(t *testing.T) {
+	cases := []Property{
+		{Target: "position", Type: TypeText, Source: Source{LatLon: true}},
+		{Target: "position", Type: TypeGeo, Source: Source{LatLon: true, Prefix: "ignored"}},
+		{Target: "labels", Type: TypeLanguageMap, Source: Source{Const: map[string]any{"en": "text"}}, ObservedAt: ObservedAtMessage},
+		{Target: "labels", Type: TypeLanguageMap, Source: Source{Const: map[string]any{"en": "text"}, Prefix: "ignored"}},
+		{Target: "structure", Type: TypeStructured, Source: Source{Const: "ignored"}, Subproperties: []Property{{Target: "label", Type: TypeText, Source: Source{Const: "text"}}}},
+	}
+	for _, property := range cases {
+		rule := expressionRule()
+		rule.Entities[0].Properties[0] = property
+		if err := Validate([]Rule{rule}); err == nil {
+			t.Fatalf("ignored combination accepted: %+v", property)
+		}
+	}
+}

@@ -7,13 +7,23 @@ import (
 )
 
 func kindRule(kind Kind, src Source) Rule {
+	propertyType := TypeNumber
+	if src.LatLon {
+		propertyType = TypeGeo
+	}
+	if src.Timestamp {
+		propertyType = TypeDateTime
+	}
+	if src.Const != nil || src.Value != "" {
+		propertyType = TypeText
+	}
 	match := Match{Kind: kind}
 	if kind == KindThing {
 		match.Event = EventThingsV1Values
 	}
 	return Rule{Match: match, Entities: []Entity{{
 		ID: "urn:ngsi-ld:X:x", Type: "X",
-		Properties: []Property{{Target: "v", Type: TypeNumber, Source: src}},
+		Properties: []Property{{Target: "v", Type: propertyType, Source: src}},
 	}}}
 }
 
@@ -39,6 +49,7 @@ func TestThingRulesRejectMeasurementSources(t *testing.T) {
 
 	sub := kindRule(KindThing, Source{Const: "x"})
 	sub.Entities[0].Properties[0].Type = TypeStructured
+	sub.Entities[0].Properties[0].Source = Source{}
 	sub.Entities[0].Properties[0].Subproperties = []Property{
 		{Target: "s", Type: TypeNumber, Source: Source{Resource: "5700"}},
 	}
@@ -80,6 +91,7 @@ func TestMeasurementRulesRejectThingSources(t *testing.T) {
 
 	sub := kindRule(KindMeasurement, Source{Const: "x"})
 	sub.Entities[0].Properties[0].Type = TypeStructured
+	sub.Entities[0].Properties[0].Source = Source{}
 	sub.Entities[0].Properties[0].Subproperties = []Property{
 		{Target: "s", Type: TypeNumber, Source: Source{Ref: "x"}},
 	}

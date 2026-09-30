@@ -374,6 +374,22 @@ func (e Entity) validateForRule(kind Kind) error {
 }
 
 func (p Property) validate() error {
+	if p.LatLon {
+		if p.Type != TypeGeo {
+			return errors.New("latlon requires Geo target type")
+		}
+		if len(p.Transform) != 0 || p.Prefix != "" {
+			return errors.New("transform/prefix is not supported for latlon")
+		}
+	}
+	if p.Timestamp {
+		if p.Type != TypeDateTime && p.Type != TypeText {
+			return errors.New("timestamp requires DateTime or Text target type")
+		}
+		if len(p.Transform) != 0 || p.Prefix != "" || p.ObservedBy != "" || p.ObservedAt != "" {
+			return errors.New("modifiers/metadata are not supported for timestamp")
+		}
+	}
 	if p.Target == "" {
 		return errors.New("target is required")
 	}
@@ -385,6 +401,9 @@ func (p Property) validate() error {
 	// LanguageMap tar endast råa språkmappor (field:/const:) — transform
 	// och derive avvisas i v1 (ingen definierad semantik över mappar).
 	if p.Type == TypeLanguageMap {
+		if p.Prefix != "" || p.ObservedAt != "" || p.ObservedBy != "" {
+			return errors.New("prefix/time/observedBy metadata is not supported for languageMap")
+		}
 		if len(p.Transform) > 0 || p.Derive != nil {
 			return errors.New("transform/derive is not supported for languageMap")
 		}
@@ -427,6 +446,9 @@ func (p Property) validate() error {
 	}
 
 	if p.Type == TypeStructured {
+		if p.Source != (Source{}) || p.Derive != nil || len(p.Transform) != 0 || p.ObservedAt != "" || p.ObservedBy != "" {
+			return errors.New("structured uses subproperties only; source/modifiers/metadata are not supported")
+		}
 		if len(p.Subproperties) == 0 {
 			return errors.New("a structured property must declare subproperties")
 		}

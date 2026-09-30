@@ -81,7 +81,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       godkänna framåtreferenser som körningen inte kan lösa.
 - [x] Kontrollera referenser i samtliga relevanta uttryck, inklusive ID, typ,
       property-värden, subproperties och `observedBy`. Upptäck okända namn och cykler.
-- [ ] Avvisa kombinationer som saknar effekt eller bryter typkontraktet,
+- [x] Avvisa kombinationer som saknar effekt eller bryter typkontraktet,
       exempelvis `latlon` på annan måltyp än Geo och metadata som inte stöds.
 - [ ] Kontrollera dubbletter och konflikter mellan attribut, samt kollisioner
       med NGSI-LD-strukturfält såsom `id`, `type` och `@context`.
