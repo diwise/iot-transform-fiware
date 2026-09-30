@@ -65,9 +65,10 @@ Kanal är en del av resursidentiteten och **inte port**: accepted-kontraktet
 levererar ingen port för matchning. En portregel ska därför avvisas.
 
 Nuvarande adapterluckor att rätta i etapp 4–5: resurser tappar fullständigt
-namn/enhet, values tappar delar av proveniensen och kuvertmetadata, Point
-saknar rå geometri, lifecycle tappar descriptorfält och relationsadaptern
-innehåller en modellberoende URN. Dessa är inte källkontraktets begränsningar.
+namn/enhet och values tappar delar av proveniensen och kuvertmetadata.
+Gemensamma descriptors exponerar nu rå plats, metadata och variantinformation
+för values/lifecycle samt båda relationssidorna. Relationsadaptern bygger
+inga modellberoende mål-URN:er. Resterande luckor är inte källkontraktets begränsningar.
 
 ## Uttryck och frånvaro
 
@@ -186,3 +187,26 @@ revisionskonkurrens och omstart kördes även separat med `-v -count=1` och
 rapporterade PASS, inte SKIP. Ändrade Go-filer har formaterats med gofmt.
 Ingen full Compose-end-to-end-acceptans eller brokerverifiering enligt etapp
 7/9 har utförts för denna ändringsserie.
+
+## Identitetsbeslut och verifiering 2026-10-01
+
+Standard-ID är nu `{{id}}`, och namn/alternativnamn mappas till attribut.
+Den nya policyn är verifierad för alla nio medföljande things-modeller med
+neutrala GUID:er: namn-, alternativnamns- och undertypsändringar behåller
+samma mål-ID i values och lifecycle/delete. Relationsreferenser och rensning
+använder samma käll-ID:n. Generella fältmallar, råa descriptors och faktisk
+Relationship-listserialisering är verifierade; `nameOrID` tillhandahålls inte.
+
+Efter identitetsändringen passerade `PG_TEST_PORT=5432 go test ./... -count=1`
+och `go vet ./...` i denna modul. Race-tester passerade med `-count=1` för
+transform, things, config, rules, api och messaging/things. DB-/seedtester
+kördes mot de separata testdatabaserna ovan. Alla fyra YAML-exempel i
+`iot-things-v2/docs/CONSUMER-BINDING.md` avkodades strikt och validerades med
+motorns faktiska validator genom en tillfällig verifieringstestfil som sedan
+togs bort.
+
+`diwise-web` använder `{{id}}` som standard och bevarar `array` i klient,
+formulär och JSON. `go test ./...` och `go vet ./...` passerade där och i
+`iot-things-v2`. Webbens ändrade `.templ` genererades med templ v0.3.1020;
+`templ generate -f internal/presentation/web/components/features/rules/rule_form.templ -check`
+passerade. Övriga omarkerade TRANSFORM-punkter återstår.

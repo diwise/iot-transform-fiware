@@ -216,7 +216,7 @@ det versionslåsta `context-broker`-biblioteket.
       eller exempeldata, inte som generiska interna fel.
 - [ ] Uppdatera `README.md`, `assets/docs/openapi.yaml`, relevanta
       konfigurationsexempel och modellkommentarer. Ta bort föråldrade legacy-hänvisningar.
-- [ ] Uppdatera relationsexemplet i syskonrepots
+- [x] Uppdatera relationsexemplet i syskonrepots
       `iot-things-v2/docs/CONSUMER-BINDING.md` utan att ändra producentens eventpayload.
 
 ## Etapp 9 — verifiering och acceptans
