@@ -49,7 +49,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 Berör främst `internal/presentation/api/{register,snapshot}.go` och
 `internal/infrastructure/rules`.
 
-- [ ] Kontrollera skrivägarskap på både befintlig och ny regel vid PUT.
+- [x] Kontrollera skrivägarskap på både befintlig och ny regel vid PUT.
       En global regel får inte kunna tas över genom att body anger egen tenant.
       Verifiera även tenantbyte och samtidiga revisionsändringar.
 - [ ] Läs regeluppsättning och versionsnummer konsistent från databasen.

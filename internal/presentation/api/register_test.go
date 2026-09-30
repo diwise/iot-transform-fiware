@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
@@ -450,6 +451,51 @@ func TestModelsTenantIsolation(t *testing.T) {
 	// Utan access-context: 401 på läsning.
 	rr = doModelAs(h.listModels, http.MethodGet, "", nil, nil, context.Background())
 	is.Equal(rr.Code, http.StatusUnauthorized)
+}
+
+func TestModelsTenantTransferAndConcurrentRevision(t *testing.T) {
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	initial := testRule()
+	initial.Match.Tenant = "a"
+	st, err := m.store.InsertRule(initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := testRule()
+	next.Match.Tenant = "b"
+	// Överföring kräver skrivscope för båda tenants.
+	denied := doModelAs(h.updateModel, http.MethodPut, st.ID, next, map[string]string{"If-Match": `"rev-1"`}, fullAccess("b"))
+	if denied.Code != http.StatusNotFound {
+		t.Fatalf("new-owner-only transfer: %d %s", denied.Code, denied.Body.String())
+	}
+	start := make(chan struct{})
+	codes := make(chan int, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() {
+			<-start
+			rr := doModelAs(h.updateModel, http.MethodPut, st.ID, next, map[string]string{"If-Match": `"rev-1"`}, fullAccess("a", "b"))
+			codes <- rr.Code
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(codes)
+	counts := map[int]int{}
+	for code := range codes {
+		counts[code]++
+	}
+	if counts[http.StatusOK] != 1 || counts[http.StatusConflict] != 1 {
+		t.Fatalf("expected one winner and one revision conflict: %v", counts)
+	}
+	final, err := m.store.GetRule(st.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Revision != 2 || final.Rule.Match.Tenant != "b" {
+		t.Fatalf("unexpected final rule: %+v", final)
+	}
 }
 
 // Valfria sökfilter på GET /models (PLAN002 1.1): omitempty, AND, okända

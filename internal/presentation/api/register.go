@@ -484,6 +484,12 @@ func (h *handler) updateModel(w http.ResponseWriter, r *http.Request) {
 		if !ruleVisible(st.Rule, authorized) {
 			return StoredResult{}, fmt.Errorf("%w: %s", rules.ErrNotFound, id)
 		}
+		if err := requireRuleTenant(st.Rule, authorized); err != nil {
+			return StoredResult{}, err
+		}
+		// Både gammalt och nytt ägarskap är kontrollerat. SQL kräver
+		// samma revision, så en samtidig ändring kan inte ersätta den
+		// kontrollerade regeln före skrivningen.
 		st, err = h.models.store.UpdateRule(id, rule, rev)
 		if err != nil {
 			return StoredResult{}, err
