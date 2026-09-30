@@ -353,6 +353,9 @@ func TestModelsTenantIsolation(t *testing.T) {
 	m := pgTestModels(t)
 	h := &handler{models: m}
 	ctxA := fullAccess("a")
+	if err := transform.Validate([]transform.Rule{testRule()}); err != nil {
+		t.Fatalf("regression fixture must be valid: %v", err)
+	}
 
 	// Setup direkt i lagret (utan auktorisering): en global regel samt
 	// en regel per tenant. Lagret är tenant-okunnigt med flit; handlers
@@ -422,6 +425,13 @@ func TestModelsTenantIsolation(t *testing.T) {
 	is.Equal(rr.Code, http.StatusForbidden)
 	rr = doModelAs(h.deleteModel, http.MethodDelete, global.ID, nil, map[string]string{"If-Match": `"rev-1"`}, ctxA)
 	is.Equal(rr.Code, http.StatusForbidden)
+	// En synlig global regel får inte tas över genom att body anger A.
+	rr = doModelAs(h.updateModel, http.MethodPut, global.ID, ra, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	unchanged, err := m.store.GetRule(global.ID)
+	is.NoErr(err)
+	is.Equal(unchanged.Rule.Match.Tenant, "")
+	is.Equal(unchanged.Revision, int64(1))
 
 	// Skapande kräver icke-tom tenant inom egna auktoriserade tenants.
 	rr = doModelAs(h.createModel, http.MethodPost, "", rb, nil, ctxA)
