@@ -163,6 +163,29 @@ func TestLoadRulesConsistentDuringCommit(t *testing.T) {
 	}
 }
 
+func TestWholeCandidateValidation(t *testing.T) {
+	s := pgTestRules(t)
+	first := testRule()
+	if _, err := s.InsertRule(first); err != nil {
+		t.Fatal(err)
+	}
+	conflicting := testRule()
+	conflicting.Entities[0].Type = "Different"
+	if err := transform.Validate([]transform.Rule{conflicting}); err != nil {
+		t.Fatalf("fixture must be independently valid: %v", err)
+	}
+	if _, err := s.InsertRule(conflicting); !errors.Is(err, ErrInvalidRule) {
+		t.Fatalf("conflicting API candidate: %v", err)
+	}
+	if _, err := s.SeedRules([]SeedEntry{{SeedKey: "conflict#0", Rule: conflicting}}); !errors.Is(err, ErrInvalidRule) {
+		t.Fatalf("conflicting seed candidate: %v", err)
+	}
+	r, v, err := s.LoadRules(context.Background())
+	if err != nil || len(r) != 1 || v != 1 {
+		t.Fatalf("failed candidate affected rows/version: %d %d %v", len(r), v, err)
+	}
+}
+
 func TestRuleCRUD(t *testing.T) {
 	s := pgTestRules(t)
 

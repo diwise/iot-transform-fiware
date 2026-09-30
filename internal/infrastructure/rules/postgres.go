@@ -32,8 +32,9 @@ const (
 )
 
 var (
-	ErrNotFound = errors.New("rule not found")
-	ErrConflict = errors.New("revision conflict")
+	ErrNotFound    = errors.New("rule not found")
+	ErrConflict    = errors.New("revision conflict")
+	ErrInvalidRule = errors.New("invalid rule set")
 )
 
 // StoredRule är en persisterad regel med identitet och livscykel.
@@ -234,13 +235,35 @@ func (s *PgStore) GetRule(id string) (StoredRule, error) {
 
 func marshalRule(r transform.Rule) ([]byte, error) {
 	if err := transform.Validate([]transform.Rule{r}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrInvalidRule, err)
 	}
 	raw, err := json.Marshal(r)
 	if err != nil {
 		return nil, fmt.Errorf("rules: rule is not encodable: %w", err)
 	}
 	return raw, nil
+}
+
+func validateCandidate(ctx context.Context, tx pgx.Tx) error {
+	stored, err := listRules(ctx, tx)
+	if err != nil {
+		return err
+	}
+	candidate := make([]transform.Rule, len(stored))
+	for i, st := range stored {
+		candidate[i] = st.Rule
+	}
+	if err := transform.Validate(candidate); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRule, err)
+	}
+	return nil
+}
+
+// Alla skrivare använder samma transaktionslås för validering av hela
+// kandidatuppsättningen även mellan processer.
+func lockRuleSet(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(6193027748113460)`)
+	return err
 }
 
 // RuleVersion returnerar den globala versionsräknaren för regelregistret.
@@ -279,6 +302,9 @@ func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
 		return StoredRule{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockRuleSet(ctx, tx); err != nil {
+		return StoredRule{}, err
+	}
 	var st StoredRule
 	var stored []byte
 	err = tx.QueryRow(ctx,
@@ -286,6 +312,9 @@ func (s *PgStore) InsertRule(r transform.Rule) (StoredRule, error) {
 		string(r.Match.Kind), raw, SourceAPI).
 		Scan(&st.ID, &st.SeedKey, &st.Kind, &st.Source, &st.Revision, &st.Position, &stored)
 	if err != nil {
+		return StoredRule{}, err
+	}
+	if err := validateCandidate(ctx, tx); err != nil {
 		return StoredRule{}, err
 	}
 	if err := bumpVersionTx(ctx, tx); err != nil {
@@ -312,6 +341,9 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 		return StoredRule{}, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockRuleSet(ctx, tx); err != nil {
+		return StoredRule{}, err
+	}
 	var st StoredRule
 	var stored []byte
 	err = tx.QueryRow(ctx,
@@ -328,6 +360,9 @@ func (s *PgStore) UpdateRule(id string, r transform.Rule, expectedRev int64) (St
 		return StoredRule{}, fmt.Errorf("%w: %s", ErrConflict, id)
 	}
 	if err != nil {
+		return StoredRule{}, err
+	}
+	if err := validateCandidate(ctx, tx); err != nil {
 		return StoredRule{}, err
 	}
 	if err := bumpVersionTx(ctx, tx); err != nil {
@@ -352,6 +387,9 @@ func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockRuleSet(ctx, tx); err != nil {
+		return err
+	}
 	var seedKey *string
 	err = tx.QueryRow(ctx,
 		`DELETE FROM transform_rules WHERE id=$1 AND revision=$2 RETURNING seed_key`,
@@ -390,43 +428,56 @@ func (s *PgStore) DeleteRule(id string, expectedRev int64) error {
 // ändring av raden — även ren omordning — eftersom ordning är en del av
 // den effektiva konfigurationen.
 //
-// Samtidighet (TF-03): varje skrivning är atomär och villkorad.
-// Samtidiga seed-körningar konvergerar (ON CONFLICT + IS DISTINCT
-// FROM-kontroll); en API-ändring mellan seed-läsning och seed-skrivning
-// vinner eftersom uppdateringen kräver source='seed'. Tombstonade nycklar
-// (borttagna via API) återupplivas aldrig. Sekvensen ställs alltid förbi
-// max — även vid partiellt fel — så API-skapanden aldrig interfolieras
-// med seed-blocket.
+// Seed och API serialiseras med samma transaktionslås. Hela kandidaten
+// valideras innan commit; seed-rader, prune och versionsbump är atomiska.
+// API-ägda och tombstonade seed-nycklar skrivs aldrig över.
 func (s *PgStore) SeedRules(entries []SeedEntry) (SeedResult, error) {
-	res, err := s.seedRules(entries)
-	if serr := s.advanceSequence(); serr != nil && err == nil {
-		err = fmt.Errorf("seed sequence: %w", serr)
-	}
-	return res, err
-}
-
-func (s *PgStore) advanceSequence() error {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	_, err := s.pool.Exec(ctx, `SELECT setval('transform_rules_position_seq', GREATEST((SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), 1), false)`)
-	return err
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return SeedResult{}, err
+	}
+	defer tx.Rollback(ctx)
+	if err := lockRuleSet(ctx, tx); err != nil {
+		return SeedResult{}, err
+	}
+	res, err := s.seedRules(ctx, tx, entries)
+	if err != nil {
+		return SeedResult{}, err
+	}
+	if err := validateCandidate(ctx, tx); err != nil {
+		return SeedResult{}, err
+	}
+	if res.Added+res.Updated+res.Pruned > 0 {
+		if err := bumpVersionTx(ctx, tx); err != nil {
+			return SeedResult{}, err
+		}
+	}
+	// Sekvensen är inte transaktionell. Justera endast efter lyckad
+	// kandidatvalidering; rollback kan ge luckor men aldrig delvisa regler.
+	if _, err := tx.Exec(ctx, `SELECT setval('transform_rules_position_seq', GREATEST((SELECT COALESCE(MAX(position), -1) + 1 FROM transform_rules), 1), false)`); err != nil {
+		return SeedResult{}, fmt.Errorf("seed sequence: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SeedResult{}, err
+	}
+	return res, nil
 }
 
-func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
+func (s *PgStore) seedRules(ctx context.Context, tx pgx.Tx, entries []SeedEntry) (SeedResult, error) {
 	var res SeedResult
 	for i, e := range entries {
 		raw, err := marshalRule(e.Rule)
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
-		ctx, cancel := s.ctx()
-		tag, err := s.pool.Exec(ctx,
+		tag, err := tx.Exec(ctx,
 			`INSERT INTO transform_rules(seed_key, kind, rule, source, position)
 			 SELECT $1, $2, $3, $4, $5
 			 WHERE NOT EXISTS (SELECT 1 FROM seed_tombstones WHERE seed_key=$1)
 			 ON CONFLICT (seed_key) DO NOTHING`,
 			e.SeedKey, string(e.Rule.Match.Kind), raw, SourceSeed, i)
-		cancel()
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
@@ -434,13 +485,11 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 			res.Added++
 			continue
 		}
-		ctx2, cancel2 := s.ctx()
 		var id, source string
 		var position int64
 		var stored []byte
-		err = s.pool.QueryRow(ctx2, `SELECT id::text, source, position, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
+		err = tx.QueryRow(ctx, `SELECT id::text, source, position, rule FROM transform_rules WHERE seed_key=$1`, e.SeedKey).
 			Scan(&id, &source, &position, &stored)
-		cancel2()
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Tombstonad (eller tävlande borttagning): återuppliva aldrig.
 			res.Skipped++
@@ -461,14 +510,12 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 			res.Skipped++
 			continue
 		}
-		ctx3, cancel3 := s.ctx()
-		tag, err = s.pool.Exec(ctx3,
+		tag, err = tx.Exec(ctx,
 			`UPDATE transform_rules
 			 SET kind=$1, rule=$2, position=$3, revision=revision+1, updated_at=now()
 			 WHERE id=$4 AND source=$5
 			   AND (rule IS DISTINCT FROM $2::jsonb OR position IS DISTINCT FROM $3)`,
 			string(e.Rule.Match.Kind), string(raw), i, id, SourceSeed)
-		cancel3()
 		if err != nil {
 			return res, fmt.Errorf("seed %s: %w", e.SeedKey, err)
 		}
@@ -478,43 +525,23 @@ func (s *PgStore) seedRules(entries []SeedEntry) (SeedResult, error) {
 		}
 		res.Updated++
 	}
-	// Versionsbump vid faktisk ändring (TF-05): pollande instanser laddar
-	// om. Egen sats utanför radtransaktionerna — monoton och konvergent;
-	// värsta fallet är en extra bump som nästa seed konstaterar onödig.
-	// Prune nedan bumpar separat vid borttagna rader.
-	if res.Added+res.Updated > 0 {
-		ctx, cancel := s.ctx()
-		defer cancel()
-		if _, err := s.pool.Exec(ctx, `INSERT INTO rule_version(id, version) VALUES(1, 1)
-			ON CONFLICT (id) DO UPDATE SET version = rule_version.version + 1`); err != nil {
-			return res, fmt.Errorf("seed version bump: %w", err)
-		}
-	}
 	if len(entries) > 0 {
 		keys := make([]string, 0, len(entries))
 		for _, e := range entries {
 			keys = append(keys, e.SeedKey)
 		}
-		ctx, cancel := s.ctx()
-		defer cancel()
-		if _, err := s.pool.Exec(ctx, `DELETE FROM seed_tombstones WHERE NOT (seed_key = ANY($1))`, keys); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM seed_tombstones WHERE NOT (seed_key = ANY($1))`, keys); err != nil {
 			return res, fmt.Errorf("seed tombstone prune: %w", err)
 		}
 		// Borttagna seed-filer: radera föräldralösa seed-rader (7.4).
 		// API-övertagna rader har source='api' och bevaras — även med samma
 		// seed_key. Verifiera på staging att endast förväntade rader
 		// försvinner vid deploy.
-		tag, err := s.pool.Exec(ctx, `DELETE FROM transform_rules WHERE source=$1 AND NOT (seed_key = ANY($2))`, SourceSeed, keys)
+		tag, err := tx.Exec(ctx, `DELETE FROM transform_rules WHERE source=$1 AND NOT (seed_key = ANY($2))`, SourceSeed, keys)
 		if err != nil {
 			return res, fmt.Errorf("seed prune: %w", err)
 		}
 		res.Pruned = int(tag.RowsAffected())
-		if res.Pruned > 0 {
-			if _, err := s.pool.Exec(ctx, `INSERT INTO rule_version(id, version) VALUES(1, 1)
-				ON CONFLICT (id) DO UPDATE SET version = rule_version.version + 1`); err != nil {
-				return res, fmt.Errorf("seed prune version bump: %w", err)
-			}
-		}
 	}
 	return res, nil
 }

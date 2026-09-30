@@ -56,7 +56,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       Förhindra att äldre regler märks med en nyare version.
 - [x] Samordna samtidiga omladdningar så att en äldre snapshot inte kan
       publiceras efter en nyare. Behåll föregående fungerande snapshot vid fel.
-- [ ] Validera/kompilera hela kandidatuppsättningen före publicering.
+- [x] Validera/kompilera hela kandidatuppsättningen före publicering.
       Seed, API och omladdning ska använda samma regler för giltighet.
 - [ ] Gör seedändringar och versionsbump atomiska. Verifiera rollback vid fel
       mitt i seedningen och att andra instanser ser en komplett uppsättning.

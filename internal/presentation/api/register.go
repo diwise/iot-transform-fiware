@@ -195,7 +195,7 @@ func requireRuleTenant(rule transform.Rule, authorized []string) error {
 
 func writeAPIError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, errValidation):
+	case errors.Is(err, errValidation), errors.Is(err, rules.ErrInvalidRule):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, errUnauthorized):
 		writeError(w, http.StatusUnauthorized, "unauthorized")

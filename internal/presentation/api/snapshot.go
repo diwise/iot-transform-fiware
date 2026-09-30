@@ -66,6 +66,13 @@ func (m *Models) Refresh() error {
 	if err != nil {
 		return err
 	}
+	candidate := make([]transform.Rule, len(stored))
+	for i, st := range stored {
+		candidate[i] = st.Rule
+	}
+	if err := transform.Validate(candidate); err != nil {
+		return err
+	}
 	snap := buildSnapshot(stored, m.resolver)
 	snap.Version = v
 	for {

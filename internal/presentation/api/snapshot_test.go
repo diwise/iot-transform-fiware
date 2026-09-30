@@ -339,3 +339,30 @@ func TestRefreshCannotPublishOlderSnapshot(t *testing.T) {
 		t.Fatalf("newer rule lost: %v", err)
 	}
 }
+
+func TestRefreshRejectsInvalidCandidate(t *testing.T) {
+	store := &stubRuleStore{}
+	st, err := store.InsertRule(testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModels(store, nil)
+	if err := m.Refresh(); err != nil {
+		t.Fatal(err)
+	}
+	before := m.Snapshot()
+	bad := testRule()
+	bad.Entities[0].Properties[0].Type = "unsupported"
+	if _, err := store.UpdateRule(st.ID, bad, st.Revision); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Refresh(); err == nil {
+		t.Fatal("invalid candidate was published")
+	}
+	if m.Snapshot() != before {
+		t.Fatal("working snapshot lost on validation error")
+	}
+	if _, err := m.Snapshot().Things.Transform(stubThing()); err != nil {
+		t.Fatal(err)
+	}
+}
