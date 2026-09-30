@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -372,15 +373,6 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		return id, nil
 	}
 
-	if strings.HasPrefix(expr, "field:") {
-		path := strings.TrimSpace(strings.TrimPrefix(expr, "field:"))
-		v, ok := in.ResolvePath(path)
-		if !ok {
-			return "", fmt.Errorf("%w: field %q", errExprNotFound, path)
-		}
-		return stringify(v), nil
-	}
-
 	if fn, args, call, err := templateCall(expr); call {
 		if err != nil {
 			return "", err
@@ -388,11 +380,34 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 		return fn.evaluate(args, func(arg string) (string, error) { return resolveExpr(arg, vars, in, entities) })
 	}
 
-	v, ok := vars[expr]
-	if !ok {
-		return "", fmt.Errorf("unknown template variable %q", expr)
+	path := strings.TrimSpace(strings.TrimPrefix(expr, "field:"))
+	if v, ok := vars[path]; ok {
+		return v, nil
 	}
-	return v, nil
+	v, ok := in.ResolvePath(path)
+	if !ok {
+		return "", fmt.Errorf("%w: field %q", errExprNotFound, path)
+	}
+	return templateValue(v)
+}
+
+func templateValue(v any) (string, error) {
+	if v == nil {
+		return "", errExprNotFound
+	}
+	if t, ok := v.(time.Time); ok {
+		return t.UTC().Format(time.RFC3339Nano), nil
+	}
+	if s, ok := v.(string); ok {
+		return s, nil
+	}
+	// JSON bevarar skalärtyper och gör objekt/listor användbara i exempelvis
+	// Geo-mallar, i stället för Go:s icke-JSON-form map[...].
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "", fmt.Errorf("template field is not JSON encodable: %w", err)
+	}
+	return string(raw), nil
 }
 
 func stringify(v any) string {

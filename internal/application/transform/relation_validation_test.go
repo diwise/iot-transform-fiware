@@ -44,7 +44,7 @@ func TestValidateRejectsEmptyFieldPath(t *testing.T) {
 	is.True(Validate([]Rule{r}) != nil)
 }
 
-func TestValidateRejectsUnknownVariableInFirstPresent(t *testing.T) {
+func TestValidateAllowsDynamicFieldInFirstPresent(t *testing.T) {
 	is := is.New(t)
 
 	r := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Type: "Sewer"}, Entities: []Entity{{
@@ -52,7 +52,7 @@ func TestValidateRejectsUnknownVariableInFirstPresent(t *testing.T) {
 		Properties: []Property{{Target: "x", Type: TypeText, Source: Source{Value: "{{firstPresent(bogus, nameOrID)}}"}}},
 	}}}
 
-	is.True(Validate([]Rule{r}) != nil)
+	is.NoErr(Validate([]Rule{r}))
 }
 
 func TestValidateAcceptsFieldAndFirstPresent(t *testing.T) {

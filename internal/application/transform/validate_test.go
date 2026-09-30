@@ -229,12 +229,16 @@ func TestValidateTemplateVariables(t *testing.T) {
 
 	r = validRule()
 	r.Entities[0].ID = "urn:ngsi-ld:Thing:{{bogus}}"
-	is.True(Validate([]Rule{r}) != nil)
+	is.NoErr(Validate([]Rule{r}))
+	_, err := NewEngine([]Rule{r}).Transform(Measurement{DeviceID: "stable-id"})
+	is.True(err != nil) // syntaktiskt giltigt, men källa saknas vid körning
 
 	r = validRule()
 	r.Entities[0].Properties[0].Type = TypeRelationship
 	r.Entities[0].Properties[0].Source = Source{Value: "urn:ngsi-ld:X:{{safeURI(nope)}}"}
-	is.True(Validate([]Rule{r}) != nil)
+	is.NoErr(Validate([]Rule{r}))
+	_, err = NewEngine([]Rule{r}).Transform(Measurement{DeviceID: "stable-id"})
+	is.True(err != nil)
 }
 
 func TestValidateAcceptsEveryKnownFunction(t *testing.T) {

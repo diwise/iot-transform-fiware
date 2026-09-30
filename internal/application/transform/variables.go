@@ -72,10 +72,11 @@ func validateExpr(expr string) error {
 		return nil
 	}
 
-	if !knownTemplateVariables[expr] {
-		return fmt.Errorf("unknown template variable %q", expr)
+	if strings.HasPrefix(expr, "entities.") {
+		return fmt.Errorf("invalid entity reference %q", expr)
 	}
-	return nil
+	_, err := parsePath(expr)
+	return err
 }
 
 func entityReferences(template string) ([]string, error) {

@@ -55,19 +55,22 @@ func TestQuotedPathEscapesAndDelimiters(t *testing.T) {
 	}
 }
 
-func TestTemplateVariablesAreSourceSpecific(t *testing.T) {
+func TestDynamicTemplateFieldsAreValidatedAtRuntime(t *testing.T) {
 	for _, variable := range []string{"deviceID", "sensorType", "object", "env"} {
 		rule := expressionRule()
 		rule.Entities[0].Properties[0].Value = "{{firstPresent(" + variable + ",name)}}"
-		if err := Validate([]Rule{rule}); err == nil {
-			t.Fatalf("thing accepted measurement variable %s", variable)
+		if err := Validate([]Rule{rule}); err != nil {
+			t.Fatalf("dynamic thing field %s: %v", variable, err)
+		}
+		if got, err := renderTemplate(rule.Entities[0].Properties[0].Value, Thing{Name: "fallback"}, nil); err != nil || got != "fallback" {
+			t.Fatalf("missing field did not use explicit fallback: %q %v", got, err)
 		}
 	}
 	for _, variable := range []string{"id", "name", "nameOrID", "uuid", "type", "subType", "alternativeName"} {
 		rule := validRule()
 		rule.Entities[0].ID = "urn:example:{{safeURI(" + variable + ")}}"
-		if err := Validate([]Rule{rule}); err == nil {
-			t.Fatalf("measurement accepted thing variable %s", variable)
+		if err := Validate([]Rule{rule}); err != nil {
+			t.Fatalf("dynamic measurement field %s: %v", variable, err)
 		}
 	}
 	for _, name := range []string{"safeURI", "firstPresent"} {

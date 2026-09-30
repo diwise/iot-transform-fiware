@@ -50,6 +50,7 @@ func (m Measurement) LatLon() (float64, float64, bool) { return m.Lat, m.Lon, m.
 
 func (m Measurement) Variables() map[string]string {
 	return map[string]string{
+		"id":         m.DeviceID,
 		"deviceID":   m.DeviceID,
 		"sensorType": m.SensorType,
 		"object":     m.Object,

@@ -104,6 +104,26 @@ exempelhandelse (aldrig broker/persistens).
 
 ## Generell SDM-mappning (bada kallor)
 
+### Identitet och mallfält
+
+Använd normalt `id: "urn:ngsi-ld:<Modell>:{{id}}"`. `id` är sakens
+oförändrade `thingId` för things-event och enhetens `deviceID` för
+measurements. En befintlig GUID/UUID bevaras; motorn skapar ingen ny identitet.
+Namn hör till attribut, exempelvis `{ target: name, type: Text, value: "{{name}}", observedAt: none }`.
+
+`{{fält}}` kan läsa vilket exponerat källfält som helst, även nästlat:
+`{{metadata.description}}`, `{{values."temperature.average".value}}` och
+`{{relation.to.thingId}}`. `field:` är ett valfritt explicit prefix för samma
+uppslag. Kända identitets-/metadatavariabler har företräde framför dynamiska
+fält. Funktionerna `safeURI(...)` och `firstPresent(...)` fungerar även med
+dessa fältvägar. Objekt och listor renderas som JSON, tal och booleska värden
+som JSON-skalärer, strängar som rå text.
+
+Validering kontrollerar syntax, funktionsargument och entitetsreferenser.
+Dynamiska fälts närvaro kan bara avgöras mot exempeldata eller ett verkligt
+event. Saknat fält ger ett klassificerbart källfel; `firstPresent` kan ange
+en uttrycklig fallback. Namnbaserade ID:n kräver ett uttryckligt regelval.
+
 Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
 things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens
 kind-kontroller:
