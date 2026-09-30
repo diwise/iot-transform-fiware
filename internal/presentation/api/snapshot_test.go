@@ -210,9 +210,9 @@ func TestSnapshotSyncNoopWithoutChange(t *testing.T) {
 	store := &stubRuleStore{}
 	m := NewModels(store, nil)
 	is.NoErr(m.Refresh(t.Context()))
-	before := m.Snapshot()
+	before := m.snap.Load()
 	is.NoErr(m.SyncOnce(t.Context()))
-	if m.Snapshot() != before {
+	if m.snap.Load() != before {
 		t.Fatal("SyncOnce without change must keep snapshot pointer")
 	}
 }
@@ -327,12 +327,12 @@ func TestRefreshCannotPublishOlderSnapshot(t *testing.T) {
 	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	newer := m.Snapshot()
+	newer := m.snap.Load()
 	close(store.release)
 	if err := <-older; err != nil {
 		t.Fatal(err)
 	}
-	if m.Snapshot() != newer || m.Snapshot().Version != 1 {
+	if m.snap.Load() != newer || m.Snapshot().Version != 1 {
 		t.Fatal("older reload replaced newer published snapshot")
 	}
 	if _, err := m.Snapshot().Things.Transform(stubThing()); err != nil {
@@ -350,7 +350,7 @@ func TestRefreshRejectsInvalidCandidate(t *testing.T) {
 	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	before := m.Snapshot()
+	before := m.snap.Load()
 	bad := testRule()
 	bad.Entities[0].Properties[0].Type = "unsupported"
 	if _, err := store.UpdateRule(t.Context(), st.ID, bad, st.Revision); err != nil {
@@ -359,7 +359,7 @@ func TestRefreshRejectsInvalidCandidate(t *testing.T) {
 	if err := m.Refresh(t.Context()); err == nil {
 		t.Fatal("invalid candidate was published")
 	}
-	if m.Snapshot() != before {
+	if m.snap.Load() != before {
 		t.Fatal("working snapshot lost on validation error")
 	}
 	if _, err := m.Snapshot().Things.Transform(stubThing()); err != nil {
@@ -373,13 +373,39 @@ func TestRefreshCancellationKeepsSnapshot(t *testing.T) {
 	if err := m.Refresh(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	before := m.Snapshot()
+	before := m.snap.Load()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	if err := m.Refresh(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation lost: %v", err)
 	}
-	if m.Snapshot() != before {
+	if m.snap.Load() != before {
 		t.Fatal("canceled load replaced snapshot")
+	}
+}
+
+func TestSnapshotMetadataAndDefensiveView(t *testing.T) {
+	store := &stubRuleStore{}
+	st, err := store.InsertRule(t.Context(), testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModels(store, nil)
+	if err := m.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	view := m.Snapshot()
+	view.Version = 999
+	view.Things = nil
+	view.Measurements = nil
+	if m.Snapshot().Version != 1 || m.ThingsTransformer() == nil || m.MeasurementsTransformer() == nil {
+		t.Fatal("caller modified published snapshot")
+	}
+	writes, err := m.ThingsTransformer().Transform(stubThing())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writes) != 1 || writes[0].RuleID != st.ID || writes[0].RuleRevision != st.Revision || writes[0].SnapshotVersion != 1 {
+		t.Fatalf("missing execution metadata: %+v", writes)
 	}
 }

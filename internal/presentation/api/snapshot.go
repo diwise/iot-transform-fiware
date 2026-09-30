@@ -69,6 +69,9 @@ func (m *Models) Refresh(ctx context.Context) error {
 	candidate := make([]transform.Rule, len(stored))
 	for i, st := range stored {
 		candidate[i] = st.Rule
+		stored[i].Rule.ID = st.ID
+		stored[i].Rule.Revision = st.Revision
+		stored[i].Rule.SnapshotVersion = v
 	}
 	if err := transform.Validate(candidate); err != nil {
 		return err
@@ -90,7 +93,8 @@ func (m *Models) Refresh(ctx context.Context) error {
 // Snapshot returnerar aktuell snapshot (aldrig nil; före första Refresh
 // en tom oladdad snapshot som inte matchar någon lagerversion).
 func (m *Models) Snapshot() *Snapshot {
-	return m.snap.Load()
+	snapshot := *m.snap.Load()
+	return &snapshot
 }
 
 // ThingsTransformer löser aktuell snapshot-motor per meddelande.

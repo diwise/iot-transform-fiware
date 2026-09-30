@@ -77,8 +77,12 @@ type Model struct {
 
 // Rule matchar en källa och beskriver vilka entiteter som ska skrivas.
 type Rule struct {
-	Match    Match    `yaml:"match" json:"match"`
-	Entities []Entity `yaml:"entities" json:"entities"`
+	// Körningsmetadata kommer från lagret, aldrig från regelpayloaden.
+	ID              string   `yaml:"-" json:"-"`
+	Revision        int64    `yaml:"-" json:"-"`
+	SnapshotVersion int64    `yaml:"-" json:"-"`
+	Match           Match    `yaml:"match" json:"match"`
+	Entities        []Entity `yaml:"entities" json:"entities"`
 }
 
 // Match beskriver vilka källor en regel gäller. Alla fält utom Kind är

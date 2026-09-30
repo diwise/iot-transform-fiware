@@ -62,7 +62,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       mitt i seedningen och att andra instanser ser en komplett uppsättning.
 - [x] För context genom API, regelgränssnitt och lagring. Bevara cancellation,
       tidsbudget och spårningskedja; skilj DB-fel från saknad rad och konflikt.
-- [ ] Behåll regel-ID, revision och uppsättningsversion som körningsmetadata.
+- [x] Behåll regel-ID, revision och uppsättningsversion som körningsmetadata.
       Säkerställ att den publicerade konfigurationen är oföränderlig under körning.
 - [ ] Verifiera start, omstart, synkfel och samtidig mutation/omladdning med
       deterministiska tester, relevanta race-tester och isolerad testdatabas.

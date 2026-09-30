@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -70,6 +71,9 @@ type resolvedValue struct {
 // att skriva värden; Delete raderar hela entiteten (idempotent).
 // Props är då tomma.
 type EntityWrite struct {
+	RuleID           string
+	RuleRevision     int64
+	SnapshotVersion  int64
 	EntityID         string
 	TypeName         string
 	Context          string
@@ -85,7 +89,56 @@ type Engine struct {
 }
 
 func NewEngine(rules []Rule) *Engine {
-	return &Engine{rules: rules}
+	return &Engine{rules: cloneConfiguration(reflect.ValueOf(rules)).Interface().([]Rule)}
+}
+
+// Regler innehåller JSON/YAML-värden, slices, maps och numeriska pekare.
+// Kopiera alla muterbara delar så caller inte kan ändra den aktiva motorn.
+func cloneConfiguration(v reflect.Value) reflect.Value {
+	switch v.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if v.IsNil() {
+			return reflect.Zero(v.Type())
+		}
+		out := reflect.New(v.Type()).Elem()
+		if v.Kind() == reflect.Pointer {
+			out.Set(reflect.New(v.Type().Elem()))
+			out.Elem().Set(cloneConfiguration(v.Elem()))
+		} else {
+			out.Set(cloneConfiguration(v.Elem()))
+		}
+		return out
+	case reflect.Slice:
+		if v.IsNil() {
+			return reflect.Zero(v.Type())
+		}
+		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+		for i := range v.Len() {
+			out.Index(i).Set(cloneConfiguration(v.Index(i)))
+		}
+		return out
+	case reflect.Map:
+		if v.IsNil() {
+			return reflect.Zero(v.Type())
+		}
+		out := reflect.MakeMapWithSize(v.Type(), v.Len())
+		iter := v.MapRange()
+		for iter.Next() {
+			out.SetMapIndex(iter.Key(), cloneConfiguration(iter.Value()))
+		}
+		return out
+	case reflect.Struct:
+		out := reflect.New(v.Type()).Elem()
+		out.Set(v)
+		for i := range v.NumField() {
+			if out.Field(i).CanSet() && v.Field(i).CanInterface() {
+				out.Field(i).Set(cloneConfiguration(v.Field(i)))
+			}
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // Matched rapporterar om någon regel matchar indatat, oavsett om den
@@ -163,6 +216,11 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		})
 	}
 
+	for i := range writes {
+		writes[i].RuleID = rule.ID
+		writes[i].RuleRevision = rule.Revision
+		writes[i].SnapshotVersion = rule.SnapshotVersion
+	}
 	return writes, nil
 }
 
