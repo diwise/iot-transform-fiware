@@ -68,3 +68,40 @@ Nuvarande adapterluckor att rätta i etapp 4–5: resurser tappar fullständigt
 namn/enhet, values tappar delar av proveniensen och kuvertmetadata, Point
 saknar rå geometri, lifecycle tappar descriptorfält och relationsadaptern
 innehåller en modellberoende URN. Dessa är inte källkontraktets begränsningar.
+
+## Uttryck och frånvaro
+
+`nameOrID` är rå alternativeName, annars rå name, annars fullständigt käll-ID.
+Ingen URI-normalisering sker implicit. `type` är rå thingType; `typeName` är
+den generella genvägen subType om satt, annars type. `uuid` är sista segmentet
+efter kolon eller slash och garanterar inte UUID-format eller unikhet.
+`id`, `name`, `alternativeName` och `subType` bevaras råa. Measurements har
+deviceID, sensorType, object, env, tenant och timestamp; saker har id, type,
+typeName, subType, name, alternativeName, nameOrID, uuid, tenant och timestamp.
+Variabler som källtypen inte kan ge ska avvisas vid regelvalidering.
+
+`safeURI(expr)` tar exakt ett uttryck och returnerar dess trimmade text
+procentkodad med Go `url.PathEscape`. Det är ett segmenthjälpmedel, inte
+validering av en komplett URI. UTF-8 kodas bytevis; exempel: `A B/å` blir
+`A%20B%2F%C3%A5`. Funktionen är inte idempotent: `%` kodas som `%25`.
+Regeln väljer prefix och var segmentkodning ska användas.
+
+`firstPresent(expr, ...)` kräver minst ett argument, utvärderar från vänster
+till höger och returnerar första närvarande, icke-tomma text. Saknat fält
+eller tom sträng tillåter nästa argument; typ-/syntaxfel är fel. Noll och
+false är närvarande, whitespace är rå text. Nästling stöds, liksom
+`field:values."temperature.average".value` och nollbaserade `[n]`-index.
+Ingen JavaScript, godtycklig Go-template eller implicit modellfunktion stöds.
+
+En saknad källa är frånvarande/null, inte ett typfel. Tom text, tom lista och
+tom mapp är saknade skrivvärden; noll och false är skrivbara. Valfri property
+utelämnas, `required` undertrycker hela entiteten. Saknad mallkälla ska följa
+samma policy för property-värden; i entitets-ID/typ är frånvaro ett fel.
+`when: present` uttrycker närvarokravet även för aggregat. Aggregat använder
+närvarande ingångar; felaktiga typer är fel. Sum/min/max utan ingång ger
+saknad källa, anyTrue/allTrue utan ingång ger false om inte present krävs.
+Derive coalesce/firstPresent väljer första icke-tomma närvarande värde.
+Alltså finns ingen implicit fallback till en Smart Data Model.
+
+Detta är fastställd semantik; äldre sanering av nameOrID och implicit
+ersättning av type måste rättas tillsammans med medföljande regler.

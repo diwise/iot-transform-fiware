@@ -32,7 +32,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 - [x] Beskriv källvyerna för `message.accepted`, `things.v1.values`,
       `things.v1.relations` och `things.v1.lifecycle`: tillgängliga fält,
       identiteter, proveniens, kvalitet och tidssemantik.
-- [ ] Fastställ dokumenterad semantik för `nameOrID`, typvariabler, URI-kodning,
+- [x] Fastställ dokumenterad semantik för `nameOrID`, typvariabler, URI-kodning,
       `firstPresent`, tomma värden och saknade källor. Behåll användbara generella
       genvägar utan att ersätta åtkomsten till råa källfält.
 - [ ] Definiera matchningskontraktet: en vinnande regel per observation/händelse,
