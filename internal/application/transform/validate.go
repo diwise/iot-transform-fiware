@@ -266,6 +266,13 @@ func (p Property) validateSourcesForKind(kind Kind) error {
 }
 
 func validateSourceKind(s Source, kind Kind) error {
+	for _, path := range []string{s.Field, s.Ref} {
+		if path != "" {
+			if _, err := parsePath(path); err != nil {
+				return err
+			}
+		}
+	}
 	switch kind {
 	case KindThing:
 		if s.Resource != "" {
@@ -354,6 +361,11 @@ func (p Property) validate() error {
 
 	if p.ObservedAt != "" && !strings.HasPrefix(string(p.ObservedAt), "field:") && !validObservedAt[p.ObservedAt] {
 		return fmt.Errorf("unknown observedAt %q", p.ObservedAt)
+	}
+	if strings.HasPrefix(string(p.ObservedAt), "field:") {
+		if _, err := parsePath(strings.TrimPrefix(string(p.ObservedAt), "field:")); err != nil {
+			return err
+		}
 	}
 
 	if p.When != "" && p.When != WhenPresent {

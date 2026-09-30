@@ -71,7 +71,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
 
 Berör främst `internal/application/transform/{schema,validate,variables,engine}.go`.
 
-- [ ] Använd gemensam parsning för malluttryck och fältsökvägar i validering och
+- [x] Använd gemensam parsning för malluttryck och fältsökvägar i validering och
       körning. Stöd dokumenterad nästling, citerade nycklar och index; avvisa
       felaktigt balanserade eller otillåtna uttryck.
 - [ ] Registrera generella funktioner med dokumenterade argument, returtyper

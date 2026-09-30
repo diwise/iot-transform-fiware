@@ -343,28 +343,23 @@ func (mm Match) score() int {
 // {{firstPresent(<uttryck>, …)}}.
 func renderTemplate(tpl string, in Input, entities map[string]string) (string, error) {
 	vars := in.Variables()
-	var firstErr error
-
-	out := templateExprRe.ReplaceAllStringFunc(tpl, func(match string) string {
-		if firstErr != nil {
-			return match
-		}
-
-		expr := strings.TrimSpace(templateExprRe.FindStringSubmatch(match)[1])
-
-		v, err := resolveExpr(expr, vars, in, entities)
-		if err != nil {
-			firstErr = err
-			return ""
-		}
-		return v
-	})
-
-	if firstErr != nil {
-		return "", firstErr
+	parts, err := parseTemplate(tpl)
+	if err != nil {
+		return "", err
 	}
-
-	return out, nil
+	var out strings.Builder
+	for _, part := range parts {
+		out.WriteString(part.text)
+		if part.expression == "" {
+			continue
+		}
+		value, err := resolveExpr(part.expression, vars, in, entities)
+		if err != nil {
+			return "", err
+		}
+		out.WriteString(value)
+	}
+	return out.String(), nil
 }
 
 func resolveExpr(expr string, vars map[string]string, in Input, entities map[string]string) (string, error) {
@@ -379,7 +374,7 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 	}
 
 	if strings.HasPrefix(expr, "field:") {
-		path := strings.TrimPrefix(expr, "field:")
+		path := strings.TrimSpace(strings.TrimPrefix(expr, "field:"))
 		v, ok := in.ResolvePath(path)
 		if !ok {
 			return "", fmt.Errorf("%w: field %q", errExprNotFound, path)
@@ -396,7 +391,11 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 	}
 
 	if inner, ok := funcArg(expr, "firstPresent"); ok {
-		for _, arg := range splitArgs(inner) {
+		args, err := splitArgs(inner)
+		if err != nil {
+			return "", err
+		}
+		for _, arg := range args {
 			v, err := resolveExpr(arg, vars, in, entities)
 			if err != nil {
 				if errors.Is(err, errExprNotFound) {
@@ -424,14 +423,6 @@ func funcArg(expr, name string) (string, bool) {
 		return expr[len(prefix) : len(expr)-1], true
 	}
 	return "", false
-}
-
-func splitArgs(s string) []string {
-	parts := strings.Split(s, ",")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-	return parts
 }
 
 func stringify(v any) string {

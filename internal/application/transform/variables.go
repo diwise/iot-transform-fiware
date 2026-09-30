@@ -44,20 +44,13 @@ func KnownTemplateVariables() []string {
 	return keys(knownTemplateVariables)
 }
 
-var (
-	templateExprRe = regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
-	entityRefExpr  = regexp.MustCompile(`^entities\.([A-Za-z0-9_-]+)\.id$`)
-)
+var entityRefExpr = regexp.MustCompile(`^entities\.([A-Za-z0-9_-]+)\.id$`)
 
 // validateTemplate kontrollerar att alla {{...}}-uttryck använder kända
 // variabler, field-vägar, entities-referenser eller hjälpfunktioner.
 func validateTemplate(s string) error {
-	for _, m := range templateExprRe.FindAllStringSubmatch(s, -1) {
-		if err := validateExpr(strings.TrimSpace(m[1])); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := parseTemplate(s)
+	return err
 }
 
 func validateExpr(expr string) error {
@@ -66,18 +59,27 @@ func validateExpr(expr string) error {
 	}
 
 	if strings.HasPrefix(expr, "field:") {
-		if strings.TrimSpace(strings.TrimPrefix(expr, "field:")) == "" {
-			return fmt.Errorf("empty field path in template")
-		}
-		return nil
+		_, err := parsePath(strings.TrimSpace(strings.TrimPrefix(expr, "field:")))
+		return err
 	}
 
 	if inner, ok := funcArg(expr, "safeURI"); ok {
-		return validateExpr(inner)
+		args, err := splitArgs(inner)
+		if err != nil {
+			return err
+		}
+		if len(args) != 1 {
+			return fmt.Errorf("safeURI requires exactly one argument")
+		}
+		return validateExpr(args[0])
 	}
 
 	if inner, ok := funcArg(expr, "firstPresent"); ok {
-		for _, arg := range splitArgs(inner) {
+		args, err := splitArgs(inner)
+		if err != nil {
+			return err
+		}
+		for _, arg := range args {
 			if err := validateExpr(arg); err != nil {
 				return err
 			}

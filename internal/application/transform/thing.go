@@ -1,7 +1,6 @@
 package transform
 
 import (
-	"strconv"
 	"strings"
 	"time"
 )
@@ -137,30 +136,28 @@ func (t Thing) ResolvePath(path string) (any, bool) {
 // (t.ex. values."temperature.average".value); ociterade vägar beter sig
 // exakt som före (bakåtkompatibelt).
 func lookupPath(root map[string]any, path string) (any, bool) {
+	steps, err := parsePath(path)
+	if err != nil {
+		return nil, false
+	}
 	var cur any = root
-
-	for _, seg := range splitPath(path) {
-		name, idx, hasIdx := parseSegment(seg)
-		name = unquote(name)
-
-		if name != "" {
+	for _, step := range steps {
+		if !step.indexed {
 			m, ok := cur.(map[string]any)
 			if !ok {
 				return nil, false
 			}
-			v, ok := m[name]
+			v, ok := m[step.key]
 			if !ok {
 				return nil, false
 			}
 			cur = v
-		}
-
-		if hasIdx {
+		} else {
 			arr, ok := cur.([]any)
-			if !ok || idx < 0 || idx >= len(arr) {
+			if !ok || step.index >= len(arr) {
 				return nil, false
 			}
-			cur = arr[idx]
+			cur = arr[step.index]
 		}
 	}
 
@@ -169,46 +166,6 @@ func lookupPath(root map[string]any, path string) (any, bool) {
 	}
 
 	return cur, true
-}
-
-func parseSegment(seg string) (name string, idx int, hasIdx bool) {
-	if i := strings.IndexByte(seg, '['); i >= 0 && strings.HasSuffix(seg, "]") {
-		n, err := strconv.Atoi(seg[i+1 : len(seg)-1])
-		if err != nil {
-			return seg, 0, false
-		}
-		return seg[:i], n, true
-	}
-	return seg, 0, false
-}
-
-// splitPath delar en field-väg på ociterade punkter; citerade avsnitt
-// behåller sina punkter (fnutten själva skalas av med unquote).
-func splitPath(path string) []string {
-	segs := []string{}
-	var cur strings.Builder
-	inQuotes := false
-	for _, r := range path {
-		switch {
-		case r == '"':
-			inQuotes = !inQuotes
-			cur.WriteRune(r)
-		case r == '.' && !inQuotes:
-			segs = append(segs, cur.String())
-			cur.Reset()
-		default:
-			cur.WriteRune(r)
-		}
-	}
-	return append(segs, cur.String())
-}
-
-// unquote skalar av ett omslutande dubbelfnutt-par från ett vägsegment.
-func unquote(s string) string {
-	if len(s) >= 2 && strings.HasPrefix(s, `"`) && strings.HasSuffix(s, `"`) {
-		return s[1 : len(s)-1]
-	}
-	return s
 }
 
 func trailingSegment(s string) string {
