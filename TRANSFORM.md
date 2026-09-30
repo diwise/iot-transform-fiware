@@ -38,7 +38,7 @@ kvalitetsfiltrering. Markera en punkt klar först när dess verifiering är utf�
 - [x] Definiera matchningskontraktet: en vinnande regel per observation/händelse,
       prioritet, tie-break och beteende när ingen regel matchar. Flera entiteter
       inom en regel stöds; flera matchande regler kombineras inte i denna etapp.
-- [ ] Definiera utfall för saknad källa, felaktig indata, ogiltig regel,
+- [x] Definiera utfall för saknad källa, felaktig indata, ogiltig regel,
       ogiltig NGSI-LD-utdata och tillfälligt beroendefel.
 - [ ] Lägg meningsfulla regressionstester för identifierade korrekthetsfel
       innan respektive rättning. Testerna ska använda i övrigt giltiga regler

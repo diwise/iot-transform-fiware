@@ -129,3 +129,24 @@ dess eget redan renderade ID. Alla uttrycksplatser har samma referensregler.
 Matchande regler kombineras inte. Ingen match ger ett förklarbart skip utan
 broker-/tokenkontakt. En match utan skrivbara properties ger inga skrivningar.
 Överlapp/skuggning ska vara diagnostik, inte falska konflikter mellan tenants.
+
+## Utfall
+
+| Situation | Produktion | Administration/preview |
+| --- | --- | --- |
+| Ingen regel | skip, ingen brokerkontakt | matched=false med orsak |
+| Saknad valfri källa | utelämnat attribut | precis käll-/skiporsak |
+| Saknad required-källa | undertryckt entitet | matched=true, required-källa angiven |
+| Felaktig JSON/identitet/typ | irreparabelt fel, ingen skrivning | klientfel 400 |
+| Ogiltig regel | kandidaten publiceras inte; fungerande snapshot behålls | klientfel 400 med regel/entitet/attribut/uttryck |
+| Ogiltig renderad NGSI-LD | irreparabelt fel före brokerkontakt | klientfel 400 med mål/attribut |
+| DB-/HTTP-/token-/brokerberoendefel | klassificerbart tillfälligt fel, cancellation bevaras | server-/beroendefel, inte maskerat som not-found |
+| Partiellt brokersvar | misslyckad leverans med delutfall | rapportera lyckade/misslyckade operationer |
+| Revisionskonflikt | ingen mutation | HTTP 409 |
+| Bristande skrivägarskap | ingen mutation | HTTP 403 |
+
+Ett fel är inte ett skip. Delvis lyckade flerskrivningar är inte full framgång.
+Transportens faktiska retry-/dead-letter-beteende ska verifieras i den låsta
+messaging-versionen innan handlers ändras; tabellen bestämmer klassificering,
+inte obevisade leveransgarantier. Replay av enskilda operationer kan vara
+idempotent utan att sena händelser är ordningsoberoende korrekta.
