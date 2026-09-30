@@ -64,7 +64,7 @@ Berör främst `internal/presentation/api/{register,snapshot}.go` och
       tidsbudget och spårningskedja; skilj DB-fel från saknad rad och konflikt.
 - [x] Behåll regel-ID, revision och uppsättningsversion som körningsmetadata.
       Säkerställ att den publicerade konfigurationen är oföränderlig under körning.
-- [ ] Verifiera start, omstart, synkfel och samtidig mutation/omladdning med
+- [x] Verifiera start, omstart, synkfel och samtidig mutation/omladdning med
       deterministiska tester, relevanta race-tester och isolerad testdatabas.
 
 ## Etapp 3 — gemensam regelvalidering och uttryckshantering

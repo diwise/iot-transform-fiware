@@ -498,6 +498,62 @@ func TestModelsTenantTransferAndConcurrentRevision(t *testing.T) {
 	}
 }
 
+func TestDatabaseSnapshotRestartAndConcurrentMutation(t *testing.T) {
+	a := pgTestModels(t)
+	st, err := a.store.InsertRule(t.Context(), testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	version := a.Snapshot().Version
+	// Ny processvy läser alltid om från beständiga rader och version.
+	b := NewModels(a.store, nil)
+	if err := b.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if b.Snapshot().Version != version {
+		t.Fatal("restart lost persisted version")
+	}
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		current := st
+		for range 10 {
+			var err error
+			current, err = a.store.UpdateRule(t.Context(), current.ID, testRule(), current.Revision)
+			if err != nil {
+				errs <- err
+				return
+			}
+		}
+	})
+	wg.Go(func() {
+		for range 10 {
+			if err := b.Refresh(t.Context()); err != nil {
+				errs <- err
+				return
+			}
+		}
+	})
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if err := b.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	writes, err := b.ThingsTransformer().Transform(stubThing())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writes) != 1 || writes[0].RuleRevision != 11 || writes[0].SnapshotVersion != version+10 {
+		t.Fatalf("mutation/reload lost revision: %+v", writes)
+	}
+}
+
 // Valfria sökfilter på GET /models (PLAN002 1.1): omitempty, AND, okända
 // värden ger tom lista (aldrig 400). Precedensordningen är oförändrad.
 func TestListModelsFilters(t *testing.T) {

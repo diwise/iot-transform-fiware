@@ -409,3 +409,34 @@ func TestSnapshotMetadataAndDefensiveView(t *testing.T) {
 		t.Fatalf("missing execution metadata: %+v", writes)
 	}
 }
+
+func TestSnapshotInitialFailureThenRestart(t *testing.T) {
+	store := &stubRuleStore{failList: errors.New("startup database unavailable")}
+	m := NewModels(store, nil)
+	if err := m.Refresh(t.Context()); err == nil {
+		t.Fatal("startup error hidden")
+	}
+	if m.Snapshot().Version != -1 {
+		t.Fatal("failed startup published a snapshot")
+	}
+	store.failList = nil
+	bad := testRule()
+	bad.Match.Kind = "unsupported"
+	st, err := store.InsertRule(t.Context(), bad)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Refresh(t.Context()); err == nil {
+		t.Fatal("invalid persisted rule accepted on startup")
+	}
+	if _, err := store.UpdateRule(t.Context(), st.ID, testRule(), st.Revision); err != nil {
+		t.Fatal(err)
+	}
+	restarted := NewModels(store, nil)
+	if err := restarted.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.ThingsTransformer().Transform(stubThing()); err != nil {
+		t.Fatal(err)
+	}
+}
