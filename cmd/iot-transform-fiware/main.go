@@ -61,7 +61,7 @@ func defaultFlags() flagMap {
 		thingsV1Values: "false",
 
 		policiesFile:      "/opt/diwise/config/authz.rego",
-		authzAccessObject: "false",
+		authzAccessObject: "true",
 
 		dbHost:     "",
 		dbUser:     "",

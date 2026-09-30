@@ -169,7 +169,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 | `LOG_LEVEL` | `debug` | Enda CLI-flaggan ar `-loglevel` |
 | `MODELS_DIR` | `/opt/diwise/config/models` | YAML-seed, lases idempotent vid start (aldrig overskrivning av API-rader) |
 | `POLICIES_FILE` | `/opt/diwise/config/authz.rego` | OPA-policy for regel-API:t |
-| `AUTHZ_ACCESS_OBJECT_ENABLED` | `false` | `true` for access-objekt-modell (per-tenant scopes) |
+| `AUTHZ_ACCESS_OBJECT_ENABLED` | `true` | Access-objekt med per-tenant scopes; `false` för legacy `tenants`-policyer |
 | `POSTGRES_HOST` | (tom, kravs) | Regel­lagring kraver PostgreSQL (enda backend) |
 | `POSTGRES_PORT` | `5432` |  |
 | `POSTGRES_DBNAME` | `diwise` |  |

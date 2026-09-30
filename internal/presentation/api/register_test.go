@@ -774,7 +774,7 @@ func TestPreviewExposesOperationAndContext(t *testing.T) {
 
 const muxAllowPolicy = `package example.authz
 default allow := false
-allow := {"tenants": ["t"]} if { input.token == "good" }
+allow := {"access": {"t": ["transforms.read", "transforms.create", "transforms.update", "transforms.delete", "transforms.write"]}} if { input.token == "good" }
 `
 
 // Full varv genom mux + middleware + handler + lagring: fångar

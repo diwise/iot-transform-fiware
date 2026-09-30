@@ -45,7 +45,7 @@ func TestDefaultFlags(t *testing.T) {
 		defaultContextUrl:  "https://raw.githubusercontent.com/diwise/context-broker/refs/heads/main/assets/jsonldcontexts/default-context.jsonld",
 		thingsV1Values:     "false",
 		policiesFile:       "/opt/diwise/config/authz.rego",
-		authzAccessObject:  "false",
+		authzAccessObject:  "true",
 		dbHost:             "",
 		dbUser:             "",
 		dbPassword:         "",

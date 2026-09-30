@@ -33,7 +33,7 @@ vara read-only eftersom seed bara läser.
 | `POSTGRES_*` | Regel­lagring (kravs, enda backend) |
 | `SERVICE_PORT` | Publik server: regel-API:t (`/api/v0/models`, OPA-skyddat) |
 | `POLICIES_FILE` | OPA-policy for regel-API:t |
-| `AUTHZ_ACCESS_OBJECT_ENABLED` | `true` for access-objekt-modell |
+| `AUTHZ_ACCESS_OBJECT_ENABLED` | Default `true` (access-objekt); `false` för legacy `tenants`-policyer |
 | `DEV_MGMT_URL` | Sensortyp-uppslag med TTL-cache |
 | `DEFAULT_CONTEXT_URL` | JSON-LD-context som fallback när en entitet inte anger `context` |
 | `NGSI_CB_URL`, `OAUTH2_*` | Context-broker och OAuth2 |
