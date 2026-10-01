@@ -90,7 +90,7 @@ func TestRelationMatchValidation(t *testing.T) {
 	is.True(Validate([]Rule{Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Relations, Relation: "partOf", Type: "tank"}, Entities: []Entity{badCreate}}}) != nil)
 
 	badProps := Entity{ID: "urn:ngsi-ld:X:x", Type: "X", RemoveAttributes: []string{"refParent"},
-		Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Const: "x"}}}}
+		Properties: []Property{{Target: "name", Type: TypeText, Const: "x"}}}
 	is.True(Validate([]Rule{Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Relations, Relation: "partOf", Type: "tank"}, Entities: []Entity{badProps}}}) != nil)
 
 	mr := Rule{Match: Match{Kind: KindMeasurement, Object: "urn:oma:lwm2m:ext:3303"},

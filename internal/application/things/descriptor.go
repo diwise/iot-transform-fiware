@@ -1,6 +1,11 @@
 package things
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+)
 
 // thingDescriptor speglar producentens ThingDescriptorV1 för samtliga event.
 type thingDescriptor struct {
@@ -20,6 +25,9 @@ func descriptorFields(id, sourceType string, descriptor *thingDescriptor) map[st
 		"name": "", "alternativeName": "", "subType": "", "category": "", "variantId": "", "variantVersion": ""}
 	if descriptor == nil {
 		return fields
+	}
+	if descriptor.ThingID != "" {
+		fields["thingId"] = descriptor.ThingID
 	}
 	fields["name"], fields["alternativeName"] = descriptor.Name, descriptor.AlternativeName
 	fields["subType"], fields["category"] = descriptor.SubType, descriptor.Category
@@ -41,4 +49,49 @@ func descriptorFields(id, sourceType string, descriptor *thingDescriptor) map[st
 		}
 	}
 	return fields
+}
+
+// descriptorInput keeps the envelope's identity authoritative while exposing
+// the descriptor, raw GeoJSON and optional Point shortcut for every source.
+func descriptorInput(id, sourceType, tenant string, descriptor *thingDescriptor) transform.Thing {
+	desc := descriptorFields(id, sourceType, descriptor)
+	fields := make(map[string]any, len(desc)+1)
+	for key, value := range desc {
+		if key != "location" {
+			fields[key] = value
+		}
+	}
+	fields["thingId"], fields["tenant"], fields["thing"] = id, tenant, desc
+	if descriptor != nil {
+		if geometry, ok := desc["location"]; ok {
+			fields["geometry"] = geometry
+		}
+		if point, ok := geoPointToLatLon(descriptor.Location); ok {
+			fields["location"] = point
+		}
+	}
+	return transform.Thing{
+		ID: id, Type: sourceType, Tenant: tenant, Fields: fields,
+		Name: desc["name"].(string), AlternativeName: desc["alternativeName"].(string),
+		SubType: desc["subType"].(string), TypeName: desc["typeName"].(string),
+	}
+}
+
+func addSourceTime(fields map[string]any, key string, value time.Time) {
+	if !value.IsZero() {
+		fields[key] = value.UTC().Format(time.RFC3339Nano)
+	}
+}
+
+// Point shortcuts complement raw geometry; they never replace it or discard
+// extra coordinates from the descriptor's GeoJSON view.
+func geoPointToLatLon(raw json.RawMessage) (map[string]any, bool) {
+	var geo struct {
+		Type        string    `json:"type"`
+		Coordinates []float64 `json:"coordinates"`
+	}
+	if json.Unmarshal(raw, &geo) != nil || geo.Type != "Point" || len(geo.Coordinates) < 2 {
+		return nil, false
+	}
+	return map[string]any{"latitude": geo.Coordinates[1], "longitude": geo.Coordinates[0]}, true
 }

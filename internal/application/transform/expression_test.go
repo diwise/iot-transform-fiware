@@ -5,7 +5,7 @@ import "testing"
 func expressionRule() Rule {
 	return Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values}, Entities: []Entity{{
 		ID: "urn:example:{{id}}", Type: "Neutral",
-		Properties: []Property{{Target: "label", Type: TypeText, Source: Source{Value: "{{name}}"}}},
+		Properties: []Property{{Target: "label", Type: TypeText, Value: "{{name}}"}},
 	}}}
 }
 
@@ -114,10 +114,10 @@ func TestReferencesValidatedAtEveryExpressionSite(t *testing.T) {
 	sites := map[string]func(*Rule, string){
 		"type": func(r *Rule, expr string) { r.Entities[0].Type = expr },
 		"observedBy": func(r *Rule, expr string) {
-			r.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Source: Source{Field: "reading"}, ObservedBy: expr}}
+			r.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Field: "reading", ObservedBy: expr}}
 		},
 		"subproperty": func(r *Rule, expr string) {
-			r.Entities[0].Properties = []Property{{Target: "structured", Type: TypeStructured, Subproperties: []Property{{Target: "label", Type: TypeText, Source: Source{Value: expr}}}}}
+			r.Entities[0].Properties = []Property{{Target: "structured", Type: TypeStructured, Subproperties: []Property{{Target: "label", Type: TypeText, Value: expr}}}}
 		},
 	}
 	for site, set := range sites {
@@ -138,7 +138,7 @@ func TestReferencesValidatedAtEveryExpressionSite(t *testing.T) {
 func TestObservedByCanUseRenderedEntityID(t *testing.T) {
 	rule := expressionRule()
 	rule.Entities[0].Name = "self"
-	rule.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Source: Source{Field: "reading"}, ObservedBy: "{{ entities.self.id }}"}}
+	rule.Entities[0].Properties = []Property{{Target: "reading", Type: TypeNumber, Field: "reading", ObservedBy: "{{ entities.self.id }}"}}
 	if err := Validate([]Rule{rule}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,11 +157,11 @@ func TestObservedByCanUseRenderedEntityID(t *testing.T) {
 
 func TestUnsupportedPropertyCombinationsRejected(t *testing.T) {
 	cases := []Property{
-		{Target: "position", Type: TypeText, Source: Source{LatLon: true}},
-		{Target: "position", Type: TypeGeo, Source: Source{LatLon: true, Prefix: "ignored"}},
-		{Target: "labels", Type: TypeLanguageMap, Source: Source{Const: map[string]any{"en": "text"}}, ObservedAt: ObservedAtMessage},
-		{Target: "labels", Type: TypeLanguageMap, Source: Source{Const: map[string]any{"en": "text"}, Prefix: "ignored"}},
-		{Target: "structure", Type: TypeStructured, Source: Source{Const: "ignored"}, Subproperties: []Property{{Target: "label", Type: TypeText, Source: Source{Const: "text"}}}},
+		{Target: "position", Type: TypeText, LatLon: true},
+		{Target: "position", Type: TypeGeo, LatLon: true, Prefix: "ignored"},
+		{Target: "labels", Type: TypeLanguageMap, Const: map[string]any{"en": "text"}, ObservedAt: ObservedAtMessage},
+		{Target: "labels", Type: TypeLanguageMap, Const: map[string]any{"en": "text"}, Prefix: "ignored"},
+		{Target: "structure", Type: TypeStructured, Const: "ignored", Subproperties: []Property{{Target: "label", Type: TypeText, Const: "text"}}},
 	}
 	for _, property := range cases {
 		rule := expressionRule()
@@ -181,7 +181,7 @@ func TestAttributeConflictsRejected(t *testing.T) {
 		}
 	}
 	rule := expressionRule()
-	rule.Entities[0].Properties = append(rule.Entities[0].Properties, Property{Target: "label", Type: TypeNumber, Source: Source{Const: 2.0}})
+	rule.Entities[0].Properties = append(rule.Entities[0].Properties, Property{Target: "label", Type: TypeNumber, Const: 2.0})
 	if err := Validate([]Rule{rule}); err == nil {
 		t.Fatal("duplicate/conflicting attribute accepted")
 	}

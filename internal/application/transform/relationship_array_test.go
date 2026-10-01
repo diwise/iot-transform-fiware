@@ -21,7 +21,7 @@ func TestRelationshipArrayJSON(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			rule := expressionRule()
-			rule.Entities[0].Properties = []Property{{Target: "links", Type: TypeRelationship, Array: test.array, Source: Source{Const: test.raw, Prefix: test.prefix}, ObservedAt: ObservedAtMessage}}
+			rule.Entities[0].Properties = []Property{{Target: "links", Type: TypeRelationship, Array: test.array, Const: test.raw, Prefix: test.prefix, ObservedAt: ObservedAtMessage}}
 			if err := Validate([]Rule{rule}); err != nil {
 				t.Fatal(err)
 			}
@@ -44,7 +44,7 @@ func TestRelationshipArrayJSON(t *testing.T) {
 func TestRelationshipReferencesAreStrict(t *testing.T) {
 	for _, raw := range []any{17.0, true, "relative", "urn:", "urn:example:has space", []any{"urn:example:valid", 17.0}, []any{[]any{"urn:example:nested"}}} {
 		rule := expressionRule()
-		rule.Entities[0].Properties = []Property{{Target: "links", Type: TypeRelationship, Array: true, Source: Source{Field: "references"}}}
+		rule.Entities[0].Properties = []Property{{Target: "links", Type: TypeRelationship, Array: true, Field: "references"}}
 		if err := Validate([]Rule{rule}); err != nil {
 			t.Fatalf("valid regression rule: %v", err)
 		}
@@ -61,7 +61,7 @@ func TestRelationshipReferencesAreStrict(t *testing.T) {
 
 func TestRelationshipArrayIsNotIgnoredInStructuredSubvalues(t *testing.T) {
 	rule := expressionRule()
-	rule.Entities[0].Properties = []Property{{Target: "document", Type: TypeStructured, Subproperties: []Property{{Target: "reference", Type: TypeRelationship, Source: Source{Const: "urn:example:target"}}}}}
+	rule.Entities[0].Properties = []Property{{Target: "document", Type: TypeStructured, Subproperties: []Property{{Target: "reference", Type: TypeRelationship, Const: "urn:example:target"}}}}
 	if err := Validate([]Rule{rule}); err != nil {
 		t.Fatalf("otherwise valid rule: %v", err)
 	}

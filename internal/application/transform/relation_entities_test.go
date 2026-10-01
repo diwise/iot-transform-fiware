@@ -14,13 +14,13 @@ func TestEntityReferenceBetweenEntities(t *testing.T) {
 		{
 			Name: "sewer", ID: "urn:ngsi-ld:Sewer:{{id}}", Type: "Sewer", Create: true,
 			Properties: []Property{
-				{Target: "name", Type: TypeText, Source: Source{Field: "name"}, ObservedAt: ObservedAtNone},
+				{Target: "name", Type: TypeText, Field: "name", ObservedAt: ObservedAtNone},
 			},
 		},
 		{
 			Name: "observation", ID: "urn:ngsi-ld:Observation:{{id}}", Type: "Observation",
 			Properties: []Property{
-				{Target: "refSewer", Type: TypeRelationship, Source: Source{Value: "{{entities.sewer.id}}"}},
+				{Target: "refSewer", Type: TypeRelationship, Value: "{{entities.sewer.id}}"},
 			},
 		},
 	}}
@@ -42,7 +42,7 @@ func TestEntityReferenceToLaterEntityFails(t *testing.T) {
 	// Valideringen ska avvisa referenser till okända namn.
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{
 		{ID: "urn:ngsi-ld:Observation:x", Type: "Observation", Properties: []Property{
-			{Target: "refSewer", Type: TypeRelationship, Source: Source{Value: "{{entities.missing.id}}"}},
+			{Target: "refSewer", Type: TypeRelationship, Value: "{{entities.missing.id}}"},
 		}},
 	}}
 

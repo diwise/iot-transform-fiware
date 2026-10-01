@@ -114,7 +114,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       standardreglernas modellval eller innehåll.
 - [x] Gör regeluppsättningskontroller med hänsyn till tenant och matchning.
       Likadana ID-mallar i åtskilda tenants får inte ge falska konflikter.
-- [ ] Verifiera att varje accepterad konstruktion har definierat körningsbeteende
+- [x] Verifiera att varje accepterad konstruktion har definierat körningsbeteende
       och att felmeddelanden pekar ut regel, entitet, attribut och uttryck.
 
 ### Arbetsplan för statisk validering (3.7)
@@ -178,7 +178,7 @@ Verifiering i `iot-transform-fiware`:
 4. Verifiera YAML, API-mutation, seed och omladdning, inklusive rollback,
    versionsnummer och föregående snapshot vid verklig konflikt. Gör review
    och förenkla relevant kod; dokumentera kontrollens statiska begränsningar.
-5. Kör gofmt, go test ./..., go vet ./..., relevanta race-tester och
+5. Kör gofmt, go test ./..., go vet ./..., därefter go fix ./..., relevanta race-tester och
    ocachade DB-tester i isolerad PostgreSQL. Markera punkten klar och committa
    först efter verifieringen.
 
@@ -210,36 +210,154 @@ Verifiering i `iot-transform-fiware`:
 - `git diff --check` passerade. README, regelkontrakt och OpenAPI beskriver
   uppsättningskontrollen och dess statiska begränsningar.
 
+### Genomförd konstruktionsparitet (3.9)
+
+Genomfört och granskat 2026-10-01. Regressionstester med i övrigt giltiga
+regler påvisade att `derive.of` tappade const/value/latlon/timestamp och
+ingångsprefix, att Structured saknade typkonvertering/derive och att
+metadata kunde accepteras utan effekt. Ett separat regressionstest påvisade
+att prefix på icke-text kunde ignoreras.
+
+Vanliga properties, aggregatingångar och Structured-delvärden delar nu
+källutvärdering. Attribut och Structured delar typkonvertering, inklusive
+kontroller av finita tal, datum, URI-referenser och stödd Geo-form.
+Ingångsprefix tillämpas före aggregatet, propertyprefix efteråt; statisk
+validering använder samma prefixregler. Prefix på fel typ ger fel.
+Metadata på Structured-delvärden och explicit observedAt på DateTime
+avvisas, liksom object/env utan resource/name. Geo använder alltid regelns
+target, även för latlon utan explicit observationstid.
+
+Referensfel anger regel, entitet, attributväg och uttryck. Körningsfel har
+motsvarande kontext för properties, aggregatingångar och Structured;
+felkedjan bevaras med wrapping. Testerna kontrollerar faktisk JSON,
+dynamiska measurement- och things-källor, noll/false, samtliga stödda
+delvärdestyper, transform/prefix, required, API/preview och bevarande av
+föregående snapshot när en ny kandidat är ogiltig. Inga modellval infördes
+i motorn.
+
+Etapp 3 är därmed slutförd. Källornas närvaro och tidssemantik, aggregatens
+policy vid tomma ingångar/dynamiska typfel och fullständig dynamisk
+NGSI-LD-utdatavalidering följer fortfarande sina separata punkter i etapp
+5–6; detta innebär inte att de etapperna är färdiga. Se även den verifierade
+funktionsprofilen i `assets/docs/transform-contract.md`.
+
+Verifiering i `iot-transform-fiware`:
+
+- `go test ./internal/application/transform -run TestExecutionParity -count=1`
+  påvisade käll-/konverterings-/metadatafelen före rättningen.
+- `go test ./internal/application/transform -run TestExecutionParityPrefix -count=1`
+  påvisade prefixluckan före dess rättning.
+- `gofmt -w` kördes på samtliga ändrade Go-filer.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 go test ./... -count=1`
+  och `go vet ./...` passerade, inklusive medföljande standardregler.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skippade tester mot tillfällig, isolerad PostgreSQL 16.
+  Verifierade seed/kandidatvalidering, rollback, cancellation, omstart,
+  samtidiga mutationer, snapshot och offline-preview.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 PG_TEST_DBNAME=diwise_parity_race go test -race ./internal/application/transform ./internal/presentation/api -run 'TestExecutionParity|TestParity|TestStatic|TestRuleSet|TestTenantAware|TestSnapshot|TestDatabaseSnapshotRestartAndConcurrentMutation|TestModelsTenantTransferAndConcurrentRevision' -count=1`
+  passerade med separat race-testdatabas.
+- README, regelkontrakt och OpenAPI uppdaterades; `git diff --check` passerade.
+
 ## Etapp 4 — källtrogna measurement- och things-adaptrar
 
 Berör `internal/application/measurements` och `internal/application/things`.
+
+### Arbetsplan för etapp 4
+
+1. Verifiera de lokala things-kuverten mot `iot-things-v2/pkg/types` och
+   measurement-normaliseringen mot de låsta core-/senml-versionerna.
+2. Lägg neutrala kontrakts- och regressionstester före rättning för
+   kuvertmetadata, descriptor/variant, proveniens, Point/Polygon och
+   återkommande objektprefix med olika metadata. Verifiera råa identiteter,
+   noll/false och subsekundprecision.
+3. Samla descriptor-/geometriexponering för values/lifecycle och relationer.
+   Exponera eventfält och full värdeproveniens. Separat observationsvy bär
+   kvalitet/proveniens men inga numeriska värden; skrivvärden finns endast
+   bakom befintlig ok/uncertain-grind i `values`.
+4. Bevara measurement-resursers fullständiga namn, objekt, kanal, enhet och
+   tid och exponera dem för generella uttryck. Använd parserns effektiva
+   observationsmetadata i den gemensamma partitioneringen, även i preview.
+5. Verifiera faktisk regelkörning/JSON och preview-paritet. Kör gofmt,
+   go test ./..., go vet ./... och därefter go fix ./...; granska fixändringar
+   och kör om formatering/test/vet om koden ändras. Kör relevanta race- och
+   ocachade DB-tester mot isolerad PostgreSQL och dokumentera innan avbockning.
 
 - [x] Ta bort `relation.from.waterQualityObserved` och konstruktionen av
       `urn:ngsi-ld:WaterQualityObserved:...` från relationsadaptern.
 - [x] Exponera generella descriptors för både `relation.from` och `relation.to`:
       käll-ID, rå typ, undertyp, namn, alternativnamn, kategori samt relevant
       plats-, metadata- och variantinformation ur producentkontraktet.
-- [ ] Exponera relevant descriptor-, event- och proveniensdata konsekvent för
+- [x] Exponera relevant descriptor-, event- och proveniensdata konsekvent för
       values och lifecycle. Rätta fält som avkodas men försvinner före regelkörning.
 - [x] Bevara råa namn och typer. Gör det tydligt vilka variabler som är råa och
       vilka som är beräknade genvägar; undvik implicit ändring av rå `type`.
-- [ ] Exponera geometridata konsekvent för Point och övriga stödda geometrier.
+- [x] Exponera geometridata konsekvent för Point och övriga stödda geometrier.
       Koordinatgenvägar får komplettera, men inte dölja, den ursprungliga geometrin.
-- [ ] Bevara measurement-resursers fullständiga identitet, objekt, kanal,
+- [x] Bevara measurement-resursers fullständiga identitet, objekt, kanal,
       värde, enhet och observationstid. Gör relevanta uppgifter åtkomliga för regler.
 - [x] Fastställ `port` mot det verkliga källkontraktet. Fyll det från korrekt
       källa; anta inte att kanal betyder port. Port är sensorns fysiska anslutning:
       `{device_id}/{object}/{resource}` utan port och
       `{device_id}/{port}/{object}/{resource}` med port. Härled från observationens
       motsvarande header efter normalisering; explicit `0` skiljs från portlös.
-- [ ] Behåll gemensam flerobjektspartitionering för produktion och preview.
+- [x] Behåll gemensam flerobjektspartitionering för produktion och preview.
       Verifiera att resurser och metadata aldrig hämtas från fel observation.
-- [ ] Bevara kontraktsregeln att ogiltiga things-värden inte ersätter aktuella.
+- [x] Bevara kontraktsregeln att ogiltiga things-värden inte ersätter aktuella.
       Exponera kvalitet/proveniens utan att kringgå filtreringen av skrivbara värden.
 - [x] Ta bort oanvänd `Thing.EntityID()` och granska kvarvarande äldre typer
       utifrån faktisk användning innan de tas bort eller behålls.
-- [ ] Verifiera adaptrarna mot producenternas kontrakt med neutrala testdata
+- [x] Verifiera adaptrarna mot producenternas kontrakt med neutrala testdata
       som inte förutsätter FIWARE-ID:n eller modellnamn i källpayloaden.
+
+### Genomfört och verifierat
+
+Etapp 4 slutförd 2026-10-01. De lokala JSON-kuverten granskades mot
+`iot-things-v2/pkg/types`, och measurement-vägen mot core/senml-versionerna
+låsta i tjänstens `go.mod`. Producenternas payloads och topics ändrades inte.
+Regressionstester påvisade förlorad proveniens/variant/geometri och att
+återkommande objektprefix kunde få en tidigare observations metadata.
+
+Values/lifecycle/relationer delar nu descriptor-/geometriexponering.
+Kuvertmetadata finns under `event`; values bevarar hela proveniensen och
+eventets inbäddade relationer. Alla källtider i de nya vyerna bevarar
+subsekundprecision; saknade tider utelämnas. `observations[]` exponerar
+samtliga observationers metadata och valuePresent men inga värden.
+Skrivvärden finns endast under den oförändrade ok/uncertain-/icke-null-
+grinden i `values`. Testad regelkörning visar att ingen alternativ vy kan
+användas för att skriva det ogiltiga mätvärdet.
+
+Measurements bevarar fullständiga resursnamn, objekt, kanal, enhet, nativa
+värden och observationstider under `records[]`. Partitioneringen använder
+parserns effektiva observationsmetadata i stället för att återleta poster
+via prefix. Lokala overrides, paketdefaults, explicit noll, återkommande
+prefix och relativ SenML-tid verifierades. Produktion och offline-preview
+ger samma serialiserade resultat för neutrala flerobservationspaket.
+
+Den interna äldre Thing-typen och stringOrEmpty togs bort efter kontroll
+av kvarvarande användning; descriptorInput ersätter mellanrepresentationen.
+README, källvyer/avgränsningar i regelkontraktet och OpenAPI uppdaterades.
+Automatisk observedAt-policy, de äldre tidsgenvägarnas formattering,
+matchning och modellregelgranskning följer fortfarande etapp 5–8.
+
+Verifiering i `iot-transform-fiware`:
+
+- `go test ./internal/application/things ./internal/application/measurements -run TestSourceContract -count=1`
+  påvisade adapter-/partitioneringsfelen före rättning.
+- `gofmt -w` kördes på ändrade Go-filer.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 go test ./... -count=1`,
+  därefter `go vet ./...` och `go fix ./...` passerade.
+  Fixändringarna till `maps.Copy` och direkt numerisk pekarkonstruktion
+  i LanguageMap-testet granskades; efterföljande formatering,
+  fulla tester och vet passerade. Sista fixkörningen gav inga ytterligare ändringar.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skippade tester mot tillfällig, isolerad PostgreSQL 16.
+  Seed, rollback, cancellation, omstart, samtidiga mutationer, snapshot
+  och preview verifierades.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 PG_TEST_DBNAME=diwise_adapter_race go test -race ./internal/application/measurements ./internal/application/things ./internal/application/transform ./internal/presentation/messaging/measurements ./internal/presentation/messaging/things ./internal/presentation/api -count=1`
+  passerade med separat race-testdatabas.
+- Producenternas kontraktstester passerade: `go test ./pkg/types -count=1`
+  i `iot-things-v2` och `go test ./pkg/messaging/events -count=1` i `iot-core`.
+- `git diff --check` passerade. Den tillfälliga DB-instansen städades efter verifiering.
 
 ## Etapp 5 — konsekvent matchning, värdekällor och tid
 
@@ -251,16 +369,18 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
       explicit om lifecycle krävs eller om wildcard stöds.
 - [ ] Lägg till regelstyrd avgränsning för relationens målsida, exempelvis måltyp
       eller generella fältpredikat, så att tankregeln kan kräva växthus som mål.
-- [ ] Använd en gemensam värdekällsutvärderare för properties, `derive.of` och
+- [x] Använd en gemensam värdekällsutvärderare för properties, `derive.of` och
       Structured. Alla tillåtna källor och modifierare ska faktiskt utvärderas.
+      Genomfört och verifierat i 3.9.
 - [ ] Definiera `required`, `when: present`, tomma värden och saknad mallkälla
       konsekvent. Gör aggregatens beteende vid saknade ingångar explicit.
       Beslut: saknad/null/tom källa ger ingen skrivning; noll och false är giltiga.
       Rensning är explicit. Inget aggregat skriver när alla ingångar saknas.
 - [ ] Skilj saknad källa från typfel. Aggregat får inte tyst ignorera felaktiga
       typer utan ett dokumenterat regelval.
-- [ ] Säkerställ att Structured-delvärden konverteras enligt deklarerad typ.
+- [x] Säkerställ att Structured-delvärden konverteras enligt deklarerad typ.
       Avvisa metadata/funktioner på delvärden som inte har implementerad semantik.
+      Genomfört och verifierat i 3.9.
 - [ ] Exponera observationstid, publiceringstid och förändringstid separat.
       Låt regler välja tidskälla för både attributvärden och `observedAt`.
 - [ ] Gör tidsmetadata konsekvent över stödda property-typer och dokumentera
@@ -278,8 +398,9 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
 
 ## Etapp 6 — generisk NGSI-LD-byggning och grundvalidering
 
-- [ ] Låt Geo alltid använda regelns `target`, oavsett koordinatkälla och
+- [x] Låt Geo alltid använda regelns `target`, oavsett koordinatkälla och
       `observedAt`. Ta bort kodvägar som implicit väljer attributet `location`.
+      Genomfört och verifierat genom gemensam konvertering i 3.9.
 - [x] Inför generisk relationslistform, exempelvis `array: true` på Relationship.
       Skalär blir enelementslista; befintlig lista får inte dubbelnästlas.
 - [x] Validera relationsreferenser och listelement strikt enligt vald profil.
@@ -356,8 +477,10 @@ regelmotorn ska inte innehålla specialfall för en viss standardregel eller mod
 
 ## Etapp 9 — verifiering och acceptans
 
-- [ ] Kör `gofmt` på ändrade Go-filer samt `go test ./...` och `go vet ./...`
-      i varje berörd Go-modul. Redovisa exakt vad som körts och eventuella hinder.
+- [ ] Kör `gofmt` på ändrade Go-filer samt `go test ./...`, `go vet ./...`
+      och därefter `go fix ./...` i varje berörd Go-modul. Granska fixändringarna
+      och kör om formatering, tester och vet om koden ändras.
+      Redovisa exakt vad som körts och eventuella hinder.
 - [ ] Kör relevanta race-tester för snapshot, omladdning och livscykel.
 - [ ] Kör berörda DB-/seedintegrationstester ocachat (`-count=1`) med isolerad
       testdatabas. Kontrollera att testerna faktiskt körs och inte skippas.

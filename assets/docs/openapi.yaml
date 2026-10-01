@@ -349,17 +349,25 @@ components:
           type: boolean
           default: false
           description: 'Endast NGSI-LD Relationship-attribut, inte Structured-delvärden. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
-        unit: { type: string }
+        unit:
+          type: string
+          description: 'Endast Number och NumberArray-attribut. Stöds inte på Structured-delvärden.'
         observedAt:
           type: string
-          description: header (default), record, message, none eller field:<väg> (motorn stöder field:-vägar)
+          description: 'header (default), record, message, none eller field:<väg>. Explicit observedAt stöds inte på DateTime, LanguageMap, Structured eller Structured-delvärden.'
           example: header
-        observedBy: { type: string }
+        observedBy:
+          type: string
+          description: 'Endast Number-attribut, inte Structured-delvärden. Stöder malluttryck och entitetsreferenser.'
         when: { type: string, enum: [present] }
         required: { type: boolean }
         resource: { type: string }
-        object: { type: string }
-        env: { type: string }
+        object:
+          type: string
+          description: 'Measurement-selector som kräver resource eller name; gäller även derive.of.'
+        env:
+          type: string
+          description: 'Measurement-selector som kräver resource eller name; gäller även derive.of.'
         name: { type: string }
         field: { type: string }
         ref: { type: string }
@@ -369,9 +377,11 @@ components:
         timestamp: { type: boolean }
         value:
           type: string
-          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. field: är ett valfritt prefix. Dynamiska fälts närvaro verifieras vid körning eller preview.'
+          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Källvyer omfattar event/thing/geometry och kvalitetsfiltrerade values för things, samt records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt för measurements. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview.'
           example: '{{metadata.description}}'
-        prefix: { type: string }
+        prefix:
+          type: string
+          description: 'Appliceras efter transform och före typkonvertering. Kräver text eller en lista med enbart text. På derive.of appliceras prefix före aggregatet.'
         transform:
           type: array
           items:
@@ -382,6 +392,7 @@ components:
               value: { type: number }
         derive:
           type: object
+          description: 'Använder gemensam källutvärdering, även i Structured-delvärden. of stöder kindens egna källor samt const, value, latlon och timestamp med valfritt prefix. derive och transform kan inte kombineras på samma property.'
           required: [fn, of]
           properties:
             fn: { type: string }
@@ -391,5 +402,6 @@ components:
                 type: object
         subproperties:
           type: array
+          description: 'Endast Structured. Delvärden konverteras enligt deklarerad typ och kan använda derive. De är råa JSON-värden: unit, observedAt, observedBy, array och nästlad Structured avvisas.'
           items:
             $ref: '#/components/schemas/Property'

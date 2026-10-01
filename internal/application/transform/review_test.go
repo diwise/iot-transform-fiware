@@ -39,7 +39,7 @@ func measurementWithResources(names ...string) Measurement {
 	m := testMeasurement()
 	m.Records = nil
 	for _, n := range names {
-		m.Records = append(m.Records, Record{Name: n, Value: ptr(1)})
+		m.Records = append(m.Records, Record{Name: n, Value: new(float64(1))})
 	}
 	return m
 }
@@ -77,7 +77,7 @@ func TestValidateRejectsKindSpecificMatchFields(t *testing.T) {
 	// kind-neutral const-källa så att endast match-fältet prövas).
 	thingWithDevice := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Device: "dev-1"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Thing:x", Type: "Thing",
-		Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Const: "x"}}},
+		Properties: []Property{{Target: "name", Type: TypeText, Const: "x"}},
 	}}}
 	is.NoErr(Validate([]Rule{thingWithDevice}))
 }
@@ -97,8 +97,8 @@ func TestConstIntConvertsToTextAndBoolean(t *testing.T) {
 	rule := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:T:x", Type: "T",
 		Properties: []Property{
-			{Target: "n", Type: TypeText, Source: Source{Const: 5}, ObservedAt: ObservedAtNone},
-			{Target: "b", Type: TypeBoolean, Source: Source{Const: 1}, ObservedAt: ObservedAtNone},
+			{Target: "n", Type: TypeText, Const: 5, ObservedAt: ObservedAtNone},
+			{Target: "b", Type: TypeBoolean, Const: 1, ObservedAt: ObservedAtNone},
 		},
 	}}}
 

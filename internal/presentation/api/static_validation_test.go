@@ -15,7 +15,7 @@ func TestStaticValidationAtAPIBoundaries(t *testing.T) {
 	if err := transform.Validate([]transform.Rule{rule}); err != nil {
 		t.Fatal(err)
 	}
-	rule.Entities[0].Properties = []transform.Property{{Target: "sampled", Type: transform.TypeDateTime, Source: transform.Source{Const: "not-a-date"}}}
+	rule.Entities[0].Properties = []transform.Property{{Target: "sampled", Type: transform.TypeDateTime, Const: "not-a-date"}}
 	for _, tt := range []struct {
 		name string
 		call func() (int, string)

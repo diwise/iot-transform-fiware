@@ -2,6 +2,7 @@ package transform
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -104,10 +105,8 @@ func splitArgs(input string) ([]string, error) {
 		return nil, fmt.Errorf("unbalanced function arguments")
 	}
 	args = append(args, strings.TrimSpace(input[start:]))
-	for _, arg := range args {
-		if arg == "" {
-			return nil, fmt.Errorf("empty function argument")
-		}
+	if slices.Contains(args, "") {
+		return nil, fmt.Errorf("empty function argument")
 	}
 	return args, nil
 }

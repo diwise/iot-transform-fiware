@@ -8,7 +8,7 @@ import (
 func ruleSetFixture(match Match, typeName string) Rule {
 	return Rule{Match: match, Entities: []Entity{{
 		ID: "urn:example:{{id}}", Type: typeName,
-		Properties: []Property{{Target: "sample", Type: TypeNumber, Source: Source{Const: 1}}},
+		Properties: []Property{{Target: "sample", Type: TypeNumber, Const: 1}},
 	}}}
 }
 

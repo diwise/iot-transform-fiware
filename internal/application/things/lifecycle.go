@@ -12,6 +12,7 @@ import (
 // livscykelhändelser (things.v1.lifecycle). Samma princip som values.go:
 // egen typ, ingen import av producentpaketet.
 type thingLifecycleEnvelope struct {
+	Schema           string           `json:"schema"`
 	EventID          string           `json:"eventId"`
 	Tenant           string           `json:"tenant"`
 	ThingID          string           `json:"thingId"`
@@ -49,45 +50,16 @@ func ThingLifecycleFromJSON(body []byte) (transform.Thing, error) {
 	// Tom tenant är inget strukturfel: presentationen skippar utan
 	// broker-kontakt (samma grind som thing.updated).
 
-	meta := Thing{
-		ID:     env.ThingID,
-		Type:   env.ThingType,
-		Tenant: env.Tenant,
+	input := descriptorInput(env.ThingID, env.ThingType, env.Tenant, env.Thing)
+	input.Event, input.Lifecycle, input.ObservedAt = transform.EventThingsV1Lifecycle, env.Kind, env.ChangedAt
+	event := map[string]any{
+		"schema": env.Schema, "eventId": env.EventID, "tenant": env.Tenant, "thingId": env.ThingID,
+		"thingType": env.ThingType, "thingTypeVersion": env.ThingTypeVersion, "configRevision": env.ConfigRevision, "kind": env.Kind,
 	}
-	if env.Thing != nil {
-		meta.Name = env.Thing.Name
-		meta.AlternativeName = env.Thing.AlternativeName
-		if sub := env.Thing.SubType; sub != "" {
-			meta.SubType = &sub
-		}
-	}
-
-	fields := map[string]any{
-		"thing": descriptorFields(env.ThingID, env.ThingType, env.Thing),
-		"lifecycle": map[string]any{
-			"kind":      env.Kind,
-			"revision":  env.ConfigRevision,
-			"changedAt": env.ChangedAt.UTC().Format(time.RFC3339),
-		},
-	}
-	if meta.Name != "" {
-		fields["name"] = meta.Name
-	}
-	if meta.AlternativeName != "" {
-		fields["alternativeName"] = meta.AlternativeName
-	}
-
-	return transform.Thing{
-		ID:              meta.ID,
-		Type:            meta.Type,
-		SubType:         stringOrEmpty(meta.SubType),
-		Name:            meta.Name,
-		AlternativeName: meta.AlternativeName,
-		Tenant:          meta.Tenant,
-		TypeName:        meta.TypeName(),
-		Event:           transform.EventThingsV1Lifecycle,
-		Lifecycle:       env.Kind,
-		ObservedAt:      env.ChangedAt,
-		Fields:          fields,
-	}, nil
+	addSourceTime(event, "changedAt", env.ChangedAt)
+	input.Fields["event"] = event
+	lifecycle := map[string]any{"kind": env.Kind, "revision": env.ConfigRevision}
+	addSourceTime(lifecycle, "changedAt", env.ChangedAt)
+	input.Fields["lifecycle"] = lifecycle
+	return input, nil
 }

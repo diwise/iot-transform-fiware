@@ -51,7 +51,7 @@ func TestThingRulesRejectMeasurementSources(t *testing.T) {
 	sub.Entities[0].Properties[0].Type = TypeStructured
 	sub.Entities[0].Properties[0].Source = Source{}
 	sub.Entities[0].Properties[0].Subproperties = []Property{
-		{Target: "s", Type: TypeNumber, Source: Source{Resource: "5700"}},
+		{Target: "s", Type: TypeNumber, Resource: "5700"},
 	}
 	is.True(Validate([]Rule{sub}) != nil)
 
@@ -93,7 +93,7 @@ func TestMeasurementRulesRejectThingSources(t *testing.T) {
 	sub.Entities[0].Properties[0].Type = TypeStructured
 	sub.Entities[0].Properties[0].Source = Source{}
 	sub.Entities[0].Properties[0].Subproperties = []Property{
-		{Target: "s", Type: TypeNumber, Source: Source{Ref: "x"}},
+		{Target: "s", Type: TypeNumber, Ref: "x"},
 	}
 	is.True(Validate([]Rule{sub}) != nil)
 

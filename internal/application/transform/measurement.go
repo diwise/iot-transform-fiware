@@ -10,14 +10,16 @@ import (
 // fullständigt LwM2M-namn ingår även objektsegmentet där; det är inte port.
 // Port för den partitionerade observationen ligger på Measurement.Port.
 type Record struct {
-	Object  string
-	Name    string
-	Channel string
-	Value   *float64
-	Bool    *bool
-	String  *string
-	Time    time.Time
-	HasTime bool
+	FullName string
+	Object   string
+	Name     string
+	Channel  string
+	Unit     string
+	Value    *float64
+	Bool     *bool
+	String   *string
+	Time     time.Time
+	HasTime  bool
 }
 
 // Measurement är motorns normaliserade indata för en enskild
@@ -27,6 +29,7 @@ type Measurement struct {
 	SensorType    string
 	Object        string
 	Env           string
+	Source        string
 	Port          string // fysisk anslutning från device/port/object/resource; tomt utan port
 	Tenant        string
 	Timestamp     time.Time
@@ -98,6 +101,13 @@ func (m Measurement) Resolve(p Property) (resolvedValue, error) {
 }
 
 func (m Measurement) ResolveTime(path string) (time.Time, bool) {
+	if value, ok := lookupPath(m.sourceFields(), path); ok {
+		if text, ok := value.(string); ok {
+			if parsed, err := time.Parse(time.RFC3339Nano, text); err == nil {
+				return parsed, true
+			}
+		}
+	}
 	if r, ok := m.findByRecordName(path); ok && r.HasTime {
 		return r.Time, true
 	}
@@ -105,6 +115,9 @@ func (m Measurement) ResolveTime(path string) (time.Time, bool) {
 }
 
 func (m Measurement) ResolvePath(path string) (any, bool) {
+	if value, ok := lookupPath(m.sourceFields(), path); ok {
+		return value, true
+	}
 	r, ok := m.findByRecordName(path)
 	if !ok {
 		return nil, false
@@ -114,6 +127,38 @@ func (m Measurement) ResolvePath(path string) (any, bool) {
 		return nil, false
 	}
 	return v, true
+}
+
+// records preserves wire order, duplicate resource names and normalized source
+// identity. The existing short-name shortcuts remain available independently.
+func (m Measurement) sourceFields() map[string]any {
+	records := make([]any, len(m.Records))
+	for i, r := range m.Records {
+		fields := map[string]any{"fullName": r.FullName, "name": r.Name, "object": r.Object, "channel": r.Channel, "unit": r.Unit}
+		switch {
+		case r.Value != nil:
+			fields["value"] = *r.Value
+		case r.Bool != nil:
+			fields["value"] = *r.Bool
+		case r.String != nil:
+			fields["value"] = *r.String
+		}
+		if r.HasTime {
+			fields["observedAt"] = r.Time.UTC().Format(time.RFC3339Nano)
+		}
+		records[i] = fields
+	}
+	fields := map[string]any{"records": records}
+	if m.Source != "" {
+		fields["source"] = m.Source
+	}
+	if !m.Timestamp.IsZero() {
+		fields["message"] = map[string]any{"timestamp": m.Timestamp.UTC().Format(time.RFC3339Nano)}
+	}
+	if m.HasHeaderTime {
+		fields["header"] = map[string]any{"observedAt": m.HeaderTime.UTC().Format(time.RFC3339Nano)}
+	}
+	return fields
 }
 
 // findRecord slår upp en post för en property.
@@ -148,7 +193,7 @@ func (m Measurement) findRecord(p Property) (Record, bool) {
 
 func (m Measurement) findByRecordName(name string) (Record, bool) {
 	for _, r := range m.Records {
-		if r.Name == name {
+		if r.Name == name || (r.FullName != "" && r.FullName == name) {
 			return r, true
 		}
 	}

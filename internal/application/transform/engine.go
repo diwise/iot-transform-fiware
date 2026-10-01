@@ -161,10 +161,10 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 	ids := map[string]string{}
 	writes := make([]EntityWrite, 0, len(rule.Entities))
 
-	for _, ent := range rule.Entities {
+	for index, ent := range rule.Entities {
 		id, err := renderTemplate(ent.ID, in, ids)
 		if err != nil {
-			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+			return nil, fmt.Errorf("rule %q, entity %d (%q), id expression %q: %w", rule.ID, index, ent.Name, ent.ID, err)
 		}
 
 		if ent.Name != "" {
@@ -173,7 +173,7 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 
 		typeName, err := renderTemplate(ent.Type, in, ids)
 		if err != nil {
-			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+			return nil, fmt.Errorf("rule %q, entity %d (%q), type expression %q: %w", rule.ID, index, ent.Name, ent.Type, err)
 		}
 
 		// delete-entiteter raderar hela entiteten; properties byggs aldrig.
@@ -204,7 +204,7 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 			if errors.Is(err, ErrRequiredSourceMissing) {
 				continue
 			}
-			return nil, fmt.Errorf("entity %q: %w", ent.Name, err)
+			return nil, fmt.Errorf("rule %q, entity %d (%q): %w", rule.ID, index, ent.Name, err)
 		}
 
 		writes = append(writes, EntityWrite{
@@ -230,7 +230,7 @@ func entityProps(ent Entity, in Input, ids map[string]string) ([]entities.Entity
 	for _, p := range ent.Properties {
 		dec, err := buildProperty(p, in, ids)
 		if err != nil {
-			return nil, err
+			return nil, propertyError(p, err)
 		}
 		if dec == nil {
 			continue

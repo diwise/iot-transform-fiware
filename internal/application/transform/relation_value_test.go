@@ -30,7 +30,7 @@ func TestRelationshipValueTemplate(t *testing.T) {
 	is := is.New(t)
 
 	rule := relationRule(
-		Property{Target: "refDevice", Type: TypeRelationship, Source: Source{Value: "urn:ngsi-ld:Device:{{id}}"}},
+		Property{Target: "refDevice", Type: TypeRelationship, Value: "urn:ngsi-ld:Device:{{id}}"},
 	)
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
@@ -43,7 +43,7 @@ func TestRelationshipConst(t *testing.T) {
 	is := is.New(t)
 
 	rule := relationRule(
-		Property{Target: "refArea", Type: TypeRelationship, Source: Source{Const: "urn:ngsi-ld:Area:7"}},
+		Property{Target: "refArea", Type: TypeRelationship, Const: "urn:ngsi-ld:Area:7"},
 	)
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
@@ -56,9 +56,8 @@ func TestRelationshipFieldWithPrefix(t *testing.T) {
 	is := is.New(t)
 
 	rule := relationRule(
-		Property{Target: "refDevice", Type: TypeRelationship, Source: Source{
-			Field: "refDevices[0].deviceID", Prefix: "urn:ngsi-ld:Device:",
-		}},
+		Property{Target: "refDevice", Type: TypeRelationship,
+			Field: "refDevices[0].deviceID", Prefix: "urn:ngsi-ld:Device:"},
 	)
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
@@ -71,9 +70,8 @@ func TestTextWithPrefix(t *testing.T) {
 	is := is.New(t)
 
 	rule := relationRule(
-		Property{Target: "source", Type: TypeText, ObservedAt: ObservedAtNone, Source: Source{
-			Field: "refDevices[0].deviceID", Prefix: "urn:ngsi-ld:Device:",
-		}},
+		Property{Target: "source", Type: TypeText, ObservedAt: ObservedAtNone,
+			Field: "refDevices[0].deviceID", Prefix: "urn:ngsi-ld:Device:"},
 	)
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())

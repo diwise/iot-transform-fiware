@@ -231,11 +231,11 @@ func TestSnapshotConcurrentAccess(t *testing.T) {
 
 	var wg sync.WaitGroup
 	errs := make(chan error, 64)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 25; j++ {
+			for range 25 {
 				snap := m.Snapshot()
 				if snap == nil || snap.Things == nil || snap.Measurements == nil {
 					errs <- errors.New("nil snapshot or engine")
@@ -246,7 +246,7 @@ func TestSnapshotConcurrentAccess(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				if err := m.SyncOnce(t.Context()); err != nil {
 					errs <- err
 					return

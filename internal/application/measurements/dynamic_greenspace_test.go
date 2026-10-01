@@ -44,10 +44,10 @@ rules:
 func greenspacePack(ts time.Time, object string, value float64) senml.Pack {
 	return senml.Pack{
 		{Name: "dev-1/0", StringValue: object, Time: float64(ts.Unix())},
-		{Name: "dev-1/5700", Value: ptr(value)},
+		{Name: "dev-1/5700", Value: new(value)},
 		{Name: "dev-1/env", StringValue: "soil"},
-		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
-		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/lat", Value: new(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: new(17.51), Unit: senml.UnitLon},
 		{Name: "dev-1/tenant", StringValue: "default"},
 	}
 }

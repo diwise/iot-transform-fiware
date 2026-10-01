@@ -27,8 +27,8 @@ func TestTextAndNumberArray(t *testing.T) {
 	is := is.New(t)
 
 	rule := arrayRule(
-		Property{Target: "category", Type: TypeTextArray, Source: Source{Field: "category"}},
-		Property{Target: "values", Type: TypeNumberArray, Source: Source{Field: "values"}, Unit: "Cel"},
+		Property{Target: "category", Type: TypeTextArray, Field: "category"},
+		Property{Target: "values", Type: TypeNumberArray, Field: "values", Unit: "Cel"},
 	)
 
 	writes, err := NewEngine([]Rule{rule}).Transform(arrayThing())
@@ -43,7 +43,7 @@ func TestTextAndNumberArray(t *testing.T) {
 func TestRelationshipArray(t *testing.T) {
 	is := is.New(t)
 
-	rule := arrayRule(Property{Target: "refSeeAlso", Type: TypeRelationship, Source: Source{Field: "refSeeAlso"}})
+	rule := arrayRule(Property{Target: "refSeeAlso", Type: TypeRelationship, Field: "refSeeAlso"})
 
 	writes, err := NewEngine([]Rule{rule}).Transform(arrayThing())
 	is.NoErr(err)
@@ -59,9 +59,9 @@ func TestStructured(t *testing.T) {
 	rule := arrayRule(Property{
 		Target: "address", Type: TypeStructured,
 		Subproperties: []Property{
-			{Target: "streetAddress", Type: TypeText, Source: Source{Field: "address.street"}},
-			{Target: "addressCountry", Type: TypeText, Source: Source{Field: "address.country"}},
-			{Target: "kind", Type: TypeText, Source: Source{Const: "postal"}},
+			{Target: "streetAddress", Type: TypeText, Field: "address.street"},
+			{Target: "addressCountry", Type: TypeText, Field: "address.country"},
+			{Target: "kind", Type: TypeText, Const: "postal"},
 		},
 	})
 
@@ -80,8 +80,8 @@ func TestStructuredMissingSubpropertyIsSkipped(t *testing.T) {
 	rule := arrayRule(Property{
 		Target: "address", Type: TypeStructured,
 		Subproperties: []Property{
-			{Target: "streetAddress", Type: TypeText, Source: Source{Field: "address.street"}},
-			{Target: "missing", Type: TypeText, Source: Source{Field: "nope"}},
+			{Target: "streetAddress", Type: TypeText, Field: "address.street"},
+			{Target: "missing", Type: TypeText, Field: "nope"},
 		},
 	})
 
@@ -100,7 +100,7 @@ func TestNestedStructuredIsRejected(t *testing.T) {
 		Target: "outer", Type: TypeStructured,
 		Subproperties: []Property{{
 			Target: "inner", Type: TypeStructured,
-			Subproperties: []Property{{Target: "x", Type: TypeText, Source: Source{Field: "a"}}},
+			Subproperties: []Property{{Target: "x", Type: TypeText, Field: "a"}},
 		}},
 	})
 

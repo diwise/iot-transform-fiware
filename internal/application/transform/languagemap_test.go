@@ -69,7 +69,7 @@ func TestLanguageMapValidation(t *testing.T) {
 	is := is.New(t)
 
 	tr := languageMapRule(Source{Field: "metadata"})
-	tr.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply, Value: ptr(2)}}
+	tr.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply, Value: new(float64(2))}}
 	is.True(Validate([]Rule{tr}) != nil)
 
 	dr := languageMapRule(Source{Field: "metadata"})

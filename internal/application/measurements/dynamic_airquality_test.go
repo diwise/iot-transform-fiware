@@ -30,14 +30,14 @@ rules:
 func airQualityPack(ts time.Time) senml.Pack {
 	return senml.Pack{
 		{Name: "dev-1/0", StringValue: "urn:oma:lwm2m:ext:3428", Time: float64(ts.Unix())},
-		{Name: "dev-1/17", Value: ptr(400)},
-		{Name: "dev-1/1", Value: ptr(12)},
-		{Name: "dev-1/3", Value: ptr(8)},
-		{Name: "dev-1/5", Value: ptr(4)},
-		{Name: "dev-1/15", Value: ptr(30)},
-		{Name: "dev-1/19", Value: ptr(10)},
-		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
-		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/17", Value: new(float64(400))},
+		{Name: "dev-1/1", Value: new(float64(12))},
+		{Name: "dev-1/3", Value: new(float64(8))},
+		{Name: "dev-1/5", Value: new(float64(4))},
+		{Name: "dev-1/15", Value: new(float64(30))},
+		{Name: "dev-1/19", Value: new(float64(10))},
+		{Name: "dev-1/lat", Value: new(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: new(17.51), Unit: senml.UnitLon},
 		{Name: "dev-1/tenant", StringValue: "default"},
 	}
 }

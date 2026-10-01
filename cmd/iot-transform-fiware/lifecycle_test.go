@@ -29,7 +29,7 @@ func containerHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) m
 		Entities: []transform.Entity{{
 			ID: "urn:ngsi-ld:WasteContainer:{{id}}", Type: "WasteContainer",
 			Properties: []transform.Property{
-				{Target: "fillingLevel", Type: transform.TypeNumber, Source: transform.Source{Field: "values.fillRate.value"}, Required: true},
+				{Target: "fillingLevel", Type: transform.TypeNumber, Field: "values.fillRate.value", Required: true},
 			},
 		}},
 	}}

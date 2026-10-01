@@ -3,6 +3,7 @@ package things
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
@@ -14,26 +15,35 @@ import (
 // är tråd (topics/JSON), inte Go-moduler, så ingen import av producentens
 // paket sker här.
 type thingValuesEnvelope struct {
-	Schema           string           `json:"schema"`
-	EventID          string           `json:"eventId"`
-	Tenant           string           `json:"tenant"`
-	ThingID          string           `json:"thingId"`
-	ThingType        string           `json:"thingType"`
-	ThingTypeVersion string           `json:"thingTypeVersion"`
-	ConfigRevision   int64            `json:"configRevision"`
-	PublishedAt      time.Time        `json:"publishedAt"`
-	Thing            *thingDescriptor `json:"thing"`
-	Values           []thingValue     `json:"values"`
+	Schema           string                  `json:"schema"`
+	EventID          string                  `json:"eventId"`
+	Tenant           string                  `json:"tenant"`
+	ThingID          string                  `json:"thingId"`
+	ThingType        string                  `json:"thingType"`
+	ThingTypeVersion string                  `json:"thingTypeVersion"`
+	ConfigRevision   int64                   `json:"configRevision"`
+	PublishedAt      time.Time               `json:"publishedAt"`
+	Thing            *thingDescriptor        `json:"thing"`
+	Values           []thingValue            `json:"values"`
+	Relations        []thingRelationEnvelope `json:"relations"`
 }
 
 type thingValue struct {
-	PropertyID string    `json:"propertyId"`
-	Value      *float64  `json:"value"`
-	Quality    string    `json:"quality"`
-	Unit       string    `json:"unit"`
-	Source     string    `json:"source"`
-	MessageID  string    `json:"messageId"`
-	ObservedAt time.Time `json:"observedAt"`
+	Schema         string    `json:"schema"`
+	EventID        string    `json:"eventId"`
+	ThingID        string    `json:"thingId"`
+	Tenant         string    `json:"tenant"`
+	PropertyID     string    `json:"propertyId"`
+	Value          *float64  `json:"value"`
+	Quality        string    `json:"quality"`
+	Unit           string    `json:"unit"`
+	Source         string    `json:"source"`
+	MessageID      string    `json:"messageId"`
+	ObservedAt     time.Time `json:"observedAt"`
+	ReceivedAt     time.Time `json:"receivedAt"`
+	ComputedAt     time.Time `json:"computedAt"`
+	PublishedAt    time.Time `json:"publishedAt"`
+	ConfigRevision int64     `json:"configRevision"`
 }
 
 // ThingValuesFromJSON tolkar ett versionerat värdesevent och bygger motorns
@@ -52,63 +62,25 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 	// Tom tenant är inget strukturfel: presentationen skippar utan
 	// broker-kontakt (samma grind som thing.updated).
 
-	meta := Thing{
-		ID:     env.ThingID,
-		Type:   env.ThingType,
-		Tenant: env.Tenant,
-	}
-	var rawLocation json.RawMessage
-	if env.Thing != nil {
-		meta.Name = env.Thing.Name
-		meta.AlternativeName = env.Thing.AlternativeName
-		if sub := env.Thing.SubType; sub != "" {
-			meta.SubType = &sub
-		}
-		rawLocation = env.Thing.Location
-	}
-
+	input := descriptorInput(env.ThingID, env.ThingType, env.Tenant, env.Thing)
+	input.Event = transform.EventThingsV1Values
 	observedAt, fields := valuesFields(env.Values)
-	fields["thing"] = descriptorFields(env.ThingID, env.ThingType, env.Thing)
-	if desc := env.Thing; desc != nil {
-		if desc.Name != "" {
-			fields["name"] = desc.Name
-		}
-		if desc.AlternativeName != "" {
-			fields["alternativeName"] = desc.AlternativeName
-		}
-		if desc.Category != "" {
-			fields["category"] = desc.Category
-		}
-		if len(rawLocation) > 0 {
-			if ll, ok := geoPointToLatLon(rawLocation); ok {
-				fields["location"] = ll
-			} else if geom, ok := rawGeometryMap(rawLocation); ok {
-				// Icke-punkt-geometri bevaras rått för Geo-regler
-				// (field:geometry); fields["location"] är oförändrad.
-				fields["geometry"] = geom
-			}
-		}
-		if len(desc.Metadata) > 0 {
-			meta := make(map[string]any, len(desc.Metadata))
-			for k, v := range desc.Metadata {
-				meta[k] = v
-			}
-			fields["metadata"] = meta
-		}
+	input.ObservedAt = observedAt
+	maps.Copy(input.Fields, fields)
+	event := map[string]any{
+		"schema": env.Schema, "eventId": env.EventID, "tenant": env.Tenant, "thingId": env.ThingID,
+		"thingType": env.ThingType, "thingTypeVersion": env.ThingTypeVersion, "configRevision": env.ConfigRevision,
 	}
-
-	return transform.Thing{
-		ID:              meta.ID,
-		Type:            meta.Type,
-		SubType:         stringOrEmpty(meta.SubType),
-		Name:            meta.Name,
-		AlternativeName: meta.AlternativeName,
-		Tenant:          meta.Tenant,
-		TypeName:        meta.TypeName(),
-		Event:           transform.EventThingsV1Values,
-		ObservedAt:      observedAt,
-		Fields:          fields,
-	}, nil
+	addSourceTime(event, "publishedAt", env.PublishedAt)
+	input.Fields["event"] = event
+	if len(env.Relations) > 0 {
+		relations := make([]any, len(env.Relations))
+		for i, relation := range env.Relations {
+			relations[i] = relationFields(relation)
+		}
+		input.Fields["relations"] = relations
+	}
+	return input, nil
 }
 
 // valuesFields mappar värden till values.<propertyId>.{value,quality,unit,
@@ -118,10 +90,14 @@ func ThingValuesFromJSON(body []byte) (transform.Thing, error) {
 func valuesFields(values []thingValue) (time.Time, map[string]any) {
 	var latest time.Time
 	byProperty := make(map[string]any, len(values))
+	observations := make([]any, 0, len(values))
 	for _, v := range values {
 		if v.ObservedAt.After(latest) {
 			latest = v.ObservedAt
 		}
+		provenance := valueProvenance(v)
+		provenance["valuePresent"] = v.Value != nil
+		observations = append(observations, provenance)
 		if v.Quality != "ok" && v.Quality != "uncertain" {
 			continue
 		}
@@ -131,54 +107,25 @@ func valuesFields(values []thingValue) (time.Time, map[string]any) {
 			// att typfel ger omsändningsloop.
 			continue
 		}
-		entry := map[string]any{
-			"quality":    v.Quality,
-			"source":     v.Source,
-			"observedAt": v.ObservedAt.UTC().Format(time.RFC3339),
-		}
-		if v.Value != nil {
-			entry["value"] = *v.Value
-		}
-		if v.Unit != "" {
-			entry["unit"] = v.Unit
-		}
+		entry := valueProvenance(v)
+		entry["value"] = *v.Value
 		byProperty[v.PropertyID] = entry
 	}
-	return latest, map[string]any{"values": byProperty}
+	return latest, map[string]any{"values": byProperty, "observations": observations}
 }
 
-// rawGeometryMap bevarar en icke-punkt-plats som rå GeoJSON-mapp för
-// Geo-regler (field:geometry). Punktplatser hanteras av fields["location"]
-// och sätts aldrig här; skräp utan type-nyckel utelämnas tyst (som före).
-func rawGeometryMap(raw json.RawMessage) (map[string]any, bool) {
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, false
+func valueProvenance(v thingValue) map[string]any {
+	fields := map[string]any{
+		"schema": v.Schema, "eventId": v.EventID, "thingId": v.ThingID, "tenant": v.Tenant,
+		"propertyId": v.PropertyID, "quality": v.Quality, "source": v.Source,
+		"messageId": v.MessageID, "configRevision": v.ConfigRevision,
 	}
-	t, ok := m["type"].(string)
-	if !ok || t == "Point" {
-		return nil, false
+	if v.Unit != "" {
+		fields["unit"] = v.Unit
 	}
-	return m, true
-}
-
-// geoPointToLatLon översätter en GeoJSON-Point ({type,coordinates:[lon,lat]})
-// till motorns platsform ({latitude,longitude}). Icke-punkter ger false och
-// utelämnas ur Fields, så att required:true hoppar entiteten i stället för
-// att felaktig geometri ger omsändningsfel.
-func geoPointToLatLon(raw json.RawMessage) (map[string]any, bool) {
-	var geo struct {
-		Type        string    `json:"type"`
-		Coordinates []float64 `json:"coordinates"`
-	}
-	if err := json.Unmarshal(raw, &geo); err != nil {
-		return nil, false
-	}
-	if geo.Type != "Point" || len(geo.Coordinates) < 2 {
-		return nil, false
-	}
-	return map[string]any{
-		"latitude":  geo.Coordinates[1],
-		"longitude": geo.Coordinates[0],
-	}, true
+	addSourceTime(fields, "observedAt", v.ObservedAt)
+	addSourceTime(fields, "receivedAt", v.ReceivedAt)
+	addSourceTime(fields, "computedAt", v.ComputedAt)
+	addSourceTime(fields, "publishedAt", v.PublishedAt)
+	return fields
 }

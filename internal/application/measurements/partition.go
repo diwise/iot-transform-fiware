@@ -1,8 +1,6 @@
 package measurements
 
 import (
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/diwise/iot-core/pkg/messaging/events"
@@ -23,7 +21,7 @@ func PartitionMessage(msg events.MessageAccepted, now time.Time) ([]events.Messa
 	objs := parsed.Objects()
 	out := make([]events.MessageAccepted, 0, len(objs))
 	for _, o := range objs {
-		scoped := ScopePack(parsed, o)
+		scoped := ScopePack(o)
 		out = append(out, events.MessageAccepted{
 			Pack_:     scoped,
 			Timestamp: msg.Timestamp,
@@ -36,31 +34,26 @@ func PartitionMessage(msg events.MessageAccepted, now time.Time) ([]events.Messa
 // resurser samt packnivå- och observations egen metadata. Resultatet är ett
 // fristående enobservationspack som befintliga transformers läser oförändrat.
 // Delad med produktion — ändra inte ena vägen utan den andra (TF-06).
-func ScopePack(parsed *diwisepkg.Pack, o diwisepkg.Object) senml.Pack {
-	devicePrefix := parsed.DeviceID() + "/"
-
+func ScopePack(o diwisepkg.Object) senml.Pack {
 	var scoped senml.Pack
 	scoped = append(scoped, o.Header())
 	scoped = append(scoped, o.Resources()...)
 
-	for _, r := range parsed.Pack() {
-		name := r.Name
-		idx := strings.LastIndex(name, "/")
-		if idx < 0 {
-			continue
+	// The parser has already applied observation-local overrides. Scanning
+	// by prefix would also pick up metadata from repeated observations.
+	metadata := o.Metadata()
+	for _, field := range []struct{ name, value string }{
+		{"tenant", metadata.Tenant}, {"source", metadata.Source}, {"env", metadata.Environment},
+	} {
+		if field.value != "" {
+			scoped = append(scoped, senml.Record{Name: o.Prefix() + field.name, StringValue: field.value})
 		}
-		trailing, prefix := name[idx+1:], name[:idx+1]
-		if trailing == "" || trailing == "0" {
-			continue
-		}
-		if _, err := strconv.Atoi(trailing); err == nil {
-			continue
-		}
-		if prefix != devicePrefix && prefix != o.Prefix() {
-			continue
-		}
-		scoped = append(scoped, r)
 	}
-
+	if metadata.Latitude != nil {
+		scoped = append(scoped, senml.Record{Name: o.Prefix() + "lat", Unit: senml.UnitLat, Value: metadata.Latitude})
+	}
+	if metadata.Longitude != nil {
+		scoped = append(scoped, senml.Record{Name: o.Prefix() + "lon", Unit: senml.UnitLon, Value: metadata.Longitude})
+	}
 	return scoped
 }

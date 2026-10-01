@@ -30,10 +30,10 @@ func TestThingFieldAndRefSources(t *testing.T) {
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Container"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:{{type}}:{{id}}", Type: "{{type}}",
 		Properties: []Property{
-			{Target: "fillingLevel", Type: TypeNumber, Source: Source{Field: "percent"}, ObservedAt: ObservedAtHeader},
-			{Target: "location", Type: TypeGeo, Source: Source{Field: "location"}},
-			{Target: "refDevice", Type: TypeRelationship, Source: Source{Ref: "current.ref"}},
-			{Target: "device", Type: TypeText, Source: Source{Field: "refDevices[0].deviceID"}},
+			{Target: "fillingLevel", Type: TypeNumber, Field: "percent", ObservedAt: ObservedAtHeader},
+			{Target: "location", Type: TypeGeo, Field: "location"},
+			{Target: "refDevice", Type: TypeRelationship, Ref: "current.ref"},
+			{Target: "device", Type: TypeText, Field: "refDevices[0].deviceID"},
 		},
 	}}}
 
@@ -115,7 +115,7 @@ func TestThingUuidVariable(t *testing.T) {
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Container"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Thing:{{uuid}}", Type: "Thing",
-		Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Field: "percent"}}},
+		Properties: []Property{{Target: "name", Type: TypeText, Field: "percent"}},
 	}}}
 
 	writes, err := NewEngine([]Rule{rule}).Transform(th)

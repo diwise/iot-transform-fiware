@@ -175,7 +175,8 @@ kind-kontroller:
 
 - `Geo` tar GeoJSON (`Point`/`LineString`/`Polygon`/`MultiPoint`/
   `MultiLineString`/`MultiPolygon` med numeriska koordinater) via
-  `field:`/`value:`/`const:`; `latlon:`-vagen ar oforandrad.
+  `field:`/`value:`/`const:` eller `latlon:`. Alla koordinatkällor använder
+  regelns `target`, även utan explicit observationstid.
 - `LanguageMap` skriver `LanguageProperty` (`field:` mot strangmapp eller
   `const:` med mapp; tom mapp = saknad kalla). `transform`/`derive`
   avvisas pa `LanguageMap` i v1.
@@ -184,10 +185,32 @@ kind-kontroller:
 - Kallbackning per kind: `resource`/`object`/`env`/`name` forbjuds pa
   thing-regler, `field`/`ref` pa matvardesregler (galler aven `Derive.Of`
   och subproperties); `LanguageMap` kraver `field` eller `const`.
-- Things-adaptern bevarar icke-punkt-geometri som `fields["geometry"]`
-  (ra GeoJSON-mapp) och exponerar `fields["metadata"]`
-  (`field:metadata.<nyckel>`); `fields["location"]` ar oforandrad
-  (latlon-mapp for punkter).
+- Vanliga properties, `derive.of` och Structured-delvärden delar
+  källutvärdering: även `const`, `value`, `latlon` och `timestamp` fungerar
+  som aggregatingångar. `object`/`env` kräver `resource` eller `name`.
+  Ingångens `prefix` används före aggregatet; propertyns prefix efteråt.
+  Prefix kräver text eller en lista med enbart text.
+- Structured-delvärden konverteras till deklarerad typ efter transform/prefix,
+  och kan använda `derive`. De är råa JSON-värden, inte nästlade NGSI-LD-attribut:
+  `unit`, `observedAt`, `observedBy`, `array` och nästlad Structured avvisas.
+  Explicit `observedAt` på DateTime avvisas också eftersom det inte stöds.
+- Validerings- och körningsfel anger regel, entitet och relevant
+  attribut-/uttryckskontext. Kvarvarande närvaro-, aggregat- och tidsarbete
+  beskrivs i `TRANSFORM.md` etapp 5.
+- Things-adaptrarna delar descriptorvy för values, lifecycle och relationer:
+  `thing` respektive `relation.from`/`relation.to`. `geometry` bevarar rå
+  GeoJSON för både Point och Polygon; `location` är Point-genvägen.
+  Metadata, kategori och variantfält är åtkomliga även för lifecycle.
+- Kuvertmetadata finns under `event`. Skrivbara `values.<propertyId>` bär
+  hela proveniensen inklusive messageId och separata källtider.
+  `observations[]` exponerar samtliga observationers kvalitet/proveniens,
+  men inga värden; invalid/null får aldrig kringgå values-vyns kvalitetsgrind.
+- Measurements exponerar `{{records[0].fullName}}`, `{{records[0].unit}}`,
+  `{{records[0].value}}` och `{{records[0].observedAt}}`, samt
+  `message.timestamp`, `header.observedAt` och effektiv `source`.
+  Partitionering delar parserns effektiva observationsmetadata med preview,
+  så även upprepade objektprefix får rätt env, koordinater och resurser.
+  Råa tidsvägar bevarar tillgänglig subsekundprecision.
 
 Medvetet utanfor i v1: `VocabProperty`, struktur-arrayer,
 `BooleanArray`/`DateTimeArray`, `datasetId`, `observedBy` utanfor Number

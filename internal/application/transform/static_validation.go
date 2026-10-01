@@ -85,6 +85,11 @@ func (p Property) validateStatic() error {
 				known = false
 				continue
 			}
+			var err error
+			value, err = applyPrefix(Property{Source: source}, value)
+			if err != nil {
+				return fmt.Errorf("derive.of %d: %w", i, err)
+			}
 			switch p.Derive.Fn {
 			case FnSum, FnMin, FnMax:
 				f, ok := toFloat(value)
@@ -114,8 +119,9 @@ func (p Property) validateStatic() error {
 	if err != nil {
 		return fmt.Errorf("static source: %w", err)
 	}
-	if p.Derive == nil {
-		raw = applyPrefix(p, raw)
+	raw, err = applyPrefix(p, raw)
+	if err != nil {
+		return fmt.Errorf("static source: %w", err)
 	}
 	if p.Type == TypeLanguageMap {
 		if _, ok := toLanguageMap(raw); !ok {

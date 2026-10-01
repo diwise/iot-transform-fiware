@@ -28,7 +28,7 @@ const multiPortPayload = `{"pack":[
 func portRule(port string) transform.Rule {
 	return transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: port},
 		Entities: []transform.Entity{{ID: "urn:example:Observation:{{id}}:{{port}}", Type: "Observation", Properties: []transform.Property{
-			{Target: "reading", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}, Required: true},
+			{Target: "reading", Type: transform.TypeNumber, Resource: "5700", Required: true},
 		}}}}
 }
 

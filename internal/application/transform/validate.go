@@ -103,44 +103,38 @@ func (r Rule) validateReferences() error {
 	}
 
 	for i, e := range r.Entities {
-		refs, err := entityReferences(e.ID)
-		if err != nil {
-			return fmt.Errorf("entity %d ID: %w", i, err)
-		}
-		for _, ref := range refs {
-			if j, ok := index[ref]; ok && j == i {
-				return fmt.Errorf("entity %d ID references itself", i)
-			}
-		}
-		expressions := []string{e.Type}
-		var properties func([]Property)
-		properties = func(props []Property) {
+		type expression struct{ path, value string }
+		expressions := []expression{{"id", e.ID}, {"type", e.Type}}
+		var properties func([]Property, string)
+		properties = func(props []Property, parent string) {
 			for _, p := range props {
-				expressions = append(expressions, p.Value, p.ObservedBy)
+				path := parent + "." + p.Target
+				expressions = append(expressions, expression{path + ".value", p.Value}, expression{path + ".observedBy", p.ObservedBy})
 				if p.Derive != nil {
-					for _, source := range p.Derive.Of {
-						expressions = append(expressions, source.Value)
+					for j, source := range p.Derive.Of {
+						expressions = append(expressions, expression{fmt.Sprintf("%s.derive.of[%d].value", path, j), source.Value})
 					}
 				}
-				properties(p.Subproperties)
+				properties(p.Subproperties, path)
 			}
 		}
-		properties(e.Properties)
+		properties(e.Properties, "properties")
 		for _, expression := range expressions {
-			names, err := entityReferences(expression)
+			names, err := entityReferences(expression.value)
 			if err != nil {
-				return fmt.Errorf("entity %d expression %q: %w", i, expression, err)
+				return fmt.Errorf("entity %d %s expression %q: %w", i, expression.path, expression.value, err)
 			}
-			refs = append(refs, names...)
-		}
-
-		for _, name := range refs {
-			j, ok := index[name]
-			if !ok {
-				return fmt.Errorf("entity %d references unknown entity %q", i, name)
-			}
-			if j > i {
-				return fmt.Errorf("entity %q is declared after it is referenced by entity %d", name, i)
+			for _, name := range names {
+				j, ok := index[name]
+				if !ok {
+					return fmt.Errorf("entity %d %s expression %q references unknown entity %q", i, expression.path, expression.value, name)
+				}
+				if j == i && expression.path == "id" {
+					return fmt.Errorf("entity %d id expression %q references itself", i, expression.value)
+				}
+				if j > i {
+					return fmt.Errorf("entity %q is declared after it is referenced by entity %d %s expression %q", name, i, expression.path, expression.value)
+				}
 			}
 		}
 	}
@@ -445,8 +439,8 @@ func (p Property) validate() error {
 	if p.ObservedAt != "" && !strings.HasPrefix(string(p.ObservedAt), "field:") && !validObservedAt[p.ObservedAt] {
 		return fmt.Errorf("unknown observedAt %q", p.ObservedAt)
 	}
-	if strings.HasPrefix(string(p.ObservedAt), "field:") {
-		if _, err := parsePath(strings.TrimPrefix(string(p.ObservedAt), "field:")); err != nil {
+	if after, ok := strings.CutPrefix(string(p.ObservedAt), "field:"); ok {
+		if _, err := parsePath(after); err != nil {
 			return err
 		}
 	}
@@ -461,6 +455,9 @@ func (p Property) validate() error {
 
 	if p.ObservedBy != "" && p.Type != TypeNumber {
 		return fmt.Errorf("observedBy is only valid for Number properties")
+	}
+	if p.Type == TypeDateTime && p.ObservedAt != "" {
+		return errors.New("observedAt is not supported for DateTime")
 	}
 
 	if p.Value != "" {
@@ -484,6 +481,9 @@ func (p Property) validate() error {
 		}
 		seen := map[string]bool{}
 		for i, sp := range p.Subproperties {
+			if sp.Unit != "" || sp.ObservedAt != "" || sp.ObservedBy != "" {
+				return fmt.Errorf("subproperty %d (%s): unit/observedAt/observedBy metadata is not supported on Structured values", i, sp.Target)
+			}
 			if sp.Array {
 				return fmt.Errorf("subproperty %d (%s): array is only supported on NGSI-LD Relationship attributes", i, sp.Target)
 			}
@@ -524,6 +524,9 @@ var validObservedAt = map[ObservedAt]bool{
 
 // validateSource säkerställer att exakt en primär värdkälla är angiven.
 func (p Property) validateSource() error {
+	if (p.Object != "" || p.Env != "") && p.Resource == "" && p.Name == "" {
+		return errors.New("object/env selectors require resource or name")
+	}
 	primary := 0
 	if p.Resource != "" {
 		primary++

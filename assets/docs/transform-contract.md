@@ -71,11 +71,64 @@ fältet Channel. Ingen port är tom sträng; explicit port `0` är strängen `"0
 Djupare kanalprefix är inte detta format och får ingen gissad fysisk port.
 Kompakt `bn` + `n` och upplösta fullständiga namn tolkas likadant.
 
-Nuvarande adapterluckor att rätta i etapp 4–5: resurser tappar fullständigt
-namn/enhet och values tappar delar av proveniensen och kuvertmetadata.
-Gemensamma descriptors exponerar nu rå plats, metadata och variantinformation
-för values/lifecycle samt båda relationssidorna. Relationsadaptern bygger
-inga modellberoende mål-URN:er. Resterande luckor är inte källkontraktets begränsningar.
+### Implementerad källvy (etapp 4)
+
+Values och lifecycle exponerar kuvertmetadata under `event`: schema, eventId,
+tenant, thingId, thingType, thingTypeVersion, configRevision samt publishedAt
+respektive kind/changedAt. Relationshändelser exponerar sina kontraktsfält
+under både `event` och `relation`, inklusive tenant och båda råa typerna.
+Inbäddade relationsändringar i ett values-event bevaras under `relations[]`;
+de väljer inte automatiskt modell eller brokeroperation.
+
+`thing` och `relation.from`/`relation.to` innehåller descriptorfält, rå
+GeoJSON-location, metadata och variantId/variantVersion. Envelope-ID och typ
+styr motorns primära identitet; ett explicit descriptor-ID bevaras också i
+descriptorvyn. Rå typ ändras aldrig till subType; `typeName` är en separat
+genväg. För values/lifecycle och relationens from-sida finns namn, kategori,
+metadata och variantfält även i roten. `geometry` bevarar hela ursprungliga
+GeoJSON-objektet för Point/Polygon, inklusive extra koordinater. `location`
+är endast Point-genvägen `{latitude,longitude}`; originalet finns alltid
+under descriptor.location och geometry. Saknad plats/metadata skapas inte.
+
+`values.<propertyId>` innehåller skrivbart värde och hela observationens
+proveniens: schema, eventId, thingId, tenant, propertyId, quality, unit,
+source, messageId, configRevision och observedAt/receivedAt/computedAt/publishedAt.
+Citerade nycklar används när propertyId innehåller punkt, exempelvis
+`values."reading.average".messageId`. Samtliga observationers metadata finns
+även i `observations[]`, i trådordning och med `valuePresent` som anger om
+originalet hade ett värde. **Denna vy innehåller inga värden**, inte heller
+för ok/uncertain: numeriska skrivvärden kan bara hämtas ur den kvalitetsfiltrerade
+values-vyn. Varken event eller någon rå payload-kopia exponerar ofiltrerade
+värden. Kvalitet/proveniens kan därmed användas utan att invalid/null ersätter
+aktuella mätvärden. Konsumentens bastid förblir max av samtliga observedAt,
+precis som producentens EventTimestamp; publicerings- och relationstid blir
+inte mättid. Alla exponerade källtider bevarar RFC3339Nano-precision och
+saknade tider utelämnas.
+
+Measurements exponerar `records[]` i partitionsordning, med fullName (det
+upplösta SenML-namnet), name (kortnamn), object (URN), channel (rått
+mellanprefix), unit, nativt value och observedAt. Noll och false bevaras,
+och upprepade resurser bevaras som separata listposter. Exempel:
+`{{records[0].fullName}}`, `{{records[0].unit}}` och
+`{{records[0].observedAt}}`; metadata finns också som poster efter resurserna.
+`message.timestamp` och `header.observedAt` ger separat meddelande-/bastid,
+och `source` är observationens effektiva källmetadata. Korta resursgenvägar
+finns kvar; ett fullständigt resursnamn kan också användas som malluppslag.
+Propertyns befintliga resource/name-selectors är fortsatt kortnamnsbaserade.
+
+Partitioneringen använder den låsta senml-parserns effektiva observationsmetadata:
+lokal env/source/lat/lon överlagrar paketets defaults, även vid upprepade
+identiska prefix. Varje partition innehåller sin egen header/resurser och
+normaliserade metadata, inte andra observationers metadataposter. Den
+normaliserade metadatan är en effektiv vy, inte en kopia av ursprunglig
+bn/n-encoding eller metadata-tidsstämplar. Detta används gemensamt av
+produktion och preview. SenML:s tidsupplösning följer den låsta parsern;
+tillgänglig subsekundprecision bevaras i den exponerade vyn.
+
+Etapp 5 återstår för automatisk observedAt-policy, tidsdefault/fallback och
+de äldre timestamp-genvägarnas formattering. Etapp 4:s nya råa tidsvägar
+ersätter inte den separata granskningen av vilka tider målreglerna använder.
+Adaptrarna innehåller inga modellberoende mål-URN:er eller modellval.
 
 ## Uttryck och frånvaro
 
@@ -145,8 +198,41 @@ Transformargument måste vara finita och division med noll avvisas oavsett käll
 
 Dynamiska mallar ersätts inte med gissade värden vid validering. Fullständig
 validering av renderade ID:n/metadata och GeoJSON-struktur återstår i etapp 6.
-Structured-delvärdens konvertering och aggregatens generella körningssemantik
-har fortsatt egna punkter i etapp 5. Statisk kontroll ersätter inte dessa.
+Structured-delvärdens konvertering och gemensam källutvärdering är verifierade
+i etapp 3.9. Aggregatens närvaro-/typfelspolicy har fortsatt egna punkter i
+etapp 5. Statisk kontroll ersätter inte dessa.
+
+### Verifierad konstruktionsparitet (etapp 3.9)
+
+Vanliga properties, `derive.of` och Structured-delvärden använder samma
+källutvärderare. `const`, `value`, `latlon` och `timestamp` kan användas som
+aggregatingångar, utöver kindens egna källor. Mallar och entitetsreferenser
+utvärderas även där. `object`/`env` är endast meningsfulla tillsammans med
+`resource` eller `name` och avvisas annars. Ingångens `prefix` appliceras
+före aggregatet, propertyns prefix efter aggregatet och eventuella transformer.
+Prefix kräver en sträng eller en lista med enbart strängar; fel typ avvisas
+statiskt när den är känd och annars vid körning.
+
+Structured innehåller råa JSON-delvärden, inte nästlade NGSI-LD-attribut.
+Delvärden använder samma typkonvertering som attribut efter transform/prefix;
+Number, Boolean, text, listor, DateTime, Geo, Relationship och LanguageMap
+behåller sina respektive typkontroller. Geo normaliseras till GeoJSON och
+Relationship till URI-sträng(ar). Delvärden kan använda `derive`; required
+saknad delkälla undertrycker hela entiteten. Nästlad Structured, `array` och
+metadata `unit`/`observedAt`/`observedBy` på delvärden avvisas. Explicit
+`observedAt` på DateTime avvisas: bibliotekets typade värde har inte det stödet.
+Geo använder regelns target även för latlon och utan explicit observationstid.
+
+Referensfel pekar ut regel, entitet, attributväg och uttryck; körningsfel bär
+motsvarande kontext även för aggregatingångar och Structured. Ursprungliga
+fel bevaras med wrapping. Felkontexten återger inte hela källpayloads.
+
+Detta verifierar konstruktionernas källupplösning och konvertering. Etapp 5
+återstår för den fastställda policyn om tomma värden, saknade property-mallar,
+aggregat utan ingångar, dynamiska aggregattypfel och tidskällor. Exempelvis
+ger saknad property-mallkälla fortfarande körningsfel och anyTrue/allTrue
+utan ingångar kan fortfarande ge false om `when: present` inte anges.
+Fullständig dynamisk NGSI-LD-utdatavalidering återstår i etapp 6.
 
 ### Regeluppsättningens ID-/typkonflikter
 

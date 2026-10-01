@@ -7,7 +7,8 @@ import (
 	"github.com/matryer/is"
 )
 
-func boolptrForTransform(b bool) *bool { return &b }
+//go:fix inline
+func boolptrForTransform(b bool) *bool { return new(b) }
 
 func transformRule(typ PropertyType, src Source, transforms ...Transform) Rule {
 	return Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
@@ -30,7 +31,7 @@ func TestNumericTransforms(t *testing.T) {
 
 	m := func(v float64) Measurement {
 		x := testMeasurement()
-		x.Records = []Record{{Name: "5700", Value: ptr(v)}}
+		x.Records = []Record{{Name: "5700", Value: new(v)}}
 		return x
 	}
 
@@ -40,9 +41,9 @@ func TestNumericTransforms(t *testing.T) {
 		in   float64
 		want string
 	}{
-		{"multiply", Transform{Op: OpMultiply, Value: ptr(4)}, 2.5, `"value":10`},
-		{"add", Transform{Op: OpAdd, Value: ptr(1.5)}, 2, `"value":3.5`},
-		{"divide", Transform{Op: OpDivide, Value: ptr(2)}, 5, `"value":2.5`},
+		{"multiply", Transform{Op: OpMultiply, Value: new(float64(4))}, 2.5, `"value":10`},
+		{"add", Transform{Op: OpAdd, Value: new(1.5)}, 2, `"value":3.5`},
+		{"divide", Transform{Op: OpDivide, Value: new(float64(2))}, 5, `"value":2.5`},
 		{"floor", Transform{Op: OpFloor}, 2.9, `"value":2`},
 		{"round", Transform{Op: OpRound}, 2.5, `"value":3`},
 	}
@@ -60,9 +61,9 @@ func TestTransformsChain(t *testing.T) {
 	is := is.New(t)
 
 	x := testMeasurement()
-	x.Records = []Record{{Name: "5700", Value: ptr(2.4)}}
+	x.Records = []Record{{Name: "5700", Value: new(2.4)}}
 	r := transformRule(TypeNumber, Source{Resource: "5700"},
-		Transform{Op: OpMultiply, Value: ptr(10)},
+		Transform{Op: OpMultiply, Value: new(float64(10))},
 		Transform{Op: OpRound},
 	)
 
@@ -73,7 +74,7 @@ func TestBoolToOnOff(t *testing.T) {
 	is := is.New(t)
 
 	x := testMeasurement()
-	x.Records = []Record{{Name: "5500", Bool: boolptrForTransform(true)}}
+	x.Records = []Record{{Name: "5500", Bool: new(true)}}
 	r := transformRule(TypeText, Source{Resource: "5500"}, Transform{Op: OpBoolToOnOff})
 
 	is.True(strings.Contains(renderFirst(t, x, r), `"value":"on"`))
@@ -86,7 +87,7 @@ func TestNumToOnOff(t *testing.T) {
 
 	m := func(v float64) Measurement {
 		x := testMeasurement()
-		x.Records = []Record{{Name: "5500", Value: ptr(v)}}
+		x.Records = []Record{{Name: "5500", Value: new(v)}}
 		return x
 	}
 
@@ -96,7 +97,7 @@ func TestNumToOnOff(t *testing.T) {
 	is.True(strings.Contains(renderFirst(t, m(0), on), `"value":"off"`))
 
 	str := testMeasurement()
-	str.Records = []Record{{Name: "name", String: strptr("närvaro")}}
+	str.Records = []Record{{Name: "name", String: new("närvaro")}}
 	bad := transformRule(TypeText, Source{Resource: "name"}, Transform{Op: OpNumToOnOff})
 	if _, err := NewEngine([]Rule{bad}).Transform(str); err == nil {
 		t.Fatal("icke-numeriskt ska ge fel")
@@ -107,7 +108,7 @@ func TestSafeURITransform(t *testing.T) {
 	is := is.New(t)
 
 	x := testMeasurement()
-	x.Records = []Record{{Name: "name", String: strptr("a b/c")}}
+	x.Records = []Record{{Name: "name", String: new("a b/c")}}
 	r := transformRule(TypeText, Source{Resource: "name"}, Transform{Op: OpSafeURI})
 
 	is.True(strings.Contains(renderFirst(t, x, r), `"value":"a%20b%2Fc"`))
@@ -123,9 +124,9 @@ func deriveRule(typ PropertyType, fn string, required bool, sources ...Source) R
 func derivedMeasurement() Measurement {
 	m := testMeasurement()
 	m.Records = []Record{
-		{Name: "a", Value: ptr(2)},
-		{Name: "b", Value: ptr(5)},
-		{Name: "flag", Bool: boolptrForTransform(true)},
+		{Name: "a", Value: new(float64(2))},
+		{Name: "b", Value: new(float64(5))},
+		{Name: "flag", Bool: new(true)},
 	}
 	return m
 }
@@ -233,8 +234,8 @@ func TestDivideByZeroFails(t *testing.T) {
 	is := is.New(t)
 
 	x := testMeasurement()
-	x.Records = []Record{{Name: "5700", Value: ptr(1.0)}}
-	r := transformRule(TypeNumber, Source{Resource: "5700"}, Transform{Op: OpDivide, Value: ptr(0)})
+	x.Records = []Record{{Name: "5700", Value: new(1.0)}}
+	r := transformRule(TypeNumber, Source{Resource: "5700"}, Transform{Op: OpDivide, Value: new(float64(0))})
 
 	_, err := NewEngine([]Rule{r}).Transform(x)
 	is.True(err != nil)

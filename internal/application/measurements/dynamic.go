@@ -76,6 +76,9 @@ func measurementFromMessage(msg events.MessageAccepted, sensorType string) trans
 	if env, ok := pack.GetStringValue(findShortName("env")); ok {
 		m.Env = env
 	}
+	if source, ok := pack.GetStringValue(findShortName("source")); ok {
+		m.Source = source
+	}
 
 	if t, ok := pack.GetTime(findHeader()); ok {
 		m.HeaderTime = t
@@ -105,7 +108,7 @@ func recordsFromPack(pack senml.Pack, object string) []transform.Record {
 			continue
 		}
 
-		rec := transform.Record{Object: object, Name: name, Channel: channelFromName(r.Name)}
+		rec := transform.Record{FullName: r.Name, Object: object, Name: name, Channel: channelFromName(r.Name), Unit: r.Unit}
 
 		if v, ok := r.GetValue(); ok {
 			rec.Value = &v

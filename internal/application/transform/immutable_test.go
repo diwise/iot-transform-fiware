@@ -9,8 +9,8 @@ func TestEngineOwnsImmutableConfiguration(t *testing.T) {
 		ID: "rule-1", Revision: 7, SnapshotVersion: 11,
 		Match: Match{Kind: KindThing, Event: EventThingsV1Values},
 		Entities: []Entity{{ID: "urn:example:source", Type: "Neutral", Properties: []Property{
-			{Target: "reading", Type: TypeNumber, Source: Source{Field: "reading"}, Transform: []Transform{{Op: OpMultiply, Value: &factor}}},
-			{Target: "label", Type: TypeLanguageMap, Source: Source{Const: constant}},
+			{Target: "reading", Type: TypeNumber, Field: "reading", Transform: []Transform{{Op: OpMultiply, Value: &factor}}},
+			{Target: "label", Type: TypeLanguageMap, Const: constant},
 		}}},
 	}}
 	if err := Validate(rules); err != nil {

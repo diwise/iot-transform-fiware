@@ -35,7 +35,7 @@ func relationRules() []transform.Rule {
 			Type: "AgriGreenhouse",
 			Properties: []transform.Property{{
 				Target: "hasWaterQualityObserved", Type: transform.TypeRelationship,
-				Array: true, Source: transform.Source{Value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"},
+				Array: true, Value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}",
 				Required: true,
 			}},
 		}},

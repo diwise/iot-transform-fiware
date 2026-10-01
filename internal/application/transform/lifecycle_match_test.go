@@ -96,7 +96,7 @@ func TestDeleteValidation(t *testing.T) {
 		{ID: "urn:ngsi-ld:X:x", Type: "X", Delete: true, Create: true},
 		{ID: "urn:ngsi-ld:X:x", Type: "X", Delete: true, RemoveAttributes: []string{"a"}},
 		{ID: "urn:ngsi-ld:X:x", Type: "X", Delete: true,
-			Properties: []Property{{Target: "name", Type: TypeText, Source: Source{Const: "x"}}}},
+			Properties: []Property{{Target: "name", Type: TypeText, Const: "x"}}},
 	} {
 		is.True(Validate([]Rule{Rule{Match: delMatch, Entities: []Entity{e}}}) != nil)
 	}

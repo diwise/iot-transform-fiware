@@ -179,7 +179,7 @@ func TestThingValuesFromJSONExposesMetadata(t *testing.T) {
 			ID: "urn:ngsi-ld:X:x", Type: "X",
 			Properties: []transform.Property{{
 				Target: "floor", Type: transform.TypeText,
-				Source: transform.Source{Field: "metadata.floor"},
+				Field: "metadata.floor",
 			}},
 		}},
 	}})

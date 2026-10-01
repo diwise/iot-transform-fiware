@@ -20,10 +20,3 @@ func NewDynamicThingTransformer(rules []transform.Rule) *DynamicThingTransformer
 func (d *DynamicThingTransformer) Transform(t transform.Thing) ([]transform.EntityWrite, error) {
 	return d.engine.Transform(t)
 }
-
-func stringOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}

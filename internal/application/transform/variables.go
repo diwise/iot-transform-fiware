@@ -56,8 +56,8 @@ func validateExpr(expr string) error {
 		return nil
 	}
 
-	if strings.HasPrefix(expr, "field:") {
-		_, err := parsePath(strings.TrimSpace(strings.TrimPrefix(expr, "field:")))
+	if after, ok := strings.CutPrefix(expr, "field:"); ok {
+		_, err := parsePath(strings.TrimSpace(after))
 		return err
 	}
 

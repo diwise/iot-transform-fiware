@@ -92,7 +92,7 @@ func testRule() transform.Rule {
 			Type: "Room",
 			Properties: []transform.Property{{
 				Target: "name", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,
-				Source: transform.Source{Field: "name"},
+				Field: "name",
 			}},
 		}},
 	}
@@ -509,7 +509,7 @@ func tieRule(id string) transform.Rule {
 			Type: "Thing",
 			Properties: []transform.Property{{
 				Target: "tag", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,
-				Source: transform.Source{Const: "x"},
+				Const: "x",
 			}},
 		}},
 	}
@@ -704,7 +704,7 @@ func TestSeedConcurrentBoots(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()

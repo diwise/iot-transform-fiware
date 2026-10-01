@@ -11,7 +11,7 @@ func validEntity() Entity {
 		ID:   "urn:ngsi-ld:Thing:x",
 		Type: "Thing",
 		Properties: []Property{
-			{Target: "temperature", Type: TypeNumber, Source: Source{Resource: "temperature"}},
+			{Target: "temperature", Type: TypeNumber, Resource: "temperature"},
 		},
 	}
 }
@@ -85,7 +85,7 @@ func TestValidateRejectsSubpropertiesOnScalar(t *testing.T) {
 	is := is.New(t)
 	r := validRule()
 	r.Entities[0].Properties[0].Subproperties = []Property{
-		{Target: "x", Type: TypeNumber, Source: Source{Resource: "temperature"}},
+		{Target: "x", Type: TypeNumber, Resource: "temperature"},
 	}
 	is.True(Validate([]Rule{r}) != nil)
 }
@@ -105,11 +105,11 @@ func TestValidateRejectsTransformValueRequirements(t *testing.T) {
 	is.True(Validate([]Rule{r}) != nil) // multiply kräver value
 
 	r = validRule()
-	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpFloor, Value: ptr(1.0)}}
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpFloor, Value: new(1.0)}}
 	is.True(Validate([]Rule{r}) != nil) // floor får inte ha value
 
 	r = validRule()
-	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply, Value: ptr(2.0)}}
+	r.Entities[0].Properties[0].Transform = []Transform{{Op: OpMultiply, Value: new(2.0)}}
 	is.NoErr(Validate([]Rule{r}))
 }
 
@@ -179,7 +179,7 @@ func TestValidateRejectsCreateEntityReferencedTooEarly(t *testing.T) {
 	ref.Properties[0] = Property{
 		Target: "refBuilding",
 		Type:   TypeRelationship,
-		Source: Source{Value: "urn:ngsi-ld:Building:{{entities.building.id}}"},
+		Value:  "urn:ngsi-ld:Building:{{entities.building.id}}",
 	}
 
 	referrer := validEntity()
@@ -248,7 +248,7 @@ func TestValidateAcceptsEveryKnownFunction(t *testing.T) {
 		r := validRule()
 		tr := Transform{Op: op}
 		if transformNeedsValue[op] {
-			tr.Value = ptr(2)
+			tr.Value = new(float64(2))
 		}
 		r.Entities[0].Properties[0].Transform = []Transform{tr}
 		is.NoErr(Validate([]Rule{r}))
@@ -262,4 +262,5 @@ func TestValidateAcceptsEveryKnownFunction(t *testing.T) {
 	}
 }
 
-func ptr(f float64) *float64 { return &f }
+//go:fix inline
+func ptr(f float64) *float64 { return new(f) }

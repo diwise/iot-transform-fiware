@@ -35,7 +35,7 @@ func dynamicRule() []transform.Rule {
 		Entities: []transform.Entity{{
 			ID: "urn:ngsi-ld:WeatherObserved:{{deviceID}}", Type: "WeatherObserved",
 			Properties: []transform.Property{{
-				Target: "temperature", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"},
+				Target: "temperature", Type: transform.TypeNumber, Resource: "5700",
 			}},
 		}},
 	}}

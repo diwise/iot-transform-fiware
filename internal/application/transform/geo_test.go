@@ -11,7 +11,7 @@ import (
 func geoRule(geometry map[string]any) Rule {
 	return Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:G:x", Type: "G",
-		Properties: []Property{{Target: "location", Type: TypeGeo, Source: Source{Const: geometry}}},
+		Properties: []Property{{Target: "location", Type: TypeGeo, Const: geometry}},
 	}}}
 }
 
@@ -86,7 +86,7 @@ func TestGeoLatLonUnchanged(t *testing.T) {
 	m.Lat, m.Lon, m.HasLatLon = 62.3, 17.5, true
 	r := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:G:x", Type: "G",
-		Properties: []Property{{Target: "location", Type: TypeGeo, Source: Source{LatLon: true}}},
+		Properties: []Property{{Target: "location", Type: TypeGeo, LatLon: true}},
 	}}}
 	writes, err := NewEngine([]Rule{r}).Transform(m)
 	is.NoErr(err)
@@ -101,15 +101,15 @@ func TestObservedAtOnBooleanGeoRelationship(t *testing.T) {
 	is := is.New(t)
 
 	m := testMeasurement()
-	m.Records = []Record{{Name: "5700", Value: ptr(1)}}
+	m.Records = []Record{{Name: "5700", Value: new(float64(1))}}
 	m.Lat, m.Lon, m.HasLatLon = 62.3, 17.5, true
 
 	r := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:G:x", Type: "G",
 		Properties: []Property{
-			{Target: "on", Type: TypeBoolean, Source: Source{Resource: "5700"}, ObservedAt: ObservedAtHeader},
-			{Target: "loc", Type: TypeGeo, Source: Source{LatLon: true}, ObservedAt: ObservedAtHeader},
-			{Target: "ref", Type: TypeRelationship, Source: Source{Const: "urn:ngsi-ld:X:y"}, ObservedAt: ObservedAtHeader},
+			{Target: "on", Type: TypeBoolean, Resource: "5700", ObservedAt: ObservedAtHeader},
+			{Target: "loc", Type: TypeGeo, LatLon: true, ObservedAt: ObservedAtHeader},
+			{Target: "ref", Type: TypeRelationship, Const: "urn:ngsi-ld:X:y", ObservedAt: ObservedAtHeader},
 		},
 	}}}
 	writes, err := NewEngine([]Rule{r}).Transform(m)
@@ -126,12 +126,12 @@ func TestBooleanRelationshipUnchangedWithoutObservedAt(t *testing.T) {
 	is := is.New(t)
 
 	m := testMeasurement()
-	m.Records = []Record{{Name: "5700", Value: ptr(1)}}
+	m.Records = []Record{{Name: "5700", Value: new(float64(1))}}
 	r := Rule{Match: Match{Kind: KindMeasurement}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:G:x", Type: "G",
 		Properties: []Property{
-			{Target: "on", Type: TypeBoolean, Source: Source{Resource: "5700"}},
-			{Target: "ref", Type: TypeRelationship, Source: Source{Const: "urn:ngsi-ld:X:y"}},
+			{Target: "on", Type: TypeBoolean, Resource: "5700"},
+			{Target: "ref", Type: TypeRelationship, Const: "urn:ngsi-ld:X:y"},
 		},
 	}}}
 	writes, err := NewEngine([]Rule{r}).Transform(m)

@@ -22,9 +22,9 @@ import (
 
 // dynamicHandler registrerar de modeller som testerna behöver.
 func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) messaging.TopicMessageHandler {
-	locationRequired := transform.Property{Target: "location", Type: transform.TypeGeo, Required: true, Source: transform.Source{LatLon: true}}
+	locationRequired := transform.Property{Target: "location", Type: transform.TypeGeo, Required: true, LatLon: true}
 	dateObserved := func(target string) transform.Property {
-		return transform.Property{Target: target, Type: transform.TypeDateTime, Required: true, Source: transform.Source{Timestamp: true}}
+		return transform.Property{Target: target, Type: transform.TypeDateTime, Required: true, Timestamp: true}
 	}
 
 	rules := []transform.Rule{
@@ -33,7 +33,7 @@ func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) mes
 			Entities: []transform.Entity{{
 				ID: "urn:ngsi-ld:AirQualityObserved:{{deviceID}}", Type: "AirQualityObserved",
 				Properties: []transform.Property{
-					{Target: "co2", Type: transform.TypeNumber, Source: transform.Source{Resource: "17"}, ObservedAt: transform.ObservedAtHeader},
+					{Target: "co2", Type: transform.TypeNumber, Resource: "17", ObservedAt: transform.ObservedAtHeader},
 					locationRequired,
 					dateObserved("dateObserved"),
 				},
@@ -44,7 +44,7 @@ func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) mes
 			Entities: []transform.Entity{{
 				ID: "urn:ngsi-ld:NoiseLevelObserved:{{deviceID}}", Type: "NoiseLevelObserved",
 				Properties: []transform.Property{
-					{Target: "LAeq", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}, ObservedAt: transform.ObservedAtHeader},
+					{Target: "LAeq", Type: transform.TypeNumber, Resource: "5700", ObservedAt: transform.ObservedAtHeader},
 					locationRequired,
 					dateObserved("dateObservedFrom"),
 					dateObserved("dateObservedTo"),
@@ -56,7 +56,7 @@ func dynamicHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc) mes
 			Entities: []transform.Entity{{
 				ID: "urn:ngsi-ld:WeatherObserved:{{deviceID}}", Type: "WeatherObserved",
 				Properties: []transform.Property{
-					{Target: "temperature", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}, ObservedAt: transform.ObservedAtHeader},
+					{Target: "temperature", Type: transform.TypeNumber, Resource: "5700", ObservedAt: transform.ObservedAtHeader},
 					locationRequired,
 					dateObserved("dateObserved"),
 				},
@@ -204,7 +204,7 @@ func TestBrokerErrorIsPropagated(t *testing.T) {
 func TestMeasurementHandlerKeepsPhysicalPortsSeparate(t *testing.T) {
 	makeRule := func(port, id string) transform.Rule {
 		return transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: port},
-			Entities: []transform.Entity{{ID: id, Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}, ObservedAt: transform.ObservedAtHeader}}}}}
+			Entities: []transform.Entity{{ID: id, Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Resource: "5700", ObservedAt: transform.ObservedAtHeader}}}}}
 	}
 	rules := []transform.Rule{
 		makeRule("", "urn:example:Observation:{{id}}"),

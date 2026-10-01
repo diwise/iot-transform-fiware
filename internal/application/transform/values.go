@@ -1,14 +1,12 @@
 package transform
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
@@ -19,67 +17,15 @@ import (
 // (nil, nil) för valfria properties och ErrRequiredSourceMissing för
 // required.
 func buildProperty(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
-	if p.Derive != nil {
-		return buildDerived(p, in, ids)
-	}
-
 	if p.Type == TypeStructured {
 		return buildStructured(p, in, ids)
 	}
 
 	if p.Type == TypeLanguageMap {
-		return buildLanguageMap(p, in)
+		return buildLanguageMap(p, in, ids)
 	}
 
-	if p.Const != nil || p.Value != "" {
-		raw := p.Const
-		if p.Value != "" {
-			rendered, err := renderTemplate(p.Value, in, ids)
-			if err != nil {
-				return nil, err
-			}
-			raw = rendered
-		}
-
-		raw, err := applyTransforms(p, raw)
-		if err != nil {
-			return nil, err
-		}
-
-		observedBy, err := renderObservedBy(p, in, ids)
-		if err != nil {
-			return nil, err
-		}
-
-		return decorate(p, applyPrefix(p, raw), observationTime(p, in, resolvedValue{}), observedBy)
-	}
-
-	if p.LatLon {
-		lat, lon, ok := in.LatLon()
-		if !ok {
-			if p.Required {
-				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
-			}
-			return nil, nil
-		}
-		// latlon:-vägen är oförändrad utan explicit observedAt (bibliotekets
-		// Point-form under target "location"); med observedAt skrivs punkten
-		// som GeoJSON under regelns target så att tiden får plats.
-		if p.ObservedAt == "" {
-			return decorators.Location(lat, lon), nil
-		}
-		return entities.P(p.Target, &genericGeoProperty{
-			Type_:      "GeoProperty",
-			Value_:     map[string]any{"type": "Point", "coordinates": []any{lon, lat}},
-			ObservedAt: observationTime(p, in, resolvedValue{}),
-		}), nil
-	}
-
-	if p.Timestamp {
-		return decorate(p, in.MessageTime().UTC().Format(rfc3339), "", "")
-	}
-
-	rv, err := in.Resolve(p)
+	rv, err := evaluateValue(p, in, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -90,47 +36,102 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 		return nil, nil
 	}
 
-	raw, err := applyTransforms(p, rv.value)
-	if err != nil {
-		return nil, err
-	}
-
 	observedBy, err := renderObservedBy(p, in, ids)
 	if err != nil {
 		return nil, err
 	}
 
-	return decorate(p, applyPrefix(p, raw), observationTime(p, in, rv), observedBy)
+	if p.Timestamp {
+		return decorate(p, rv.value, "", "")
+	}
+	return decorate(p, rv.value, observationTime(p, in, rv), observedBy)
+}
+
+// resolveSource is shared by attributes, aggregate inputs and Structured values.
+// Source selectors do not perform target-type conversion.
+func resolveSource(s Source, in Input, ids map[string]string) (resolvedValue, error) {
+	switch {
+	case s.Const != nil:
+		return resolvedValue{value: s.Const, found: true}, nil
+	case s.Value != "":
+		value, err := renderTemplate(s.Value, in, ids)
+		return resolvedValue{value: value, found: err == nil}, err
+	case s.LatLon:
+		lat, lon, ok := in.LatLon()
+		return resolvedValue{value: map[string]any{"latitude": lat, "longitude": lon}, found: ok}, nil
+	case s.Timestamp:
+		t := in.MessageTime()
+		return resolvedValue{value: t.UTC().Format(rfc3339), found: !t.IsZero()}, nil
+	default:
+		return in.Resolve(Property{Source: s})
+	}
+}
+
+func evaluateValue(p Property, in Input, ids map[string]string) (resolvedValue, error) {
+	var rv resolvedValue
+	var err error
+	if p.Derive == nil {
+		rv, err = resolveSource(p.Source, in, ids)
+	} else {
+		values := make([]any, 0, len(p.Derive.Of))
+		for i, source := range p.Derive.Of {
+			input, sourceErr := resolveSource(source, in, ids)
+			if sourceErr != nil {
+				return rv, fmt.Errorf("derive.of %d (%s): %w", i, sourceDescription(source), sourceErr)
+			}
+			if input.found {
+				value, prefixErr := applyPrefix(Property{Source: source}, input.value)
+				if prefixErr != nil {
+					return rv, fmt.Errorf("derive.of %d (%s): %w", i, sourceDescription(source), prefixErr)
+				}
+				values = append(values, value)
+			}
+		}
+		// Aggregate absence semantics are handled separately from conversion.
+		if p.When == WhenPresent && len(values) == 0 {
+			return rv, nil
+		}
+		rv.value, err = deriveValue(p.Derive.Fn, values)
+		rv.found = rv.value != nil
+	}
+	if err != nil || !rv.found {
+		return rv, err
+	}
+	rv.value, err = applyTransforms(p, rv.value)
+	if err == nil {
+		rv.value, err = applyPrefix(p, rv.value)
+	}
+	return rv, err
 }
 
 // applyPrefix prependar en sträng till ett skalärt värde eller till varje
 // element i en lista (t.ex. "urn:ngsi-ld:Device:").
-func applyPrefix(p Property, raw any) any {
+func applyPrefix(p Property, raw any) (any, error) {
 	if p.Prefix == "" {
-		return raw
+		return raw, nil
 	}
 
 	switch x := raw.(type) {
 	case string:
-		return p.Prefix + x
+		return p.Prefix + x, nil
 	case []any:
 		out := make([]any, len(x))
 		for i, v := range x {
 			if s, ok := v.(string); ok {
 				out[i] = p.Prefix + s
 			} else {
-				out[i] = v
+				return nil, fmt.Errorf("prefix element %d: expected text", i)
 			}
 		}
-		return out
+		return out, nil
 	case []string:
 		out := make([]string, len(x))
 		for i, value := range x {
 			out[i] = p.Prefix + value
 		}
-		return out
+		return out, nil
 	default:
-		return raw
+		return nil, errors.New("prefix expects text or a list of text")
 	}
 }
 
@@ -142,6 +143,11 @@ func renderObservedBy(p Property, in Input, ids map[string]string) (string, erro
 }
 
 func decorate(p Property, raw any, observedAt, observedBy string) (entities.EntityDecoratorFunc, error) {
+	var err error
+	raw, err = convertValue(p, raw)
+	if err != nil {
+		return nil, err
+	}
 	// explicitObservedAt hedras på Boolean/Geo/Relationship endast vid
 	// explicit konfiguration (p.ObservedAt != ""): utan config förblir
 	// output exakt som före (utdataneutralt — ingen seed-regel sätter det
@@ -152,13 +158,7 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 	}
 	switch p.Type {
 	case TypeNumber:
-		v, ok := toFloat(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected number", p.Target)
-		}
-		if !finite(v) {
-			return nil, fmt.Errorf("property %s: expected finite number", p.Target)
-		}
+		v := raw.(float64)
 		opts := make([]properties.NumberPropertyDecoratorFunc, 0, 3)
 		if p.Unit != "" {
 			opts = append(opts, properties.UnitCode(p.Unit))
@@ -171,83 +171,33 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		}
 		return decorators.Number(p.Target, v, opts...), nil
 	case TypeText:
-		s, ok := toString(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected text", p.Target)
-		}
+		s := raw.(string)
 		opts := make([]properties.TextPropertyDecoratorFunc, 0, 1)
 		if observedAt != "" {
 			opts = append(opts, properties.TxtObservedAt(observedAt))
 		}
 		return textDecorator(p.Target, s, opts...), nil
 	case TypeBoolean:
-		b, ok := toBool(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected boolean", p.Target)
-		}
+		b := raw.(bool)
 		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b, ObservedAt: explicit}), nil
 	case TypeDateTime:
-		s, ok := toString(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected date time", p.Target)
-		}
-		if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
-			return nil, fmt.Errorf("property %s: invalid date time %q: %w", p.Target, s, err)
-		}
+		s := raw.(string)
 		return decorators.DateTime(p.Target, s), nil
 	case TypeGeo:
-		// value:-mallar renderar strängar: ett JSON-dokument prövas som
-		// GeoJSON före latlon-tolkning.
-		if s, ok := raw.(string); ok {
-			var m map[string]any
-			if err := json.Unmarshal([]byte(s), &m); err == nil {
-				raw = m
-			}
-		}
-		if geo, ok := toGeoJSON(raw); ok {
-			return entities.P(p.Target, &genericGeoProperty{Type_: "GeoProperty", Value_: geo, ObservedAt: explicit}), nil
-		}
-		lat, lon, ok := toLatLon(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected a location", p.Target)
-		}
-		// latlon:-vägen är oförändrad utan explicit observedAt; med
-		// observedAt skrivs punkten som GeoJSON så att tiden får plats
-		// (samma value-form som biblioteket, plus observedAt).
-		if explicit == "" {
-			return decorators.Location(lat, lon), nil
-		}
-		return entities.P(p.Target, &genericGeoProperty{
-			Type_:      "GeoProperty",
-			Value_:     map[string]any{"type": "Point", "coordinates": []any{lon, lat}},
-			ObservedAt: explicit,
-		}), nil
+		return entities.P(p.Target, &genericGeoProperty{Type_: "GeoProperty", Value_: raw, ObservedAt: explicit}), nil
 	case TypeRelationship:
-		objects, err := relationshipObjects(raw, p.Array)
-		if err != nil {
-			return nil, fmt.Errorf("property %s: %w", p.Target, err)
-		}
-		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: objects, ObservedAt: explicit}), nil
+		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: raw, ObservedAt: explicit}), nil
 	case TypeTextArray:
-		ss, ok := toStringSlice(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected a list of text", p.Target)
-		}
+		ss := raw.([]string)
 		tlp := properties.NewTextListProperty(ss)
 		if observedAt != "" {
 			tlp.ObservedAt_ = &observedAt
 		}
 		return entities.P(p.Target, tlp), nil
 	case TypeNumberArray:
-		fs, ok := toFloatSlice(raw)
-		if !ok {
-			return nil, fmt.Errorf("property %s: expected a list of numbers", p.Target)
-		}
+		fs := raw.([]float64)
 		values := make([]any, len(fs))
 		for i, f := range fs {
-			if !finite(f) {
-				return nil, fmt.Errorf("property %s: element %d: expected finite number", p.Target, i)
-			}
 			values[i] = f
 		}
 		return entities.P(p.Target, &genericProperty{
@@ -313,23 +263,23 @@ func buildStructured(p Property, in Input, ids map[string]string) (entities.Enti
 	obj := map[string]any{}
 
 	for _, sp := range p.Subproperties {
-		val, found, err := resolveSubValue(sp, in, ids)
+		rv, err := evaluateValue(sp, in, ids)
 		if err != nil {
-			return nil, err
+			return nil, propertyError(sp, err)
 		}
-		if !found {
+		if !rv.found {
 			if sp.Required {
-				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+				return nil, propertyError(sp, ErrRequiredSourceMissing)
 			}
 			continue
 		}
 
-		val, err = applyTransforms(sp, val)
+		val, err := convertValue(sp, rv.value)
 		if err != nil {
-			return nil, err
+			return nil, propertyError(sp, err)
 		}
 
-		obj[sp.Target] = applyPrefix(sp, val)
+		obj[sp.Target] = val
 	}
 
 	if len(obj) == 0 && p.Required {
@@ -337,35 +287,6 @@ func buildStructured(p Property, in Input, ids map[string]string) (entities.Enti
 	}
 
 	return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: obj}), nil
-}
-
-func resolveSubValue(p Property, in Input, ids map[string]string) (any, bool, error) {
-	if p.Const != nil {
-		return p.Const, true, nil
-	}
-	if p.Value != "" {
-		rendered, err := renderTemplate(p.Value, in, ids)
-		if err != nil {
-			return nil, false, err
-		}
-		return rendered, true, nil
-	}
-	if p.LatLon {
-		lat, lon, ok := in.LatLon()
-		if !ok {
-			return nil, false, nil
-		}
-		return map[string]any{"latitude": lat, "longitude": lon}, true, nil
-	}
-	if p.Timestamp {
-		return in.MessageTime().UTC().Format(rfc3339), true, nil
-	}
-
-	rv, err := in.Resolve(p)
-	if err != nil {
-		return nil, false, err
-	}
-	return rv.value, rv.found, nil
 }
 
 // genericProperty täcker NGSI-LD-properties som biblioteket saknar
@@ -398,28 +319,22 @@ func (l *languageMapProperty) Value() any { return l.LanguageMap }
 // buildLanguageMap bygger en LanguageProperty från field: (strängmapp) eller
 // const: (mapp). Tom mapp = saknad källa (skip/required-semantik som
 // vanligt); fel typ ger fel, inte tyst skip.
-func buildLanguageMap(p Property, in Input) (entities.EntityDecoratorFunc, error) {
-	var raw any
-	switch {
-	case p.Const != nil:
-		raw = p.Const
-	case p.Field != "":
-		v, ok := in.ResolvePath(p.Field)
-		if !ok {
-			if p.Required {
-				return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
-			}
-			return nil, nil
+func buildLanguageMap(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
+	rv, err := evaluateValue(p, in, ids)
+	if err != nil {
+		return nil, err
+	}
+	if !rv.found {
+		if p.Required {
+			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
 		}
-		raw = v
-	default:
-		return nil, fmt.Errorf("property %s: languageMap requires field or const", p.Target)
+		return nil, nil
 	}
-
-	m, ok := toLanguageMap(raw)
-	if !ok {
-		return nil, fmt.Errorf("property %s: expected a language map", p.Target)
+	value, err := convertValue(p, rv.value)
+	if err != nil {
+		return nil, err
 	}
+	m := value.(map[string]string)
 	if len(m) == 0 {
 		if p.Required {
 			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
@@ -633,51 +548,6 @@ func applyTransform(t Transform, raw any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown transform op %q", t.Op)
 	}
-}
-
-// buildDerived kombinerar flera källor med en namngiven funktion.
-func buildDerived(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
-	values := make([]any, 0, len(p.Derive.Of))
-
-	for _, s := range p.Derive.Of {
-		rv, err := in.Resolve(Property{Source: s})
-		if err != nil {
-			return nil, err
-		}
-		if !rv.found {
-			continue
-		}
-		values = append(values, rv.value)
-	}
-
-	// when: present innebär att en deriverad property bara skrivs om minst en
-	// källa fanns. Utan when skrivs funktionens resultat även för tomma källor
-	// (t.ex. anyTrue -> 0).
-	if p.When == WhenPresent && len(values) == 0 {
-		if p.Required {
-			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
-		}
-		return nil, nil
-	}
-
-	raw, err := deriveValue(p.Derive.Fn, values)
-	if err != nil {
-		return nil, fmt.Errorf("property %s: %w", p.Target, err)
-	}
-
-	if raw == nil {
-		if p.Required {
-			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
-		}
-		return nil, nil
-	}
-
-	observedBy, err := renderObservedBy(p, in, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	return decorate(p, raw, observationTime(p, in, resolvedValue{}), observedBy)
 }
 
 func deriveValue(fn string, values []any) (any, error) {

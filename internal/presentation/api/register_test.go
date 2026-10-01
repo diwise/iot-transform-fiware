@@ -87,7 +87,7 @@ func testRule() transform.Rule {
 			Type: "Room",
 			Properties: []transform.Property{{
 				Target: "name", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,
-				Source: transform.Source{Field: "name"},
+				Field: "name",
 			}},
 		}},
 	}
@@ -567,7 +567,7 @@ func TestListModelsFilters(t *testing.T) {
 		Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Tenant: "t"},
 		Entities: []transform.Entity{{
 			ID: "urn:ngsi-ld:T:x", Type: "T",
-			Properties: []transform.Property{{Target: "v", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}}},
+			Properties: []transform.Property{{Target: "v", Type: transform.TypeNumber, Resource: "5700"}},
 		}},
 	}
 	for _, r := range []transform.Rule{thing, meas} {
@@ -764,7 +764,7 @@ func TestPreviewMeasurement(t *testing.T) {
 func TestPreviewMeasurementMatchesOnlySelectedPhysicalPort(t *testing.T) {
 	h := &handler{models: NewModels(&stubRuleStore{}, nil)}
 	rule := transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: "2"},
-		Entities: []transform.Entity{{ID: "urn:example:Observation:{{id}}:{{port}}", Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}}}}}}
+		Entities: []transform.Entity{{ID: "urn:example:Observation:{{id}}:{{port}}", Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Resource: "5700"}}}}}
 	if err := transform.Validate([]transform.Rule{rule}); err != nil {
 		t.Fatal(err)
 	}

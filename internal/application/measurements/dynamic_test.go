@@ -203,19 +203,20 @@ func TestWaterConsumptionWithoutVolumeStillWritesAlarms(t *testing.T) {
 	is.True(!strings.Contains(b, `"waterConsumption"`))
 }
 
-func boolptr(b bool) *bool { return &b }
+//go:fix inline
+func boolptr(b bool) *bool { return new(b) }
 
 func waterPack(ts time.Time) senml.Pack {
 	recTime := ts.Add(30 * time.Second)
 	return senml.Pack{
 		{Name: "dev-1/0", StringValue: "urn:oma:lwm2m:ext:3424", Time: float64(ts.Unix())},
-		{Name: "dev-1/1", Value: ptr(12.3456), Time: float64(recTime.Unix())},
+		{Name: "dev-1/1", Value: new(12.3456), Time: float64(recTime.Unix())},
 		{Name: "dev-1/3", StringValue: "watermeter"},
-		{Name: "dev-1/9", BoolValue: boolptr(true)},
-		{Name: "dev-1/11", BoolValue: boolptr(false)},
-		{Name: "dev-1/64007", BoolValue: boolptr(false)},
-		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
-		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/9", BoolValue: new(true)},
+		{Name: "dev-1/11", BoolValue: new(false)},
+		{Name: "dev-1/64007", BoolValue: new(false)},
+		{Name: "dev-1/lat", Value: new(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: new(17.51), Unit: senml.UnitLon},
 		{Name: "dev-1/tenant", StringValue: "default"},
 	}
 }
@@ -223,10 +224,10 @@ func waterPack(ts time.Time) senml.Pack {
 func weatherPack(ts time.Time) senml.Pack {
 	return senml.Pack{
 		{Name: "dev-1/0", StringValue: "urn:oma:lwm2m:ext:3303", Time: float64(ts.Unix())},
-		{Name: "dev-1/5700", Value: ptr(22.5)},
+		{Name: "dev-1/5700", Value: new(22.5)},
 		{Name: "dev-1/source", StringValue: "outdoor"},
-		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
-		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/lat", Value: new(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: new(17.51), Unit: senml.UnitLon},
 		{Name: "dev-1/env", StringValue: "air"},
 		{Name: "dev-1/tenant", StringValue: "default"},
 	}
@@ -235,11 +236,12 @@ func weatherPack(ts time.Time) senml.Pack {
 func noisePack(ts time.Time) senml.Pack {
 	return senml.Pack{
 		{Name: "dev-1/0", StringValue: "urn:oma:lwm2m:ext:3324", Time: float64(ts.Unix())},
-		{Name: "dev-1/5700", Value: ptr(55.0)},
-		{Name: "dev-1/lat", Value: ptr(62.36), Unit: senml.UnitLat},
-		{Name: "dev-1/lon", Value: ptr(17.51), Unit: senml.UnitLon},
+		{Name: "dev-1/5700", Value: new(55.0)},
+		{Name: "dev-1/lat", Value: new(62.36), Unit: senml.UnitLat},
+		{Name: "dev-1/lon", Value: new(17.51), Unit: senml.UnitLon},
 		{Name: "dev-1/tenant", StringValue: "default"},
 	}
 }
 
-func ptr(f float64) *float64 { return &f }
+//go:fix inline
+func ptr(f float64) *float64 { return new(f) }

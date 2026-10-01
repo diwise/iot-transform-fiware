@@ -47,44 +47,25 @@ func ThingRelationsFromJSON(body []byte) (transform.Thing, error) {
 	// Tom tenant är inget strukturfel: presentationen skippar utan
 	// broker-kontakt (samma grind som thing.updated).
 
-	meta := Thing{ID: env.FromID, Type: env.FromThingType, Tenant: env.Tenant}
-	if env.From != nil {
-		meta.Name = env.From.Name
-		meta.AlternativeName = env.From.AlternativeName
-		if env.From.SubType != "" {
-			sub := env.From.SubType
-			meta.SubType = &sub
-		}
-	}
+	input := descriptorInput(env.FromID, env.FromThingType, env.Tenant, env.From)
+	input.Event, input.Relation, input.RelationRemoved, input.ObservedAt = transform.EventThingsV1Relations, env.Type, env.Removed, env.ChangedAt
+	input.Fields["relation"] = relationFields(env)
+	input.Fields["event"] = relationFields(env)
+	return input, nil
+}
 
-	toFields := descriptorFields(env.ToID, env.ToThingType, env.To)
-
+func relationFields(env thingRelationEnvelope) map[string]any {
 	fields := map[string]any{
-		"relation": map[string]any{
-			"relationId": env.RelationID,
-			"type":       env.Type,
-			"fromId":     env.FromID,
-			"toId":       env.ToID,
-			"removed":    env.Removed,
-			"revision":   env.Revision,
-			"changedAt":  env.ChangedAt.UTC().Format(time.RFC3339),
-			"to":         toFields,
-			"from":       descriptorFields(env.FromID, env.FromThingType, env.From),
-		},
+		"relationId": env.RelationID,
+		"type":       env.Type,
+		"fromId":     env.FromID,
+		"toId":       env.ToID,
+		"removed":    env.Removed,
+		"revision":   env.Revision,
+		"tenant":     env.Tenant, "fromThingType": env.FromThingType, "toThingType": env.ToThingType,
+		"to":   descriptorFields(env.ToID, env.ToThingType, env.To),
+		"from": descriptorFields(env.FromID, env.FromThingType, env.From),
 	}
-
-	return transform.Thing{
-		ID:              meta.ID,
-		Type:            meta.Type,
-		SubType:         stringOrEmpty(meta.SubType),
-		Name:            meta.Name,
-		AlternativeName: meta.AlternativeName,
-		Tenant:          meta.Tenant,
-		TypeName:        meta.TypeName(),
-		Event:           transform.EventThingsV1Relations,
-		Relation:        env.Type,
-		RelationRemoved: env.Removed,
-		ObservedAt:      env.ChangedAt,
-		Fields:          fields,
-	}, nil
+	addSourceTime(fields, "changedAt", env.ChangedAt)
+	return fields
 }
