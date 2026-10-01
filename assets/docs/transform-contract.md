@@ -261,3 +261,16 @@ messaging/measurements.
 
 Besluten är målkontrakt för återstående implementation. Bland annat kräver
 dagens enelementslista/rensning av hela attributet en rättning för flera tankar.
+
+### Ägarskap för tankreferenser
+
+Vald implementation är en modellneutral och tenant-isolerad relationsprojektion
+i transform-tjänstens befintliga PostgreSQL. Den håller källrelationer och
+medlemskap, inte tankarnas mätvärden eller färdiga FIWARE-modellval. Reglerna
+bestämmer fortfarande mål-ID, typ och attribut. En delta-händelse måste kunna
+bygga den kompletta referensmängden för berört mål och vid flytt även det
+tidigare målet. Transaktioner/samordning ska skydda samtidiga instanser;
+omstart och brokerfel får inte tappa medlemskap eller felaktigt ackas som
+full framgång. Befintliga relationer behöver en explicit bootstrap/återsynk.
+Detta är hantering av en relationsmängd, inte join eller aggregering av
+separata measurement-/things-värdesevent, och inför inte recency-skydd.

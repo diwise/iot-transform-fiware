@@ -217,6 +217,9 @@ det versionslåsta `context-broker`-biblioteket.
 - [ ] Håll växthusets tankreferenser kompletta vid set/remove/flytt: flera tankar
       per växthus, högst ett växthus per tank. Varje tank behåller egen mätentitet;
       inga tankvärden aggregeras till växthusets mätdata.
+      Vald arkitektur: modellneutral, tenant-isolerad relationsprojektion i
+      transform-tjänstens PostgreSQL. Verifiera transaktioner, samtidig mutation,
+      brokerfel/replay, omstart och bootstrap/återsynk av befintliga relationer.
 - [x] Dokumentera namnbaserade ID:n, namnbyten och kollisionsrisk. Regler får
       välja denna policy, men den ska inte införas implicit av adaptern.
 - [ ] Utöka preview med konkret operation, rensade attribut och precisa
