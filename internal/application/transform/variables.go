@@ -11,7 +11,7 @@ import (
 //
 // Mätvärden (message.accepted):
 //
-//	id, deviceID, sensorType, object, timestamp,
+//	id, deviceID, sensorType, object, port, timestamp,
 //	env, tenant
 //
 // Saker (things v1):
@@ -24,6 +24,7 @@ var knownTemplateVariables = map[string]bool{
 	"deviceID":        true,
 	"sensorType":      true,
 	"object":          true,
+	"port":            true,
 	"name":            true,
 	"timestamp":       true,
 	"env":             true,

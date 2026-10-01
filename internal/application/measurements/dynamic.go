@@ -69,6 +69,9 @@ func measurementFromMessage(msg events.MessageAccepted, sensorType string) trans
 		Tenant:     msg.Tenant(),
 		Timestamp:  msg.Timestamp,
 	}
+	if header, ok := pack.GetRecord(findHeader()); ok {
+		m.Port = portFromHeader(header)
+	}
 
 	if env, ok := pack.GetStringValue(findShortName("env")); ok {
 		m.Env = env
@@ -132,10 +135,25 @@ func shortResourceName(name string) string {
 	return name
 }
 
-// channelFromName bevarar eventuellt kanalsegment ur ett fullständigt
-// SenML-namn ("<device>/<kanal>/<resurs>" eller längre). Namn med färre
-// än tre segment saknar kanal och ger "". Matchning på Name/Object
-// påverkas inte; Channel är additiv metadata för framtida regler.
+// Port är det valfria segmentet före objektet, inte objekt-ID:t eller
+// hela mellanprefixet som Channel bevarar. Header och resurser delar samma
+// prefix efter diwise.Parse: device[/port]/object/0 respektive /resource.
+// Tolka både kompakt bn+n och redan upplösta headernamn. Djupare prefix är
+// inte det dokumenterade portformatet och får ingen gissad port.
+func portFromHeader(header senml.Record) string {
+	parts := strings.Split(header.BaseName+header.Name, "/")
+	if len(parts) != 4 || parts[0] == "" || parts[1] == "" || parts[2] == "" || parts[3] != "0" {
+		return ""
+	}
+	if !strings.HasSuffix(header.StringValue, ":"+parts[2]) {
+		return ""
+	}
+	return parts[1]
+}
+
+// channelFromName bevarar det råa mellanprefixet mellan device och resurs.
+// Det kan innehålla objektsegmentet och är inte en fysisk port. Port tolkas
+// separat ur headern. Matchning på Name/Object påverkas inte av Channel.
 func channelFromName(name string) string {
 	parts := strings.Split(name, "/")
 	if len(parts) < 3 {

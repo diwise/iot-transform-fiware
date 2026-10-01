@@ -88,8 +88,10 @@ type Rule struct {
 // Match beskriver vilka källor en regel gäller. Alla fält utom Kind är
 // valfria; tomt fält matchar allt.
 type Match struct {
-	Kind       Kind   `yaml:"kind" json:"kind"`
-	Device     string `yaml:"device,omitempty" json:"device,omitempty"`
+	Kind   Kind   `yaml:"kind" json:"kind"`
+	Device string `yaml:"device,omitempty" json:"device,omitempty"`
+	// Port matchar exakt den fysiska anslutningen i device/port/object/resource.
+	// Tomt är wildcard; "0" är en explicit port, inte avsaknad av port.
 	Port       string `yaml:"port,omitempty" json:"port,omitempty"`
 	SensorType string `yaml:"sensorType,omitempty" json:"sensorType,omitempty"`
 	Object     string `yaml:"object,omitempty" json:"object,omitempty"`

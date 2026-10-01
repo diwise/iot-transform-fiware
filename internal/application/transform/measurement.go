@@ -6,9 +6,9 @@ import (
 )
 
 // Record är en normaliserad resurs-/metadatapost i en mätning.
-// Channel bevarar eventuell kanalsegment ur SenML-namnet (t.ex.
-// "<device>/<kanal>/<resurs>") utan att påverka befintlig matchning
-// på Name/Object.
+// Channel bevarar det råa mellanprefixet mellan enhet och resurs. I ett
+// fullständigt LwM2M-namn ingår även objektsegmentet där; det är inte port.
+// Port för den partitionerade observationen ligger på Measurement.Port.
 type Record struct {
 	Object  string
 	Name    string
@@ -27,7 +27,7 @@ type Measurement struct {
 	SensorType    string
 	Object        string
 	Env           string
-	Port          string
+	Port          string // fysisk anslutning från device/port/object/resource; tomt utan port
 	Tenant        string
 	Timestamp     time.Time
 	HeaderTime    time.Time

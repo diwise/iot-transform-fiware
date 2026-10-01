@@ -136,6 +136,21 @@ Relationsregler använder exempelvis
 flerrelationsaggregation ingår inte. Både skalärer och listelement måste vara
 absoluta URI-strängar.
 
+### Sensorportar
+
+En fysisk anslutning/utgång på sensorn anges före objektet i SenML-namnet:
+
+- Utan port: `123-456-789/3303/5700` → `port: ""`.
+- Med port: `123-456-789/2/3303/5700` → `port: "2"`.
+- `123-456-789/0/3303/5700` → explicit port `"0"`, inte portlös.
+
+`match.port: "2"` avgränsar regeln till just den anslutningen. Tomt/osatt
+`match.port` är wildcard och matchar även portlösa observationer. `{{port}}`
+exponerar portsträngen och en portspecifik regel vinner över en i övrigt
+likadan generell regel. Porten hämtas från den partitionerade observationens
+header; olika portar får inte dela värden eller mättider. Radioport och rå
+Channel-metadata används inte för att gissa fysisk port.
+
 Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
 things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens
 kind-kontroller:

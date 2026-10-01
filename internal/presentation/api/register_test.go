@@ -761,6 +761,38 @@ func TestPreviewMeasurement(t *testing.T) {
 	is.Equal(len(out.Entities), 1)
 }
 
+func TestPreviewMeasurementMatchesOnlySelectedPhysicalPort(t *testing.T) {
+	h := &handler{models: NewModels(&stubRuleStore{}, nil)}
+	rule := transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: "2"},
+		Entities: []transform.Entity{{ID: "urn:example:Observation:{{id}}:{{port}}", Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}}}}}}
+	if err := transform.Validate([]transform.Rule{rule}); err != nil {
+		t.Fatal(err)
+	}
+	pack := []map[string]any{
+		{"bn": "123-456-789/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 11},
+		{"bn": "123-456-789/0/3303/", "bt": 1720000001, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 22},
+		{"bn": "123-456-789/1/3303/", "bt": 1720000002, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 33},
+		{"bn": "123-456-789/2/3303/", "bt": 1720000003, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 44},
+		{"bn": "123-456-789/", "n": "tenant", "vs": "test"},
+	}
+	body := map[string]any{"rule": rule, "event": map[string]any{"kind": "measurement", "message": map[string]any{"pack": pack, "timestamp": "2024-07-03T09:46:45Z"}}}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("preview: %d %s", rr.Code, rr.Body.String())
+	}
+	var response previewResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Matched || response.Observations != 4 || len(response.Entities) != 1 || response.Entities[0].ID != "urn:example:Observation:123-456-789:2" {
+		t.Fatalf("ports not isolated in preview: %+v", response)
+	}
+	reading := response.Entities[0].Properties["reading"].(map[string]any)
+	if reading["value"] != 44.0 {
+		t.Fatalf("preview read wrong port value: %+v", reading)
+	}
+}
+
 // TF-06: multi-observation-pack delas som i produktion — en regel för ett
 // objekt ger träff på dess observation utan läckage från andra objekt.
 func TestPreviewMultiObservation(t *testing.T) {

@@ -200,3 +200,60 @@ func TestBrokerErrorIsPropagated(t *testing.T) {
 	handler := dynamicHandler(factory)
 	is.True(handler(context.Background(), msg, slog.Default()) != nil)
 }
+
+func TestMeasurementHandlerKeepsPhysicalPortsSeparate(t *testing.T) {
+	makeRule := func(port, id string) transform.Rule {
+		return transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: port},
+			Entities: []transform.Entity{{ID: id, Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Source: transform.Source{Resource: "5700"}, ObservedAt: transform.ObservedAtHeader}}}}}
+	}
+	rules := []transform.Rule{
+		makeRule("", "urn:example:Observation:{{id}}"),
+		makeRule("0", "urn:example:Observation:{{id}}:{{port}}"),
+		makeRule("1", "urn:example:Observation:{{id}}:{{port}}"),
+		makeRule("2", "urn:example:Observation:{{id}}:{{port}}"),
+	}
+	if err := transform.Validate(rules); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]map[string]any{}
+	broker := &clienttest.ContextBrokerClientMock{MergeEntityFunc: func(ctx context.Context, id string, fragment types.EntityFragment, headers map[string][]string) (*ngsild.MergeEntityResult, error) {
+		raw, err := fragment.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		var body map[string]any
+		if err := json.Unmarshal(raw, &body); err != nil {
+			return nil, err
+		}
+		seen[id] = body
+		return &ngsild.MergeEntityResult{}, nil
+	}}
+	handler := NewDynamicMeasurementTopicMessageHandler(func(tenant string) (client.ContextBrokerClient, error) {
+		if tenant != "test" {
+			t.Fatalf("wrong tenant: %q", tenant)
+		}
+		return broker, nil
+	}, staticMeasurementsProvider{appmeasurements.NewDynamicTransformer(rules, nil)}, "")
+	body := `{"pack":[
+	 {"bn":"123-456-789/3303/","bt":1720000000,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},{"n":"5700","v":11},
+	 {"bn":"123-456-789/0/3303/","bt":1720000001,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},{"n":"5700","v":22},
+	 {"bn":"123-456-789/1/3303/","bt":1720000002,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},{"n":"5700","v":33},
+	 {"bn":"123-456-789/2/3303/","bt":1720000003,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},{"n":"5700","v":44},
+	 {"bn":"123-456-789/","n":"tenant","vs":"test"}],"timestamp":"2024-07-03T09:46:45Z"}`
+	message := &messaging.IncomingTopicMessageMock{BodyFunc: func() []byte { return []byte(body) }, ContentTypeFunc: func() string { return "application/vnd.oma.lwm2m+json" }}
+	if err := handler(t.Context(), message, slog.Default()); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 4 {
+		t.Fatalf("ports merged together: %+v", seen)
+	}
+	for id, want := range map[string]float64{"urn:example:Observation:123-456-789": 11, "urn:example:Observation:123-456-789:0": 22, "urn:example:Observation:123-456-789:1": 33, "urn:example:Observation:123-456-789:2": 44} {
+		fragment, ok := seen[id]
+		if !ok {
+			t.Fatalf("missing target for port: %s", id)
+		}
+		if fragment["reading"].(map[string]any)["value"] != want {
+			t.Fatalf("wrong port value in %s: %+v", id, fragment)
+		}
+	}
+}

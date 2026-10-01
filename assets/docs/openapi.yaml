@@ -294,7 +294,10 @@ components:
       properties:
         kind: { type: string, enum: [measurement, thing] }
         device: { type: string }
-        port: { type: string }
+        port:
+          type: string
+          description: 'Measurement-filter för sensorns fysiska anslutning i device/port/object/resource. Tomt/osatt är wildcard. Utan port används device/object/resource; explicit "0" är en port. Exakt strängmatchning; {{port}} exponeras i mallar.'
+          example: '2'
         sensorType: { type: string }
         object: { type: string }
         resource: { type: string }

@@ -326,6 +326,9 @@ func (mm Match) score() int {
 	if mm.Resource != "" {
 		s++
 	}
+	if mm.Port != "" {
+		s++
+	}
 	if mm.SubType != "" {
 		s += 4
 	}

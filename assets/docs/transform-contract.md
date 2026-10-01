@@ -61,8 +61,15 @@ inte en FIWARE-relation. Subsekundprecision ska bevaras.
 
 Measurement-partitionering sker per observation före regelkörning, även i
 preview. Env, koordinater, resurser och bastid ska komma från samma partition.
-Kanal är en del av resursidentiteten och **inte port**: accepted-kontraktet
-levererar ingen port för matchning. En portregel ska därför avvisas.
+Port är sensorns fysiska anslutning/utgång, kodad i resursidentiteten:
+`{device_id}/{object}/{resource}` utan port och
+`{device_id}/{port}/{object}/{resource}` med port. Exempel:
+`123-456-789/3303/5700` respektive `123-456-789/2/3303/5700`.
+Port härleds från observationens motsvarande header (`.../object/0`) efter
+SenML-normalisering och partitionering, inte från radio-/transportport eller
+fältet Channel. Ingen port är tom sträng; explicit port `0` är strängen `"0"`.
+Djupare kanalprefix är inte detta format och får ingen gissad fysisk port.
+Kompakt `bn` + `n` och upplösta fullständiga namn tolkas likadant.
 
 Nuvarande adapterluckor att rätta i etapp 4–5: resurser tappar fullständigt
 namn/enhet och values tappar delar av proveniensen och kuvertmetadata.
@@ -80,7 +87,7 @@ Namn och alternativnamn är separata attribut, utan fallback till ID.
 den generella genvägen subType om satt, annars type. `uuid` är sista segmentet
 efter kolon eller slash och garanterar inte UUID-format eller unikhet.
 `id`, `name`, `alternativeName` och `subType` bevaras råa. Measurements har
-id, deviceID, sensorType, object, env, tenant och timestamp; saker har id, type,
+id, deviceID, sensorType, object, port, env, tenant och timestamp; saker har id, type,
 typeName, subType, name, alternativeName, uuid, tenant och timestamp.
 Detta är standardgenvägar, inte en sluten lista. `{{variabel}}` kan slå upp
 vilket exponerat källfält som helst via samma parser som `{{field:variabel}}`,
@@ -128,9 +135,12 @@ och därefter regel-ID (seed i filordning, API i skapandeordning);
 offline YAML använder fil-/regelordning. Prioritet ändrar aldrig tenantgrinden.
 
 Specificitet: device/subType ger 4 vardera, sensorType/type ger 2 vardera,
-object/resource/env/tenant och relationens måltyp ger 1 vardera. Event,
+object/resource/env/port/tenant och relationens måltyp ger 1 vardera. Event,
 relationRemoved och lifecycle är hårda filter. SensorType jämförs
-case-insensitivt, övriga värden exakt. Port stöds inte av accepted-källan.
+case-insensitivt, övriga värden exakt. `match.port` är ett measurement-filter:
+tomt/osatt matchar alla portar och portlösa observationer, `"0"`, `"1"` etc.
+matchar den exakta portsträngen. En portspecifik regel får ett extra
+specificitetspoäng och vinner över en i övrigt likadan generell regel.
 Lifecycle-regler kräver explicit created/updated/deleted, inget wildcard.
 Things kräver exakt en dokumenterad eventkälla. Relationens målsida måste
 kunna avgränsas separat från from-sidan.
@@ -210,3 +220,20 @@ formulär och JSON. `go test ./...` och `go vet ./...` passerade där och i
 `iot-things-v2`. Webbens ändrade `.templ` genererades med templ v0.3.1020;
 `templ generate -f internal/presentation/web/components/features/rules/rule_form.templ -check`
 passerade. Övriga omarkerade TRANSFORM-punkter återstår.
+
+## Portkontrakt och verifiering 2026-10-01
+
+TRANSFORM 4.7 följer nu det fastställda resursformatet ovan. Producentreferens:
+`iot-agent/internal/application/decoders/elsys/decoders.elsys.go` bygger
+enhets-ID med `/0`, `/1` och `/2`; `pkg/lwm2m/lwm2m.go` lägger därefter till
+objekt och resurs. Den låsta SenML-versionen
+`v0.0.0-20260909175035-ac3958b9698e` bevarar dessa observationsprefix.
+
+Regressionstester visade före rättningen att port alltid var tom och att en
+generell regel skuggade portregeln. Efter rättningen verifieras portlös och
+explicit port 0/1/2 med samma device/object/resource, olika värden och olika
+mättider. Produktionshandlern skriver fyra rätt avgränsade fragment mot en
+kontrollerad brokerklient; offline-preview väljer endast efterfrågad port.
+`PG_TEST_PORT=5432 go test ./... -count=1` och `go vet ./...` passerade.
+Race-tester med `-count=1` passerade för measurements, transform, api och
+messaging/measurements.

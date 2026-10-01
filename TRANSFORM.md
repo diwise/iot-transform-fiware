@@ -113,8 +113,11 @@ Berör `internal/application/measurements` och `internal/application/things`.
       Koordinatgenvägar får komplettera, men inte dölja, den ursprungliga geometrin.
 - [ ] Bevara measurement-resursers fullständiga identitet, objekt, kanal,
       värde, enhet och observationstid. Gör relevanta uppgifter åtkomliga för regler.
-- [ ] Fastställ `port` mot det verkliga källkontraktet. Fyll det från korrekt
-      källa eller avvisa stöd som inte finns; anta inte att kanal betyder port.
+- [x] Fastställ `port` mot det verkliga källkontraktet. Fyll det från korrekt
+      källa; anta inte att kanal betyder port. Port är sensorns fysiska anslutning:
+      `{device_id}/{object}/{resource}` utan port och
+      `{device_id}/{port}/{object}/{resource}` med port. Härled från observationens
+      motsvarande header efter normalisering; explicit `0` skiljs från portlös.
 - [ ] Behåll gemensam flerobjektspartitionering för produktion och preview.
       Verifiera att resurser och metadata aldrig hämtas från fel observation.
 - [ ] Bevara kontraktsregeln att ogiltiga things-värden inte ersätter aktuella.
