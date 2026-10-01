@@ -68,10 +68,10 @@ func (m *Models) Refresh(ctx context.Context) error {
 	}
 	candidate := make([]transform.Rule, len(stored))
 	for i, st := range stored {
-		candidate[i] = st.Rule
 		stored[i].Rule.ID = st.ID
 		stored[i].Rule.Revision = st.Revision
 		stored[i].Rule.SnapshotVersion = v
+		candidate[i] = stored[i].Rule
 	}
 	if err := transform.Validate(candidate); err != nil {
 		return err

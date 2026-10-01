@@ -145,6 +145,12 @@ paths:
     post:
       tags: [Models]
       summary: Validera regel utan att spara (samma regler som vid start; kräver transforms.write)
+      description: >-
+        Kontrollerar syntax, referenser och statiska värden med samma generella
+        validering som YAML/seed, snapshot och preview. Ogiltiga statiska URI:er,
+        datum, värdetyper och transformargument (inklusive division med noll)
+        ger 400. Dynamiska källvärden kan bara bedömas vid körning med indata;
+        ett godkänt svar intygar inte Smart Data Models-konformitet.
       requestBody:
         required: true
         content:

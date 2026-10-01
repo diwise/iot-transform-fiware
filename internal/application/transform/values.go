@@ -8,12 +8,11 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"unicode"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
 	"github.com/diwise/context-broker/pkg/ngsild/types/properties"
-	"github.com/diwise/context-broker/pkg/ngsild/types/relationships"
 )
 
 // buildProperty skapar dekoratören för en property. Saknad källa ger
@@ -157,6 +156,9 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected number", p.Target)
 		}
+		if !finite(v) {
+			return nil, fmt.Errorf("property %s: expected finite number", p.Target)
+		}
 		opts := make([]properties.NumberPropertyDecoratorFunc, 0, 3)
 		if p.Unit != "" {
 			opts = append(opts, properties.UnitCode(p.Unit))
@@ -188,6 +190,9 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		s, ok := toString(raw)
 		if !ok {
 			return nil, fmt.Errorf("property %s: expected date time", p.Target)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
+			return nil, fmt.Errorf("property %s: invalid date time %q: %w", p.Target, s, err)
 		}
 		return decorators.DateTime(p.Target, s), nil
 	case TypeGeo:
@@ -240,6 +245,9 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		}
 		values := make([]any, len(fs))
 		for i, f := range fs {
+			if !finite(f) {
+				return nil, fmt.Errorf("property %s: element %d: expected finite number", p.Target, i)
+			}
 			values[i] = f
 		}
 		return entities.P(p.Target, &genericProperty{
@@ -258,19 +266,14 @@ func textDecorator(name, value string, opts ...properties.TextPropertyDecoratorF
 	return entities.P(name, tp)
 }
 
-func relationshipDecorator(name, value string) entities.EntityDecoratorFunc {
-	return entities.R(name, relationships.NewSingleObjectRelationship(value))
-}
-
 func relationshipObjects(raw any, array bool) (any, error) {
 	validate := func(value any) (string, error) {
 		reference, ok := value.(string)
 		if !ok {
 			return "", errors.New("relationship reference must be a URI string")
 		}
-		uri, err := url.Parse(reference)
-		if err != nil || !uri.IsAbs() || strings.IndexFunc(reference, unicode.IsSpace) >= 0 || (uri.Opaque == "" && uri.Host == "" && uri.Path == "") {
-			return "", fmt.Errorf("invalid relationship URI %q", reference)
+		if err := validateURI(reference); err != nil {
+			return "", fmt.Errorf("invalid relationship URI %q: %w", reference, err)
 		}
 		return reference, nil
 	}
@@ -461,9 +464,8 @@ func (g *genericGeoProperty) Type() string { return g.Type_ }
 
 func (g *genericGeoProperty) Value() any { return g.Value_ }
 
-// genericRelationship täcker Relationship med observedAt (bibliotekets
-// konstruktorer saknar tiden). Utan observedAt används bibliotekets egna
-// konstruktorer (oförändrad JSON).
+// genericRelationship täcker skalära/listformade Relationship-referenser
+// med valfri observedAt.
 type genericRelationship struct {
 	Type_      string `json:"type"`
 	Object_    any    `json:"object"`
@@ -513,8 +515,8 @@ func numericLeaves(v any) bool {
 		}
 		return true
 	default:
-		_, ok := toFloat(x)
-		return ok
+		f, ok := toFloat(x)
+		return ok && finite(f)
 	}
 }
 
@@ -557,17 +559,23 @@ func toFloatSlice(v any) ([]float64, bool) {
 // applyTransforms kör transformstegen i ordning. Ett steg kan byta typ
 // (t.ex. boolToOnOff: bool -> "on"/"off").
 func applyTransforms(p Property, raw any) (any, error) {
-	for _, t := range p.Transform {
+	for i, t := range p.Transform {
 		var err error
 		raw, err = applyTransform(t, raw)
 		if err != nil {
-			return nil, fmt.Errorf("property %s: %w", p.Target, err)
+			return nil, fmt.Errorf("property %s: transform %d (%s): %w", p.Target, i, t.Op, err)
+		}
+		if value, ok := raw.(float64); ok && !finite(value) {
+			return nil, fmt.Errorf("property %s: transform %d (%s): expected finite result", p.Target, i, t.Op)
 		}
 	}
 	return raw, nil
 }
 
 func applyTransform(t Transform, raw any) (any, error) {
+	if err := t.validate(); err != nil {
+		return nil, err
+	}
 	switch t.Op {
 	case OpMultiply, OpDivide, OpAdd:
 		f, ok := toFloat(raw)
@@ -579,9 +587,6 @@ func applyTransform(t Transform, raw any) (any, error) {
 		case OpMultiply:
 			f *= arg
 		case OpDivide:
-			if arg == 0 {
-				return nil, errors.New("divide by zero")
-			}
 			f /= arg
 		case OpAdd:
 			f += arg
@@ -819,7 +824,7 @@ func toLatLon(v any) (float64, float64, bool) {
 	}
 	lat, latOK := toFloat(m["latitude"])
 	lon, lonOK := toFloat(m["longitude"])
-	return lat, lon, latOK && lonOK
+	return lat, lon, latOK && lonOK && finite(lat) && finite(lon)
 }
 
 const rfc3339 = "2006-01-02T15:04:05Z07:00"

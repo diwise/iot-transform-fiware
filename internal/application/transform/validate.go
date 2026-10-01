@@ -25,7 +25,7 @@ func Validate(rules []Rule) error {
 
 	for i, r := range rules {
 		if err := r.validate(); err != nil {
-			return fmt.Errorf("rule %d: %w", i, err)
+			return fmt.Errorf("rule %d (%q): %w", i, r.ID, err)
 		}
 
 		for _, e := range r.Entities {
@@ -69,11 +69,6 @@ func (r Rule) validate() error {
 	}
 
 	for i, e := range r.Entities {
-		for _, expr := range []string{e.ID, e.Type} {
-			if err := validateTemplate(expr); err != nil {
-				return fmt.Errorf("entity %d: %w", i, err)
-			}
-		}
 		if err := e.validate(); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
 		}
@@ -247,6 +242,9 @@ func (e Entity) validate() error {
 	}
 	if err := validateTemplate(e.Type); err != nil {
 		return fmt.Errorf("entity.type: %w", err)
+	}
+	if err := e.validateStatic(); err != nil {
+		return err
 	}
 
 	seen := map[string]bool{}
@@ -506,7 +504,10 @@ func (p Property) validate() error {
 		return err
 	}
 
-	return p.validateFunctions()
+	if err := p.validateFunctions(); err != nil {
+		return err
+	}
+	return p.validateStatic()
 }
 
 var validObservedAt = map[ObservedAt]bool{

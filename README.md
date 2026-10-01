@@ -121,6 +121,11 @@ dessa fältvägar. Objekt och listor renderas som JSON, tal och booleska värden
 som JSON-skalärer, strängar som rå text.
 
 Validering kontrollerar syntax, funktionsargument och entitetsreferenser.
+Den avvisar även ogiltiga statiska ID-/relations-URI:er, context-URL:er,
+DateTime-värden och konstanta värdetyper/resultat. Transformargument måste
+vara finita och division med noll avvisas även när värdekällan är dynamisk.
+Samma validering används vid YAML/seed, API, snapshot och offline-preview;
+kontrollerna är generella och känner inte till standardreglernas modellval.
 Dynamiska fälts närvaro kan bara avgöras mot exempeldata eller ett verkligt
 event. Saknat fält ger ett klassificerbart källfel; `firstPresent` kan ange
 en uttrycklig fallback. Namnbaserade ID:n kräver ett uttryckligt regelval;

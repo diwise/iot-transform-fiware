@@ -126,7 +126,29 @@ ID-mall, men dess författare ansvarar då för kollisioner, namnbyten och
 tidigare målentiteter. Ingen automatisk rensning eller målidentitetshistorik
 införs; samma ansvar gäller vid byte av ID-mall eller modellprefix.
 
-## Regelval
+## Statisk regelvalidering
+
+YAML/seed, regel-API, snapshot och offline-preview använder samma `Validate`.
+Statiska entitets-ID:n och `observedBy` måste vara absoluta URI:er, liksom
+konstanta Relationship-referenser (även varje listelement efter transform/prefix).
+Statiska typer får vara context-termer eller URI:er, men inte innehålla
+whitespace/kontrolltecken. Explicit context måste vara en HTTP(S)-URL.
+Ingen context hämtas och inga modellnamn eller attributval hårdkodas.
+
+Konstanter och `value` utan malluttryck kontrolleras genom körningens
+transformer, prefix och typkonvertering. DateTime kräver RFC 3339; numeriska
+resultat och tal i listor måste vara finita. LanguageMap kräver strängvärden.
+Kontrollerna omfattar även Structured-delproperties. Konstanta aggregatingångar
+kontrolleras för funktionens ingångstyp även när andra ingångar är dynamiska;
+när alla ingångar är statiska kontrolleras även aggregatets resultat.
+Transformargument måste vara finita och division med noll avvisas oavsett källa.
+
+Dynamiska mallar ersätts inte med gissade värden vid validering. Fullständig
+validering av renderade ID:n/metadata och GeoJSON-struktur återstår i etapp 6.
+Structured-delvärdens konvertering och aggregatens generella körningssemantik
+har fortsatt egna punkter i etapp 5. Statisk kontroll ersätter inte dessa.
+
+## Regelval och prioritet
 
 Exakt en regel vinner per partitionerad measurement-observation eller things-
 händelse. Alla matchningsvillkor är AND-villkor. Högsta explicita heltals-

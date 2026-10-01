@@ -4,10 +4,29 @@
 
 Measurements och things är källdata och behöver inte känna till FIWARE.
 `iot-transform-fiware` mappar dessa data till Smart Data Models genom regler.
-Tjänsten får känna till ETSI/NGSI-LD och utföra grundläggande protokollvalidering.
+Det avsedda flödet är att tjänsten lyssnar på källhändelser från
+`iot-things-v2` eller `iot-events`, tolkar dem genom källtrogna adaptrar och
+använder regler för att skapa, uppdatera och/eller ta bort NGSI-LD-entiteter
+i context-broker. Reglerna anger mappningen till önskade Smart Data Models
+och vilken brokeroperation händelsen ska ge upphov till, inom tjänstens
+dokumenterade operationsstöd. Producent, topic och payload för varje flöde
+ska verifieras mot de faktiska källkontrakten; ett eventnamn eller en
+källtyp får inte implicit välja modell eller brokeroperation i motorn.
+Tjänsten får känna till och implementera begrepp, strukturer och krav som
+beskrivs i NGSI-LD-specifikationen inom ETSI CIM, enligt tjänstens dokumenterade
+funktionsprofil. Det omfattar exempelvis entiteter, Properties, Relationships,
+GeoProperties, identifierare, tidsmetadata och JSON-LD-context samt
+grundläggande protokollvalidering. Sådan protokollkunskap är skild från
+modellberoende mappningar i standardreglerna.
 
 - Modellval ligger i regler: entitetstyp, ID-mall, attribut, värdekällor,
   relationer, enheter, tidskällor och JSON-LD-context.
+- Mappningarna som följer med tjänsten är fördefinierade standardregler i
+  regelfiler, inte inbyggd Go-logik. De får förfinas som regler. Regelmotorn
+  läser, tolkar och validerar regler med generella funktioner; dess kod får inte
+  känna till standardreglernas modellnamn, attributval eller mappningsinnehåll.
+  NGSI-LD-/ETSI CIM-definierade strukturfält och metadata får däremot vara kända
+  i koden; förbudet gäller modellberoende val, inte protokollimplementationen.
 - Standard-ID använder stabilt käll-ID (helst GUID/UUID) via `{{id}}`; namn
   mappas till attribut. `nameOrID` tas bort. `{{variabel}}` får läsa vilket
   exponerat källfält som helst, inklusive nästlade vägar, citerade nycklar och index.
@@ -89,12 +108,58 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       exempelvis `latlon` på annan måltyp än Geo och metadata som inte stöds.
 - [x] Kontrollera dubbletter och konflikter mellan attribut, samt kollisioner
       med NGSI-LD-strukturfält såsom `id`, `type` och `@context`.
-- [ ] Kontrollera statiska konstanter, URI:er, datum och transformargument där
+- [x] Kontrollera statiska konstanter, URI:er, datum och transformargument där
       felet kan upptäckas utan indata, inklusive division med konstant noll.
+      Kontrollerna ska vara generella och får inte hårdkoda de medföljande
+      standardreglernas modellval eller innehåll.
 - [ ] Gör regeluppsättningskontroller med hänsyn till tenant och matchning.
       Likadana ID-mallar i åtskilda tenants får inte ge falska konflikter.
 - [ ] Verifiera att varje accepterad konstruktion har definierat körningsbeteende
       och att felmeddelanden pekar ut regel, entitet, attribut och uttryck.
+
+### Arbetsplan för statisk validering (3.7)
+
+1. Kartlägg befintliga kontroller och körningens konvertering. Kontrollera
+   gemensam validering vid YAML/seed, API, snapshot och offline-preview.
+2. Lägg regressionstester före rättning med i övrigt giltiga regler för
+   statiska URI:er, datum, värdetyper, transformargument och konstanta aggregat.
+   Lägg positiva fall för generiska modellval, dynamiska uttryck, noll och false.
+3. Återanvänd generella körningsfunktioner för statiska värden och samla
+   URI-/transformkontroller. Avvisa division med noll, icke-finita argument,
+   felaktiga konstanta ingångar och ogiltiga konstanta resultat. Kontrollera
+   delproperties rekursivt och ge fel med regel-/entitets-/attributkontext.
+4. Gör review och ta bort dubblerad validering. Verifiera faktisk serialisering
+   och att ogiltiga kandidater inte publiceras. Kör gofmt, modultester och vet.
+5. Dokumentera verifiering och begränsningar innan punkten markeras klar.
+   Dynamiska resultat, fullständig GeoJSON-struktur och tenant-/matchnings-
+   konflikter har fortsatt egna punkter i planen.
+
+Genomfört och granskat 2026-10-01: regressionstesterna påvisade felen före
+rättning. Statiska värden använder körningens konvertering och generella
+URI-/transformkontroller. Finita tal kontrolleras även efter transformsteg,
+i numeriska listor och koordinater. Dubblerad entitetsmallvalidering och en
+oanvänd relationshjälpare togs bort. Snapshot-validering får nu regel-ID
+innan kandidaten valideras; ett ogiltigt statiskt värde behåller föregående
+fungerande snapshot. Modellmappningar ligger fortsatt i regelfiler.
+
+Verifiering i `iot-transform-fiware`:
+
+- `gofmt -w` kördes på samtliga ändrade Go-filer.
+- `go test ./...` och `go vet ./...` passerade.
+- `go test ./internal/application/transform -run 'TestStatic' -count=1`
+  påvisade de ursprungliga valideringsluckorna före implementationen.
+- `go test -race ./internal/application/transform ./internal/presentation/api -run 'TestStatic|TestDynamicValues|TestSnapshot' -count=1`
+  passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skippade tester mot en tillfällig, isolerad PostgreSQL 16.
+  Kontrollerade seed, rollback, cancellation, omstart, samtidig mutation,
+  kandidatvalidering och preview. Första försöket utan DB skippade DB-testerna;
+  det ersattes av denna verifierade körning.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 go test ./... -count=1`
+  passerade mot samma isolerade testinstans, inklusive medföljande standardregler.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 PG_TEST_DBNAME=diwise_static_race go test -race ./internal/presentation/api -run 'TestStatic|TestSnapshot|TestDatabaseSnapshotRestartAndConcurrentMutation|TestModelsTenantTransferAndConcurrentRevision' -count=1`
+  passerade med en separat race-testdatabas.
+- `git diff --check` passerade. README, regelkontrakt och OpenAPI uppdaterades.
 
 ## Etapp 4 — källtrogna measurement- och things-adaptrar
 
@@ -204,6 +269,10 @@ det versionslåsta `context-broker`-biblioteket.
 
 ## Etapp 8 — modellregler, preview och dokumentation
 
+De medföljande modellmappningarna förvaltas som fördefinierade standardregler
+i regelfiler. Förfiningar av dessa görs i reglerna och deras modelltester;
+regelmotorn ska inte innehålla specialfall för en viss standardregel eller modell.
+
 - [x] Uppdatera tank/växthus-regeln till regelstyrd referensmall och listform.
       Modellnamn och URN-prefix får endast finnas i regeln och modelltesterna.
 - [x] Uppdatera medföljande ID-mallar till `{{id}}` respektive generella relationsfält och
@@ -287,6 +356,8 @@ portarnas mätströmmar binds till olika egenskaper i en sak.
 
 - [ ] Nya modellmappningar kan införas via YAML eller regel-API utan Go-ändringar
       så länge de använder dokumenterade, generella motorfunktioner.
+- [ ] Medföljande mappningar är fördefinierade standardregler i regelfiler och
+      kan förfinas utan modellberoende kod eller specialfall i regelmotorn.
 - [ ] Measurements/things-kontrakten behöver inte bära FIWARE-modellkunskap.
 - [ ] Regelvalidering och körning har samma uppfattning om stödda konstruktioner.
 - [ ] Felaktig NGSI-LD-utdata upptäcks före brokeranrop och ger rätt leveransutfall.

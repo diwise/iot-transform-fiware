@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
@@ -64,6 +65,35 @@ func TestLoadModelsDirPropagatesValidationError(t *testing.T) {
 
 	_, err := LoadModelsDir(dir)
 	is.True(err != nil)
+}
+
+func TestLoadModelsDirRejectsStaticTransformErrors(t *testing.T) {
+	for _, tt := range []struct{ argument, want string }{
+		{"0", "divide by zero"},
+		{".inf", "finite"},
+		{".nan", "finite"},
+	} {
+		t.Run(tt.argument, func(t *testing.T) {
+			dir := t.TempDir()
+			data := fmt.Sprintf(`rules:
+  - match: {kind: measurement}
+    entities:
+      - id: "urn:example:{{id}}"
+        type: ArbitraryType
+        properties:
+          - target: sample
+            type: Number
+            resource: "5700"
+            transform: [{op: divide, value: %s}]
+`, tt.argument)
+			if err := os.WriteFile(filepath.Join(dir, "static.yaml"), []byte(data), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadModelsDir(dir); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q through YAML loading, got %v", tt.want, err)
+			}
+		})
+	}
 }
 
 // En tom katalog (inga regler) ska ge fel i stället för en tyst tom motor.

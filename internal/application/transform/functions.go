@@ -83,15 +83,9 @@ func (p Property) validateFunctions() error {
 		return errors.New("transform and derive cannot be combined")
 	}
 
-	for _, t := range p.Transform {
-		if !validTransformOps[t.Op] {
-			return fmt.Errorf("unknown transform.op %q", t.Op)
-		}
-		if transformNeedsValue[t.Op] && t.Value == nil {
-			return fmt.Errorf("transform.op %q requires a value", t.Op)
-		}
-		if !transformNeedsValue[t.Op] && t.Value != nil {
-			return fmt.Errorf("transform.op %q must not declare a value", t.Op)
+	for i, t := range p.Transform {
+		if err := t.validate(); err != nil {
+			return fmt.Errorf("transform %d: %w", i, err)
 		}
 	}
 
@@ -109,5 +103,24 @@ func (p Property) validateFunctions() error {
 		}
 	}
 
+	return nil
+}
+
+func (t Transform) validate() error {
+	if !validTransformOps[t.Op] {
+		return fmt.Errorf("unknown transform.op %q", t.Op)
+	}
+	if transformNeedsValue[t.Op] && t.Value == nil {
+		return fmt.Errorf("transform.op %q requires a value", t.Op)
+	}
+	if !transformNeedsValue[t.Op] && t.Value != nil {
+		return fmt.Errorf("transform.op %q must not declare a value", t.Op)
+	}
+	if t.Value != nil && !finite(*t.Value) {
+		return fmt.Errorf("transform.op %q requires a finite value", t.Op)
+	}
+	if t.Op == OpDivide && *t.Value == 0 {
+		return errors.New("divide by zero")
+	}
 	return nil
 }
