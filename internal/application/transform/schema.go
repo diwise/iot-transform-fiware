@@ -85,8 +85,8 @@ type Rule struct {
 	Entities        []Entity `yaml:"entities" json:"entities"`
 }
 
-// Match beskriver vilka källor en regel gäller. Alla fält utom Kind är
-// valfria; tomt fält matchar allt.
+// Match beskriver vilka källor en regel gäller. Tomma skalära filter är
+// wildcard, men Kind, Event, Lifecycle och RelationRemoved jämförs exakt.
 type Match struct {
 	Kind   Kind   `yaml:"kind" json:"kind"`
 	Device string `yaml:"device,omitempty" json:"device,omitempty"`

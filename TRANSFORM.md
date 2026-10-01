@@ -112,7 +112,7 @@ Berör främst `internal/application/transform/{schema,validate,variables,engine
       felet kan upptäckas utan indata, inklusive division med konstant noll.
       Kontrollerna ska vara generella och får inte hårdkoda de medföljande
       standardreglernas modellval eller innehåll.
-- [ ] Gör regeluppsättningskontroller med hänsyn till tenant och matchning.
+- [x] Gör regeluppsättningskontroller med hänsyn till tenant och matchning.
       Likadana ID-mallar i åtskilda tenants får inte ge falska konflikter.
 - [ ] Verifiera att varje accepterad konstruktion har definierat körningsbeteende
       och att felmeddelanden pekar ut regel, entitet, attribut och uttryck.
@@ -160,6 +160,55 @@ Verifiering i `iot-transform-fiware`:
 - `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32768 PG_TEST_DBNAME=diwise_static_race go test -race ./internal/presentation/api -run 'TestStatic|TestSnapshot|TestDatabaseSnapshotRestartAndConcurrentMutation|TestModelsTenantTransferAndConcurrentRevision' -count=1`
   passerade med en separat race-testdatabas.
 - `git diff --check` passerade. README, regelkontrakt och OpenAPI uppdaterades.
+
+### Arbetsplan för regeluppsättningskontroller (3.8)
+
+1. Kartlägg `Validate`, motorns matchning och kandidatvalideringen i
+   YAML/seed, API och snapshot. Definiera kontrollen som en jämförelse av
+   identiska ID-mallar med olika typmallar inom samma regel eller mellan
+   regler som potentiellt matchar samma indata. En vinnande regel gäller
+   fortsatt; överlappskontrollen kombinerar inte regler.
+2. Lägg regressionstester före rättning för separata tenants, global kontra
+   tenantspecifik regel och åtskilda/överlappande matchningar. Kontrollera
+   wildcard, sensorType utan hänsyn till skiftläge och event/lifecycle med
+   exakt jämförelse. Olika resource-villkor kan överlappa i samma observation.
+3. Ersätt det globala ID-/typregistret med en matchningsmedveten kontroll som
+   behåller samtliga tidigare definitioner per ID-mall. Bevara lokala
+   konflikter och ge fel med båda reglernas och entiteternas identitet.
+4. Verifiera YAML, API-mutation, seed och omladdning, inklusive rollback,
+   versionsnummer och föregående snapshot vid verklig konflikt. Gör review
+   och förenkla relevant kod; dokumentera kontrollens statiska begränsningar.
+5. Kör gofmt, go test ./..., go vet ./..., relevanta race-tester och
+   ocachade DB-tester i isolerad PostgreSQL. Markera punkten klar och committa
+   först efter verifieringen.
+
+Genomfört och granskat 2026-10-01: det globala ID-/typregistret ersattes av
+definitioner grupperade per ID-mall med kontroll mot matchningsöverlapp.
+Alla tidigare definitioner behålls, så en åtskild tenant mellan två
+konflikter inte kan dölja den första definitionen. Lokala konflikter och
+potentiellt överlappande olika typmallar avvisas, medan separata tenants och
+oförenliga filter accepteras. Fel anger båda regel-ID:na och entitetsindexen;
+DB-kandidatvalidering tilldelar nu regel-ID före kontrollen. Motorns
+matchningsbeteende och modellmappningar ändrades inte.
+
+Verifiering i `iot-transform-fiware`:
+
+- `go test ./internal/application/transform -run 'TestRuleSet' -count=1`
+  påvisade falska konflikter före rättningen med i övrigt giltiga regler.
+- `gofmt -w` kördes på samtliga ändrade Go-filer.
+- `go test ./...` och `go vet ./...` passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skippade tester mot tillfällig, isolerad PostgreSQL 16.
+  Kontrollerade API/seed, rollback, revisions-/versionsbevarande, omstart,
+  samtidig mutation och att en ogiltig kandidat behåller föregående snapshot.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 go test ./... -count=1`
+  och efterföljande `go vet ./...` passerade, inklusive medföljande standardregler.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 PG_TEST_DBNAME=diwise_rule_set_race go test -race ./internal/application/transform ./internal/infrastructure/rules -run 'TestRuleSet|TestTenantAware|TestWholeCandidateValidation|TestSeedConcurrentBoots' -count=1`
+  passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32769 PG_TEST_DBNAME=diwise_rule_set_api_race go test -race ./internal/presentation/api -run 'TestTenantAware|TestSnapshot|TestDatabaseSnapshotRestartAndConcurrentMutation|TestModelsTenantTransferAndConcurrentRevision' -count=1`
+  passerade med separat race-testdatabas.
+- `git diff --check` passerade. README, regelkontrakt och OpenAPI beskriver
+  uppsättningskontrollen och dess statiska begränsningar.
 
 ## Etapp 4 — källtrogna measurement- och things-adaptrar
 

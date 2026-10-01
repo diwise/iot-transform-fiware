@@ -148,6 +148,30 @@ validering av renderade ID:n/metadata och GeoJSON-struktur återstår i etapp 6.
 Structured-delvärdens konvertering och aggregatens generella körningssemantik
 har fortsatt egna punkter i etapp 5. Statisk kontroll ersätter inte dessa.
 
+### Regeluppsättningens ID-/typkonflikter
+
+Identiska ID-mallar med olika typmallar avvisas inom samma regel och mellan
+regler vars matchningar potentiellt överlappar. Samma ID-/typmall får
+återanvändas. Åtskilda tenants och oförenliga matchningsvillkor ger ingen
+konflikt; en global regel (tom tenant) kan överlappa alla tenants.
+
+Överlapp följer motorns filter: kind, event, lifecycle och relationRemoved
+jämförs exakt, även när event/lifecycle är tomma. Övriga skalära filter, utom
+resource, har tomt wildcard; två olika, explicit angivna värden utesluter överlapp.
+SensorType jämförs utan hänsyn till skiftläge. Olika resource-villkor utesluter
+inte överlapp eftersom en observation kan innehålla flera resurser.
+Specificitet och ordning gör inte matchningsmängderna åtskilda. Motorn väljer
+fortfarande en vinnande regel; kontrollen är definitionskonsistens, inte
+en kombination av matchande regler eller diagnostik av all skuggning.
+
+Kontrollen är statisk och konservativ: den jämför malltext, renderar inga
+uttryck och hämtar/expanderar ingen context. Den bevisar inte att olika
+ID-mallar aldrig renderar samma ID, att olika typmallar aldrig renderar samma
+typ eller att åtskilda händelser aldrig skriver till samma brokerentitet över
+tid. Regelns författare ansvarar fortsatt för målidentiteter och modellval.
+Regel-API:s mutationer, seed och snapshot använder samma uppsättningskontroll;
+offline validate/preview kontrollerar endast den angivna regeln.
+
 ## Regelval och prioritet
 
 Exakt en regel vinner per partitionerad measurement-observation eller things-

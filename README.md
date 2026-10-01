@@ -126,6 +126,12 @@ DateTime-värden och konstanta värdetyper/resultat. Transformargument måste
 vara finita och division med noll avvisas även när värdekällan är dynamisk.
 Samma validering används vid YAML/seed, API, snapshot och offline-preview;
 kontrollerna är generella och känner inte till standardreglernas modellval.
+Regeluppsättningar tillåter samma ID-mall med olika måltyper i åtskilda tenants
+eller åtskilda matchningar. Olika typmallar för samma ID-mall avvisas inom
+samma regel eller mellan potentiellt överlappande regler. En global regel
+kan överlappa en tenantspecifik regel; olika resursvillkor kan överlappa när
+en observation innehåller båda resurserna. Kontrollens statiska gränser
+beskrivs i `assets/docs/transform-contract.md`.
 Dynamiska fälts närvaro kan bara avgöras mot exempeldata eller ett verkligt
 event. Saknat fält ger ett klassificerbart källfel; `firstPresent` kan ange
 en uttrycklig fallback. Namnbaserade ID:n kräver ett uttryckligt regelval;

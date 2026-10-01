@@ -96,6 +96,32 @@ func TestLoadModelsDirRejectsStaticTransformErrors(t *testing.T) {
 	}
 }
 
+func TestLoadModelsDirTenantAwareConflicts(t *testing.T) {
+	dir := t.TempDir()
+	model := `rules:
+  - match: {kind: measurement, tenant: %s}
+    entities:
+      - id: "urn:example:{{id}}"
+        type: %s
+        properties: [{target: sample, type: Number, const: 1}]
+`
+	write := func(file, tenant, typeName string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(fmt.Sprintf(model, tenant, typeName)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.yaml", "a", "First")
+	write("b.yaml", "b", "Second")
+	if loaded, err := LoadModelsDir(dir); err != nil || len(loaded) != 2 {
+		t.Fatalf("separate tenants: %v, %v", loaded, err)
+	}
+	write("b.yaml", "a", "Second")
+	if _, err := LoadModelsDir(dir); err == nil {
+		t.Fatal("overlapping different types must fail YAML set loading")
+	}
+}
+
 // En tom katalog (inga regler) ska ge fel i stället för en tyst tom motor.
 func TestLoadModelsDirRejectsEmptyDir(t *testing.T) {
 	is := is.New(t)

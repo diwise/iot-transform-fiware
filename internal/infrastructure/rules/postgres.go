@@ -259,6 +259,7 @@ func validateCandidate(ctx context.Context, tx pgx.Tx) error {
 	candidate := make([]transform.Rule, len(stored))
 	for i, st := range stored {
 		candidate[i] = st.Rule
+		candidate[i].ID = st.ID
 	}
 	if err := transform.Validate(candidate); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidRule, err)

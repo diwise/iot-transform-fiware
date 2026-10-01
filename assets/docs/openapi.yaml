@@ -150,7 +150,11 @@ paths:
         validering som YAML/seed, snapshot och preview. Ogiltiga statiska URI:er,
         datum, värdetyper och transformargument (inklusive division med noll)
         ger 400. Dynamiska källvärden kan bara bedömas vid körning med indata;
-        ett godkänt svar intygar inte Smart Data Models-konformitet.
+        ett godkänt svar intygar inte Smart Data Models-konformitet. Denna
+        endpoint kontrollerar endast den angivna regeln. Vid create/update
+        valideras även hela kandidatuppsättningen: identiska ID-mallar med
+        olika typmallar avvisas inom samma regel eller mellan potentiellt
+        överlappande matchningar. Åtskilda tenants ger ingen sådan konflikt.
       requestBody:
         required: true
         content:
