@@ -114,7 +114,8 @@ utelämnas, `required` undertrycker hela entiteten. Saknad mallkälla ska följa
 samma policy för property-värden; i entitets-ID/typ är frånvaro ett fel.
 `when: present` uttrycker närvarokravet även för aggregat. Aggregat använder
 närvarande ingångar; felaktiga typer är fel. Sum/min/max utan ingång ger
-saknad källa, anyTrue/allTrue utan ingång ger false om inte present krävs.
+saknad källa. Även anyTrue/allTrue utan ingång ger saknad källa och ingen
+skrivning; noll/false får väljas som uttrycklig fallback i regeln.
 Derive coalesce/firstPresent väljer första icke-tomma närvarande värde.
 Alltså finns ingen implicit fallback till en Smart Data Model.
 
@@ -237,3 +238,26 @@ kontrollerad brokerklient; offline-preview väljer endast efterfrågad port.
 `PG_TEST_PORT=5432 go test ./... -count=1` och `go vet ./...` passerade.
 Race-tester med `-count=1` passerade för measurements, transform, api och
 messaging/measurements.
+
+## Fastställda verksamhetsbeslut
+
+- Saknad/null/tom källa utelämnas; noll/false är närvarande. Attributrensning
+  är en explicit operation. Aggregat utan ingångsvärden skriver ingenting.
+- Standardtid för dynamiska värden är respektive observationstid, med
+  measurement-objektets bastid som fallback. Things-värden använder sin egen
+  observedAt. Konstanter och namnmetadata får ingen automatisk observedAt.
+  Saknad tid ersätts inte av aktuell klocktid. Regler får välja tidskälla.
+- Växthusets co2 behålls i PPM med explicit enhet. Detta är ett avsiktligt
+  avsteg från AgriGreenhouse-schemats mg/L, inte en implicit enhetsomvandling.
+- `{{id}}` är standard. Portspecifika entiteter väljs i regeln; portarnas
+  mätströmmar binds normalt till olika egenskaper i en sak före transformation.
+- Exakt en regel vinner. Ingen join mellan separata measurements/things-event
+  och inget recency-/revisionsskydd mot gamla händelser införs nu.
+- Ett växthus kan referera till flera tankars separata mätentiteter. En tank
+  kan tillhöra högst ett växthus. Set/remove/flytt får endast ändra berörd
+  referens; inga tankmätvärden summeras eller sammanförs på växthuset.
+- Grundläggande NGSI-LD-validering gäller nu. Full versionerad SDM-validering
+  är en framtida valfri funktion, inte ett krav för denna etapp.
+
+Besluten är målkontrakt för återstående implementation. Bland annat kräver
+dagens enelementslista/rensning av hela attributet en rättning för flera tankar.

@@ -141,6 +141,8 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
       Structured. Alla tillåtna källor och modifierare ska faktiskt utvärderas.
 - [ ] Definiera `required`, `when: present`, tomma värden och saknad mallkälla
       konsekvent. Gör aggregatens beteende vid saknade ingångar explicit.
+      Beslut: saknad/null/tom källa ger ingen skrivning; noll och false är giltiga.
+      Rensning är explicit. Inget aggregat skriver när alla ingångar saknas.
 - [ ] Skilj saknad källa från typfel. Aggregat får inte tyst ignorera felaktiga
       typer utan ett dokumenterat regelval.
 - [ ] Säkerställ att Structured-delvärden konverteras enligt deklarerad typ.
@@ -149,6 +151,10 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
       Låt regler välja tidskälla för både attributvärden och `observedAt`.
 - [ ] Gör tidsmetadata konsekvent över stödda property-typer och dokumentera
       vad `header`, `record`, `message`, `field` och `none` betyder för varje källa.
+      Beslut: använd värdets egen observationstid, med objektets bastid som
+      measurement-fallback. Things-values använder respektive observedAt;
+      relation/lifecycle använder changedAt där regeln efterfrågar den.
+      Konstanter/namn får ingen automatisk tid. Saknad tid fabriceras inte.
 - [ ] Bevara tillgänglig subsekundprecision. Verifiera relativ SenML-tid,
       saknad tid och flera observationer med olika mättider.
 - [ ] Gör källenheter åtkomliga och låt regler ange målens enheter och eventuell
@@ -206,6 +212,11 @@ det versionslåsta `context-broker`-biblioteket.
       och gör platsmappning konsekvent för Point och Polygon.
 - [ ] Gå igenom modellernas tidskällor, enheter och obligatoriska värdekällor.
       Redovisa olösta modellfrågor, exempelvis greenhouse-CO2, i reglernas dokumentation.
+      Beslut: växthusets co2 behålls med explicit PPM-enhet, som ett dokumenterat
+      avsteg från AgriGreenhouse-modellens mg/L; ingen implicit omvandling.
+- [ ] Håll växthusets tankreferenser kompletta vid set/remove/flytt: flera tankar
+      per växthus, högst ett växthus per tank. Varje tank behåller egen mätentitet;
+      inga tankvärden aggregeras till växthusets mätdata.
 - [x] Dokumentera namnbaserade ID:n, namnbyten och kollisionsrisk. Regler får
       välja denna policy, men den ska inte införas implicit av adaptern.
 - [ ] Utöka preview med konkret operation, rensade attribut och precisa
@@ -247,21 +258,27 @@ det versionslåsta `context-broker`-biblioteket.
 
 Följande kräver egna beslut och ska inte smygas in i ovanstående rättningar.
 
-- [ ] Besluta om flera matchande regler ska kunna kombineras; definiera i så
-      fall ordning, attributkonflikter och operationskonflikter.
-- [ ] Besluta om flerrelationsaggregation. `array: true` löser representationen,
-      inte set/remove för flera tankar; dokumentera entank-antagandet tills vidare.
-- [ ] Besluta om recency-/revisionsskydd mot gamla händelser, inklusive sena
-      values efter delete och replay som blandas med nyare uppdateringar.
-- [ ] Besluta om någon framtida join mellan separata measurements/things-event
-      behövs och vem som då äger tillstånd, lagring och återhämtning.
+- [x] Besluta om flera matchande regler ska kunna kombineras.
+      Beslut: en vinnande regel per observation/händelse; flera entiteter inom regeln.
+- [x] Besluta om flerrelationshantering. Beslut: ett växthus kan ha flera tankar;
+      en tank kan ha högst ett växthus. Referenserna behöver hanteras som en mängd
+      vid set/remove/flytt. Tankmätvärden aggregeras inte till växthuset.
+- [x] Besluta om recency-/revisionsskydd mot gamla händelser.
+      Beslut: sådant skydd införs inte i nuläget.
+- [x] Besluta om join mellan separata measurements/things-event.
+      Beslut: event behandlas självständigt; ingen sådan join i denna etapp.
 - [x] Besluta om hantering av tidigare målidentiteter vid namn-/typändringar.
       Beslut: standardregler använder stabilt käll-ID, helst GUID/UUID, och
       fasta modellprefix. Namn är attribut och påverkar inte ID. Egna namn-/
       typbaserade ID-mallar är regelns författares ansvar; ingen automatisk
       historik eller städning av tidigare mål-ID:n införs.
-- [ ] Besluta om valfri versionerad Smart Data Models-schemavalidering utöver
-      motorns grundläggande NGSI-LD-validering.
+- [x] Besluta om valfri versionerad Smart Data Models-schemavalidering.
+      Beslut: grundläggande NGSI-LD-validering nu; full versionerad SDM-validering
+      är en framtida valfri funktion. Medföljande modellregler granskas uttryckligen.
+
+Övrigt fastställt: `{{id}}` är standard även för measurements. Separata
+portentiteter väljs uttryckligen i regeln när de behövs; normalfallet är att
+portarnas mätströmmar binds till olika egenskaper i en sak.
 
 ## Klart när
 
