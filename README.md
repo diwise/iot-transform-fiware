@@ -151,6 +151,13 @@ likadan generell regel. Porten hämtas från den partitionerade observationens
 header; olika portar får inte dela värden eller mättider. Radioport och rå
 Channel-metadata används inte för att gissa fysisk port.
 
+### Växthusets enheter
+
+AgriGreenhouse-regeln har ett uttryckligt modellavsteg: CO₂ skrivs som PPM
+med UN/CEFACT `unitCode: "59"`, i stället för modellens mg/L. Värdet omvandlas
+inte. Relativ luftfuktighet från `%RH` divideras med 100 till modellens 0–1.
+Detta är regelstyrd mappning; grundvalideringen intygar inte full SDM-konformitet.
+
 Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
 things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens
 kind-kontroller:

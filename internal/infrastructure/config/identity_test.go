@@ -72,6 +72,16 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 					t.Fatalf("name/subtype affected identity: %s", writes[0].EntityID)
 				}
 				entity := writeJSON(t, writes[0])
+				if sourceType == "greenhouse" {
+					co2 := entity["co2"].(map[string]any)
+					humidity := entity["relativeHumidity"].(map[string]any)
+					if co2["value"] != 21.5 || co2["unitCode"] != "59" {
+						t.Fatalf("PPM value relabeled or converted: %+v", co2)
+					}
+					if humidity["value"] != 0.215 {
+						t.Fatalf("%%RH was not converted to 0–1: %+v", humidity)
+					}
+				}
 				if entity["name"].(map[string]any)["value"] != names[0] || entity["alternateName"].(map[string]any)["value"] != names[1] {
 					t.Fatalf("names not mapped as attributes: %+v", entity)
 				}
