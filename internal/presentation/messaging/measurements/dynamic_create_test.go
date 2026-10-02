@@ -35,8 +35,8 @@ func TestDynamicWritesInOrderAndHandlesCreate(t *testing.T) {
 	rules := []transform.Rule{{
 		Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303"},
 		Entities: []transform.Entity{
-			{ID: "urn:ngsi-ld:First:x", Type: "First", Create: true},
-			{ID: "urn:ngsi-ld:Second:x", Type: "Second"},
+			{ID: "urn:ngsi-ld:First:x", Type: "First", Create: true, Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Resource: "5700"}}},
+			{ID: "urn:ngsi-ld:Second:x", Type: "Second", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Resource: "5700"}}},
 		},
 	}}
 

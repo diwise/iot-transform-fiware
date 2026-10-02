@@ -151,6 +151,9 @@ func (mm Match) validateForKind() error {
 	}
 	switch mm.Kind {
 	case KindMeasurement:
+		if mm.ToType != "" {
+			return errors.New("match.toType requires things.v1.relations")
+		}
 		if mm.Type != "" || mm.SubType != "" {
 			return errors.New("match.type/subType is only valid for things")
 		}
@@ -164,8 +167,8 @@ func (mm Match) validateForKind() error {
 			return errors.New("match.lifecycle is only valid for things")
 		}
 	case KindThing:
-		if mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
-			return errors.New("match.port/sensorType/object/resource/env is only valid for measurements")
+		if mm.Device != "" || mm.Port != "" || mm.SensorType != "" || mm.Object != "" || mm.Resource != "" || mm.Env != "" {
+			return errors.New("match.device/port/sensorType/object/resource/env is only valid for measurements")
 		}
 		// Legacy thing-regler (tom event-tagg) är ersatta av things-v2-regler
 		// (PLAN001 steg 7.7): tomma thing-regler matchar aldrig och blir
@@ -175,6 +178,9 @@ func (mm Match) validateForKind() error {
 		}
 		if (mm.Relation != "" || mm.RelationRemoved) && mm.Event != EventThingsV1Relations {
 			return errors.New("match.relation/relationRemoved requires event things.v1.relations")
+		}
+		if mm.ToType != "" && mm.Event != EventThingsV1Relations {
+			return errors.New("match.toType requires things.v1.relations")
 		}
 		if mm.RelationRemoved && mm.Relation == "" {
 			return errors.New("match.relationRemoved requires match.relation")
@@ -202,11 +208,11 @@ func (mm Match) validateRelationsMatch() error {
 // validateLifecycleMatch avvisar okända livscykeltyper: endast
 // created/updated/deleted finns i producentens kontrakt.
 func (mm Match) validateLifecycleMatch() error {
-	if mm.Kind == KindThing && mm.Event == EventThingsV1Lifecycle && mm.Lifecycle != "" {
+	if mm.Kind == KindThing && mm.Event == EventThingsV1Lifecycle {
 		switch LifecycleKind(mm.Lifecycle) {
 		case LifecycleCreated, LifecycleUpdated, LifecycleDeleted:
 		default:
-			return fmt.Errorf("unknown match.lifecycle %q (want created, updated or deleted)", mm.Lifecycle)
+			return fmt.Errorf("match.lifecycle %q must explicitly be created, updated or deleted", mm.Lifecycle)
 		}
 	}
 	return nil
@@ -264,12 +270,12 @@ func (e Entity) validate() error {
 }
 
 func validateAttributeName(name string) error {
-	if strings.TrimSpace(name) == "" {
-		return errors.New("attribute name must not be empty")
-	}
 	switch name {
 	case "id", "type", "@context", "createdAt", "modifiedAt", "deletedAt":
 		return fmt.Errorf("attribute %q collides with NGSI-LD structural field", name)
+	}
+	if err := validateTerm(name); err != nil {
+		return fmt.Errorf("attribute name: %w", err)
 	}
 	return nil
 }
@@ -410,7 +416,7 @@ func (p Property) validate() error {
 		if p.Type != TypeDateTime && p.Type != TypeText {
 			return errors.New("timestamp requires DateTime or Text target type")
 		}
-		if len(p.Transform) != 0 || p.Prefix != "" || p.ObservedBy != "" || p.ObservedAt != "" {
+		if len(p.Transform) != 0 || p.Prefix != "" || p.ObservedBy != "" {
 			return errors.New("modifiers/metadata are not supported for timestamp")
 		}
 	}
@@ -425,8 +431,8 @@ func (p Property) validate() error {
 	// LanguageMap tar endast råa språkmappor (field:/const:) — transform
 	// och derive avvisas i v1 (ingen definierad semantik över mappar).
 	if p.Type == TypeLanguageMap {
-		if p.Prefix != "" || p.ObservedAt != "" || p.ObservedBy != "" {
-			return errors.New("prefix/time/observedBy metadata is not supported for languageMap")
+		if p.Prefix != "" || p.ObservedBy != "" {
+			return errors.New("prefix/observedBy metadata is not supported for languageMap")
 		}
 		if len(p.Transform) > 0 || p.Derive != nil {
 			return errors.New("transform/derive is not supported for languageMap")
@@ -452,12 +458,17 @@ func (p Property) validate() error {
 	if p.Unit != "" && p.Type != TypeNumber && p.Type != TypeNumberArray {
 		return fmt.Errorf("unit is only valid for Number and NumberArray properties")
 	}
+	if p.Unit != "" {
+		if err := validateUnitCode(p.Unit); err != nil {
+			return err
+		}
+	}
 
 	if p.ObservedBy != "" && p.Type != TypeNumber {
 		return fmt.Errorf("observedBy is only valid for Number properties")
 	}
-	if p.Type == TypeDateTime && p.ObservedAt != "" {
-		return errors.New("observedAt is not supported for DateTime")
+	if err := p.validateConversion(); err != nil {
+		return err
 	}
 
 	if p.Value != "" {
@@ -473,7 +484,7 @@ func (p Property) validate() error {
 	}
 
 	if p.Type == TypeStructured {
-		if p.Source != (Source{}) || p.Derive != nil || len(p.Transform) != 0 || p.ObservedAt != "" || p.ObservedBy != "" {
+		if p.Source != (Source{}) || p.Derive != nil || len(p.Transform) != 0 || p.Convert != nil || p.ObservedBy != "" {
 			return errors.New("structured uses subproperties only; source/modifiers/metadata are not supported")
 		}
 		if len(p.Subproperties) == 0 {

@@ -132,7 +132,7 @@ func (h *handler) previewModel(w http.ResponseWriter, r *http.Request) {
 // attributen (id/type/@context skalas av) — samma serialisering som mot
 // context-broker i produktion.
 func entityProperties(id, typeName string, props []entities.EntityDecoratorFunc) (map[string]any, error) {
-	e, err := entities.New(id, typeName, props...)
+	e, err := transform.BuildEntity(transform.EntityWrite{EntityID: id, TypeName: typeName, Props: props}, "")
 	if err != nil {
 		return nil, err
 	}

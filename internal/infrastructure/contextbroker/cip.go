@@ -5,16 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsilderrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 type lockEntry struct {
-	mu       sync.Mutex
+	gate     chan struct{}
 	refCount int
 }
 
@@ -23,21 +22,18 @@ type keyedLocks struct {
 	locks map[string]*lockEntry
 }
 
-func (kl *keyedLocks) lock(key string) func() {
+func (kl *keyedLocks) lock(ctx context.Context, key string) (func(), error) {
 	kl.mu.Lock()
 	entry, ok := kl.locks[key]
 	if !ok {
-		entry = &lockEntry{}
+		entry = &lockEntry{gate: make(chan struct{}, 1)}
+		entry.gate <- struct{}{}
 		kl.locks[key] = entry
 	}
 	entry.refCount++
 	kl.mu.Unlock()
 
-	entry.mu.Lock()
-
-	return func() {
-		entry.mu.Unlock()
-
+	releaseRef := func() {
 		kl.mu.Lock()
 		entry.refCount--
 		if entry.refCount == 0 {
@@ -45,6 +41,13 @@ func (kl *keyedLocks) lock(key string) func() {
 		}
 		kl.mu.Unlock()
 	}
+	select {
+	case <-ctx.Done():
+		releaseRef()
+		return nil, ctx.Err()
+	case <-entry.gate:
+	}
+	return func() { entry.gate <- struct{}{}; releaseRef() }, nil
 }
 
 func newKeyedLocks() *keyedLocks {
@@ -57,14 +60,20 @@ var locks = newKeyedLocks()
 
 // MergeOrCreateWithContext skapar eller mergar en entitet med den angivna
 // JSON-LD-contexten. Tom contextURL ger bibliotekets default-context.
-func MergeOrCreateWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
-	unlock := locks.lock(id)
+func MergeOrCreateWithContext(ctx context.Context, cbClient BrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
+	if _, err := transform.BuildEntity(transform.EntityWrite{EntityID: id, TypeName: typeName, Context: contextURL, Props: properties}, ""); err != nil {
+		return err
+	}
+	unlock, err := locks.lock(ctx, id)
+	if err != nil {
+		return err
+	}
 	defer unlock()
 
 	log := logging.GetFromContext(ctx).With("entity_id", id, "type_name", typeName)
 	ctx = logging.NewContextWithLogger(ctx, log)
 
-	err := mergeEntityWithContext(ctx, cbClient, id, contextURL, properties)
+	err = mergeEntityWithContext(ctx, cbClient, id, contextURL, properties)
 	if err != nil && !errors.Is(err, errEntityNotFound) {
 		return err
 	}
@@ -93,18 +102,12 @@ var ErrEntityAlreadyExists = errors.New("entity already exists")
 
 // CreateNewEntityWithContext skapar en entitet med den angivna JSON-LD-
 // contexten. Tom contextURL ger bibliotekets default-context.
-func CreateNewEntityWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
+func CreateNewEntityWithContext(ctx context.Context, cbClient BrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	return createNewEntity(ctx, cbClient, id, typeName, contextURL, properties)
 }
 
-func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
-	if contextURL != "" {
-		properties = append(properties, entities.Context([]string{contextURL}))
-	} else {
-		properties = append(properties, entities.DefaultContext())
-	}
-
-	entity, err := entities.New(id, typeName, properties...)
+func createNewEntity(ctx context.Context, cbClient BrokerClient, id string, typeName string, contextURL string, properties []entities.EntityDecoratorFunc) error {
+	entity, err := transform.BuildEntity(transform.EntityWrite{EntityID: id, TypeName: typeName, Context: contextURL, Props: properties}, "")
 	if err != nil {
 		return fmt.Errorf("failed to create new entity (entities.New): %w", err)
 	}
@@ -123,11 +126,17 @@ func createNewEntity(ctx context.Context, cbClient client.ContextBrokerClient, i
 
 var errEntityNotFound = errors.New("entity not found")
 
-func mergeEntityWithContext(ctx context.Context, cbClient client.ContextBrokerClient, id, contextURL string, properties []entities.EntityDecoratorFunc) error {
+func mergeEntityWithContext(ctx context.Context, cbClient BrokerClient, id, contextURL string, properties []entities.EntityDecoratorFunc) error {
 	log := logging.GetFromContext(ctx)
+	if _, err := transform.BuildEntity(transform.EntityWrite{EntityID: id, TypeName: "FragmentValidation", Context: contextURL, Props: properties}, ""); err != nil {
+		return err
+	}
+	properties = append([]entities.EntityDecoratorFunc(nil), properties...)
 
 	if contextURL != "" {
 		properties = append(properties, entities.Context([]string{contextURL}))
+	} else {
+		properties = append(properties, entities.DefaultContext())
 	}
 
 	fragment, err := entities.NewFragment(properties...)
@@ -145,8 +154,6 @@ func mergeEntityWithContext(ctx context.Context, cbClient client.ContextBrokerCl
 
 		return err
 	}
-
-	time.Sleep(100 * time.Millisecond) // give the context broker some time to process the merge before any subsequent operations
 
 	return nil
 }

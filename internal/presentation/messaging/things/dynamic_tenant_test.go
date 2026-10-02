@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
@@ -27,7 +27,7 @@ func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 
 	called := false
 	handler := NewThingValuesTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			called = true
 			return nil, nil
 		},
@@ -50,12 +50,12 @@ func TestDynamicThingHandlerReturnsBrokerError(t *testing.T) {
 	is := is.New(t)
 
 	handler := NewThingValuesTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
 		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{{
 			Match:    transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "room"},
-			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{id}}", Type: "Thing"}},
+			Entities: []transform.Entity{{ID: "urn:ngsi-ld:Thing:{{id}}", Type: "Thing", Properties: []transform.Property{{Target: "name", Type: transform.TypeText, Value: "{{name}}"}}}},
 		}})},
 		"",
 	)

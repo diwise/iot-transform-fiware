@@ -17,6 +17,7 @@ func (m Match) overlaps(other Match) bool {
 		{m.Type, other.Type},
 		{m.SubType, other.SubType},
 		{m.Relation, other.Relation},
+		{m.ToType, other.ToType},
 	} {
 		if values[0] != "" && values[1] != "" && values[0] != values[1] {
 			return false

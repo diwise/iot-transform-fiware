@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/iot-core/pkg/messaging/events"
 	appmeasurements "github.com/diwise/iot-transform-fiware/internal/application/measurements"
 	apptransform "github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	delivery "github.com/diwise/iot-transform-fiware/internal/presentation/messaging"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"go.opentelemetry.io/otel"
@@ -54,12 +54,14 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 		log.Error("failed to create otel transformed measurements counter", "err", err.Error())
 	}
 
-	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) error {
+	return func(ctx context.Context, msg messaging.IncomingTopicMessage, log *slog.Logger) (err error) {
+		ctx, log, end := delivery.Begin(ctx, log, "handle-measurements")
+		defer func() { end(err) }()
 		messageAccepted := events.MessageAccepted{}
 
 		log = log.With(slog.String("content_type", msg.ContentType()))
 
-		err := json.Unmarshal(msg.Body(), &messageAccepted)
+		err = json.Unmarshal(msg.Body(), &messageAccepted)
 		if err != nil {
 			log.Error("unable to unmarshal incoming message", "err", err.Error())
 			return messaging.Permanent(err)
@@ -74,7 +76,9 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 			return messaging.Permanent(err)
 		}
 
-		var errs []error
+		var allWrites []apptransform.EntityWrite
+		var batchTenant string
+		writtenObservations := int64(0)
 
 		// Snapshot per meddelande: alla objektobservationer i samma
 		// meddelande transformeras med samma regelversion (TF-05).
@@ -101,41 +105,48 @@ func newMeasurementTopicMessageHandler(cbClientFn contextbroker.ContextBrokerCli
 
 			olog := log.With(slog.String("device_id", deviceID), slog.String("tenant", tenant))
 			octx := logging.NewContextWithLogger(ctx, olog)
-
-			cbClient, err := cbClientFn(tenant)
-			if err != nil {
-				olog.Error("failed to create context broker client", "err", err.Error())
-				errs = append(errs, err)
-				continue
-			}
-
-			// Brokerfel propageras så att rapporten kan återlevereras.
-			// NGSI-LD merge/create är idempotent, så en retry konvergerar.
-			// Meddelanden utan relevanta egenskaper ackas (skip).
-			err = transformObservation(octx, dynamic, observation, cbClient, defaultContext)
+			writes, err := dynamic.Transform(octx, observation)
 			if err != nil {
 				if errors.Is(err, apptransform.ErrNoMatchingRule) {
 					olog.Debug("no matching rule for measurement")
 					continue
 				}
-
 				olog.Error("transform failed", "err", err.Error())
-				errs = append(errs, err)
+				return delivery.DataError(err)
+			}
+			if len(writes) == 0 {
+				olog.Debug("measurement has no writable attributes")
 				continue
 			}
-
-			transformedCounter.Add(ctx, 1)
-
-			olog.Debug("measurement handled successfully")
+			if err := apptransform.ValidateEntityWrites(writes, defaultContext); err != nil {
+				return delivery.DependencyError(err)
+			}
+			if batchTenant != "" && batchTenant != tenant {
+				return delivery.DataError(errors.New("measurement batch contains multiple tenants"))
+			}
+			batchTenant = tenant
+			allWrites = append(allWrites, writes...)
+			writtenObservations++
 		}
-
-		return errors.Join(errs...)
+		if len(allWrites) == 0 {
+			return nil
+		}
+		ctx = logging.NewContextWithLogger(ctx, log.With("tenant", batchTenant, "device_id", messageAccepted.DeviceID()))
+		cbClient, err := cbClientFn(batchTenant)
+		if err != nil {
+			return delivery.DependencyError(err)
+		}
+		if err := contextbroker.ApplyEntityWrites(ctx, cbClient, allWrites, defaultContext); err != nil {
+			return delivery.DependencyError(err)
+		}
+		transformedCounter.Add(ctx, writtenObservations)
+		return nil
 	}
 }
 
 // transformObservation kör den konfigurationsstyrda motorn och skriver
 // entiteterna mot brokern med delad skrivsemantik (create/merge/removeAttributes).
-func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient client.ContextBrokerClient, defaultContext string) error {
+func transformObservation(ctx context.Context, dynamic *appmeasurements.DynamicTransformer, observation events.MessageAccepted, cbClient contextbroker.BrokerClient, defaultContext string) error {
 	writes, err := dynamic.Transform(ctx, observation)
 	if err != nil {
 		return err

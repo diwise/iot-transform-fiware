@@ -17,6 +17,8 @@ const (
 	controlPort
 	servicePort
 	contextbrokerUrl
+	brokerTimeout
+	tokenTimeout
 
 	oauth2ClientId
 	oauth2ClientSecret

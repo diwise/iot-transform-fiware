@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsierrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	clienttest "github.com/diwise/context-broker/pkg/test"
@@ -94,7 +93,7 @@ func TestMultiObservationTransformsEach(t *testing.T) {
 	}
 
 	var tenantSeen string
-	factory := func(tenant string) (client.ContextBrokerClient, error) {
+	factory := func(tenant string) (contextbroker.BrokerClient, error) {
 		tenantSeen = tenant
 		return cbClient, nil
 	}
@@ -153,7 +152,7 @@ func TestMultiObservationTransformsEach(t *testing.T) {
 func TestScopeRejectsMalformedPermanently(t *testing.T) {
 	is := is.New(t)
 
-	factory := func(tenant string) (client.ContextBrokerClient, error) {
+	factory := func(tenant string) (contextbroker.BrokerClient, error) {
 		t.Fatal("factory must not be called")
 		return nil, nil
 	}
@@ -180,7 +179,7 @@ func TestBrokerErrorIsPropagated(t *testing.T) {
 		},
 	}
 
-	factory := func(tenant string) (client.ContextBrokerClient, error) { return cbClient, nil }
+	factory := func(tenant string) (contextbroker.BrokerClient, error) { return cbClient, nil }
 
 	body := `{"pack":[
 		{"bn":"dev1/3303/","bt":1720000000,"n":"0","vs":"urn:oma:lwm2m:ext:3303"},
@@ -228,7 +227,7 @@ func TestMeasurementHandlerKeepsPhysicalPortsSeparate(t *testing.T) {
 		seen[id] = body
 		return &ngsild.MergeEntityResult{}, nil
 	}}
-	handler := NewDynamicMeasurementTopicMessageHandler(func(tenant string) (client.ContextBrokerClient, error) {
+	handler := NewDynamicMeasurementTopicMessageHandler(func(tenant string) (contextbroker.BrokerClient, error) {
 		if tenant != "test" {
 			t.Fatalf("wrong tenant: %q", tenant)
 		}

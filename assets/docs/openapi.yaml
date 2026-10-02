@@ -292,6 +292,10 @@ components:
       type: object
       required: [match, entities]
       properties:
+        priority:
+          type: integer
+          default: 0
+          description: 'Högsta prioritet vinner, därefter specificitet och stabil snapshotordning. Ändrar inte tenantgrinden.'
         match:
           $ref: '#/components/schemas/Match'
         entities:
@@ -303,7 +307,7 @@ components:
       required: [kind]
       properties:
         kind: { type: string, enum: [measurement, thing] }
-        device: { type: string }
+        device: { type: string, description: 'Endast measurement; things saknar device-identitet.' }
         port:
           type: string
           description: 'Measurement-filter för sensorns fysiska anslutning i device/port/object/resource. Tomt/osatt är wildcard. Utan port används device/object/resource; explicit "0" är en port. Exakt strängmatchning; {{port}} exponeras i mallar.'
@@ -317,8 +321,9 @@ components:
         tenant: { type: string, description: Ägarskap för API-administration (tom = global seed-regel) }
         event: { type: string, description: Händelsekälla för things-regler (t.ex. things.v1.values, things.v1.relations, things.v1.lifecycle); tom = ursprunglig källa }
         relation: { type: string, description: Relationsregler avgränsas till relationstyp (t.ex. partOf); endast med event things.v1.relations och match.type/subType }
+        toType: { type: string, description: 'Exakt rå toThingType, separat från from-sidans type/subType. Endast things.v1.relations; tomt är wildcard.' }
         relationRemoved: { type: boolean, description: Bortkoppling (true) eller koppling (osatt); endast med match.relation }
-        lifecycle: { type: string, description: Livscykelregler avgränsas till händelsetyp (created, updated, deleted); endast med event things.v1.lifecycle }
+        lifecycle: { type: string, enum: [created, updated, deleted], description: 'Krävs explicit med event things.v1.lifecycle; inget wildcard. Avvisas på övriga event.' }
     Entity:
       type: object
       required: [id, type, properties]
@@ -341,7 +346,9 @@ components:
       type: object
       required: [target, type]
       properties:
-        target: { type: string }
+        target:
+          type: string
+          description: 'Kompakt term (Unicode-bokstav/underscore först; därefter bokstäver/siffror/underscore/bindestreck/punkt) eller absolut URI. Får inte kollidera med NGSI-LD-strukturfält.'
         type:
           type: string
           enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured, LanguageMap]
@@ -351,16 +358,25 @@ components:
           description: 'Endast NGSI-LD Relationship-attribut, inte Structured-delvärden. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
         unit:
           type: string
-          description: 'Endast Number och NumberArray-attribut. Stöds inte på Structured-delvärden.'
+          description: 'Endast Number och NumberArray-attribut. Stöds inte på Structured-delvärden. Känd källenhet får endast märkas om med ekvivalent kod eller explicit convert.'
+        convert:
+          type: object
+          required: [from, to]
+          description: 'Explicit Number/NumberArray-konvertering: värde * factor + offset, före transform. From verifieras mot känd källenhet; annars är from författarens uttryckliga deklaration. Argument/resultat måste vara finita; olika enheter får inte ha identisk numerisk omvandling. Unit, om angiven, måste stämma med to; annars används to som unitCode.'
+          properties:
+            from: { type: string }
+            to: { type: string }
+            factor: { type: number, default: 1 }
+            offset: { type: number, default: 0 }
         observedAt:
           type: string
-          description: 'header (default), record, message, none eller field:<väg>. Explicit observedAt stöds inte på DateTime, LanguageMap, Structured eller Structured-delvärden.'
+          description: 'Default är värdets egen observationstid (measurement-header som fallback), aldrig fabricerad tid. Header väljer bastid/max observedAt/changedAt; record värdets tid; message measurement-timestamp eller things publiceringstid/changedAt; none utelämnar tid; field:<väg> väljer explicit källtid. Stöds på alla attributtyper, inte Structured-delvärden. Strikt RFC3339 med högst nio decimaler; tillgänglig RFC3339Nano-precision bevaras.'
           example: header
         observedBy:
           type: string
           description: 'Endast Number-attribut, inte Structured-delvärden. Stöder malluttryck och entitetsreferenser.'
-        when: { type: string, enum: [present] }
-        required: { type: boolean }
+        when: { type: string, enum: [present], description: 'Närvarosemantiken gäller även utan when. Tom/null/saknad källa ger ingen skrivning; noll och false är giltiga. Aggregat utan närvarande ingångar skriver inte.' }
+        required: { type: boolean, description: 'Saknad källa undertrycker hela entiteten, även för Structured-delvärden. Typfel är fel, inte frånvaro.' }
         resource: { type: string }
         object:
           type: string

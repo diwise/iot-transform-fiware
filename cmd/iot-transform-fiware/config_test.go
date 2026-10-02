@@ -35,6 +35,8 @@ func TestDefaultFlags(t *testing.T) {
 		controlPort:        "8000",
 		servicePort:        "8080",
 		contextbrokerUrl:   "http://context-broker",
+		brokerTimeout:      "10s",
+		tokenTimeout:       "5s",
 		oauth2ClientId:     "",
 		oauth2ClientSecret: "",
 		oauth2TokenUrl:     "",

@@ -29,7 +29,7 @@ func TestStaticRuleValidation(t *testing.T) {
 		}, "expected a location"},
 		{"nonfinite geojson", func(e *Entity) {
 			e.Properties[0] = Property{Target: "position", Type: TypeGeo, Const: map[string]any{"type": "Point", "coordinates": []any{12, math.NaN()}}}
-		}, "expected a location"},
+		}, "finite numeric coordinate"},
 		{"number overflow", func(e *Entity) {
 			e.Properties[0].Source = Source{Const: math.MaxFloat64}
 			e.Properties[0].Transform = []Transform{{Op: OpMultiply, Value: new(float64(2))}}

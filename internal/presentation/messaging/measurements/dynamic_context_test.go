@@ -39,6 +39,7 @@ rules:
     entities:
       - id: "urn:ngsi-ld:WeatherObserved:{{deviceID}}"
         type: WeatherObserved
+        properties: [{target: reading, type: Number, resource: "5700"}]
 `))
 	is.NoErr(err)
 
@@ -60,6 +61,7 @@ rules:
       - id: "urn:ngsi-ld:WeatherObserved:{{deviceID}}"
         type: WeatherObserved
         context: "https://example.invalid/entity-context.jsonld"
+        properties: [{target: reading, type: Number, resource: "5700"}]
 `))
 	is.NoErr(err)
 

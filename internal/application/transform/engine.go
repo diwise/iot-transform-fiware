@@ -55,14 +55,17 @@ type MatchInfo struct {
 	// Lifecycle avgränsar livscykelregler till en händelsetyp
 	// (likhetsmatchning, ingen score).
 	Lifecycle string
+	ToType    string
 }
 
 // resolvedValue är resultatet av en värdekälleuppslagning.
 type resolvedValue struct {
-	value   any
-	time    time.Time
-	hasTime bool
-	found   bool
+	value        any
+	time         time.Time
+	hasTime      bool
+	found        bool
+	unit         string
+	unitConflict bool
 }
 
 // EntityWrite beskriver en entitet som ska skrivas, utan att utföra
@@ -175,6 +178,9 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		if err != nil {
 			return nil, fmt.Errorf("rule %q, entity %d (%q), type expression %q: %w", rule.ID, index, ent.Name, ent.Type, err)
 		}
+		if err := validateWriteHeader(EntityWrite{EntityID: id, TypeName: typeName, Context: ent.Context}); err != nil {
+			return nil, fmt.Errorf("rule %q, entity %d (%q): %w", rule.ID, index, ent.Name, err)
+		}
 
 		// delete-entiteter raderar hela entiteten; properties byggs aldrig.
 		if ent.Delete {
@@ -206,6 +212,9 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 			}
 			return nil, fmt.Errorf("rule %q, entity %d (%q): %w", rule.ID, index, ent.Name, err)
 		}
+		if len(props) == 0 {
+			continue
+		}
 
 		writes = append(writes, EntityWrite{
 			EntityID: id,
@@ -220,6 +229,9 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		writes[i].RuleID = rule.ID
 		writes[i].RuleRevision = rule.Revision
 		writes[i].SnapshotVersion = rule.SnapshotVersion
+	}
+	if err := ValidateEntityWrites(writes, ""); err != nil {
+		return nil, err
 	}
 	return writes, nil
 }
@@ -255,7 +267,7 @@ func (e *Engine) match(in Input) (Rule, bool) {
 			continue
 		}
 
-		if s := r.Match.score(); s > bestScore {
+		if s := r.Match.score(); best < 0 || r.Priority > e.rules[best].Priority || (r.Priority == e.rules[best].Priority && s > bestScore) {
 			bestScore, best = s, i
 		}
 	}
@@ -290,6 +302,9 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 		return false
 	}
 	if mm.SubType != "" && mm.SubType != info.SubType {
+		return false
+	}
+	if mm.ToType != "" && mm.ToType != info.ToType {
 		return false
 	}
 	if mm.Tenant != "" && mm.Tenant != info.Tenant {
@@ -327,6 +342,12 @@ func (mm Match) score() int {
 		s++
 	}
 	if mm.Port != "" {
+		s++
+	}
+	if mm.Env != "" {
+		s++
+	}
+	if mm.ToType != "" {
 		s++
 	}
 	if mm.SubType != "" {
@@ -385,10 +406,13 @@ func resolveExpr(expr string, vars map[string]string, in Input, entities map[str
 
 	path := strings.TrimSpace(strings.TrimPrefix(expr, "field:"))
 	if v, ok := vars[path]; ok {
+		if !present(v) {
+			return "", fmt.Errorf("%w: variable %q", errExprNotFound, path)
+		}
 		return v, nil
 	}
 	v, ok := in.ResolvePath(path)
-	if !ok {
+	if !ok || !present(v) {
 		return "", fmt.Errorf("%w: field %q", errExprNotFound, path)
 	}
 	return templateValue(v)

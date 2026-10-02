@@ -159,7 +159,6 @@ func TestUnsupportedPropertyCombinationsRejected(t *testing.T) {
 	cases := []Property{
 		{Target: "position", Type: TypeText, LatLon: true},
 		{Target: "position", Type: TypeGeo, LatLon: true, Prefix: "ignored"},
-		{Target: "labels", Type: TypeLanguageMap, Const: map[string]any{"en": "text"}, ObservedAt: ObservedAtMessage},
 		{Target: "labels", Type: TypeLanguageMap, Const: map[string]any{"en": "text"}, Prefix: "ignored"},
 		{Target: "structure", Type: TypeStructured, Const: "ignored", Subproperties: []Property{{Target: "label", Type: TypeText, Const: "text"}}},
 	}

@@ -77,6 +77,7 @@ type Model struct {
 
 // Rule matchar en källa och beskriver vilka entiteter som ska skrivas.
 type Rule struct {
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
 	// Körningsmetadata kommer från lagret, aldrig från regelpayloaden.
 	ID              string   `yaml:"-" json:"-"`
 	Revision        int64    `yaml:"-" json:"-"`
@@ -110,6 +111,7 @@ type Match struct {
 	// partOf); endast giltig med event things.v1.relations. Utan
 	// match.type/subType skulle regeln träffa alla sakers länkar.
 	Relation string `yaml:"relation,omitempty" json:"relation,omitempty"`
+	ToType   string `yaml:"toType,omitempty" json:"toType,omitempty"`
 	// RelationRemoved skiljer bortkoppling (true) från koppling (osatt).
 	// Jämförs med likhet: osatt matchar endast set-händelser.
 	RelationRemoved bool `yaml:"relationRemoved,omitempty" json:"relationRemoved,omitempty"`
@@ -165,6 +167,15 @@ type Derive struct {
 	Of []Source `yaml:"of" json:"of"`
 }
 
+// Conversion explicitly declares an affine source-to-target unit conversion.
+// The rule author owns its physical meaning; the engine never infers a model.
+type Conversion struct {
+	From   string   `yaml:"from" json:"from"`
+	To     string   `yaml:"to" json:"to"`
+	Factor *float64 `yaml:"factor,omitempty" json:"factor,omitempty"`
+	Offset float64  `yaml:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // Property beskriver ett NGSI-LD-attribut.
 type Property struct {
 	// Array skriver en skalär Relationship som enelementslista. Listor
@@ -173,6 +184,7 @@ type Property struct {
 	Target     string       `yaml:"target" json:"target"`
 	Type       PropertyType `yaml:"type" json:"type"`
 	Unit       string       `yaml:"unit,omitempty" json:"unit,omitempty"`
+	Convert    *Conversion  `yaml:"convert,omitempty" json:"convert,omitempty"`
 	ObservedAt ObservedAt   `yaml:"observedAt,omitempty" json:"observedAt,omitempty"`
 	ObservedBy string       `yaml:"observedBy,omitempty" json:"observedBy,omitempty"`
 	When       When         `yaml:"when,omitempty" json:"when,omitempty"`

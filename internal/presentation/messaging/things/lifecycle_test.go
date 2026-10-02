@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	clienttest "github.com/diwise/context-broker/pkg/test"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
@@ -38,7 +38,7 @@ func TestThingLifecycleHandlerMalformedIsPermanent(t *testing.T) {
 	is := is.New(t)
 
 	handler := NewThingLifecycleTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) { return nil, nil },
+		func(string) (contextbroker.BrokerClient, error) { return nil, nil },
 		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
@@ -59,7 +59,7 @@ func TestThingLifecycleHandlerSkipsEmptyTenant(t *testing.T) {
 
 	called := false
 	handler := NewThingLifecycleTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			called = true
 			return nil, nil
 		},
@@ -82,7 +82,7 @@ func TestThingLifecycleHandlerSkipsWithoutRule(t *testing.T) {
 
 	called := false
 	handler := NewThingLifecycleTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			called = true
 			return nil, nil
 		},
@@ -103,7 +103,7 @@ func TestThingLifecycleHandlerReturnsBrokerError(t *testing.T) {
 	is := is.New(t)
 
 	handler := NewThingLifecycleTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
 		staticThingsProvider{appthings.NewDynamicThingTransformer(lifecycleDeleteRules())},
@@ -129,7 +129,7 @@ func TestThingLifecycleHandlerDeletesEntity(t *testing.T) {
 		},
 	}
 	handler := NewThingLifecycleTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) { return cbClient, nil },
+		func(string) (contextbroker.BrokerClient, error) { return cbClient, nil },
 		staticThingsProvider{appthings.NewDynamicThingTransformer(lifecycleDeleteRules())},
 		"",
 	)

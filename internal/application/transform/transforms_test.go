@@ -164,7 +164,7 @@ func TestDeriveBooleanFunctionsAsNumbers(t *testing.T) {
 	all := deriveRule(TypeNumber, FnAllTrue, false, Source{Resource: "flag"})
 	is.True(strings.Contains(renderFirst(t, m, all), `"value":1`))
 
-	none := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"})
+	none := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"}, Source{Const: false})
 	is.True(strings.Contains(renderFirst(t, m, none), `"value":0`))
 }
 
@@ -185,15 +185,17 @@ func TestWhenPresentSkipsDerivedWithoutSources(t *testing.T) {
 
 	writes, err := NewEngine([]Rule{r}).Transform(m)
 	is.NoErr(err)
-	is.Equal(len(writes[0].Props), 0)
+	is.Equal(len(writes), 0)
 }
 
-func TestDeriveWithoutWhenWritesZeroForEmptySources(t *testing.T) {
+func TestDeriveWithoutWhenSkipsEmptySources(t *testing.T) {
 	is := is.New(t)
 
 	m := derivedMeasurement()
 	r := deriveRule(TypeNumber, FnAnyTrue, false, Source{Resource: "missing"})
-	is.True(strings.Contains(renderFirst(t, m, r), `"value":0`))
+	writes, err := NewEngine([]Rule{r}).Transform(m)
+	is.NoErr(err)
+	is.Equal(len(writes), 0)
 }
 
 func TestWhenPresentOnMissingScalarIsSkipped(t *testing.T) {
@@ -205,7 +207,7 @@ func TestWhenPresentOnMissingScalarIsSkipped(t *testing.T) {
 
 	writes, err := NewEngine([]Rule{r}).Transform(x)
 	is.NoErr(err)
-	is.Equal(len(writes[0].Props), 0)
+	is.Equal(len(writes), 0)
 }
 
 func TestDeriveMissingOptionalIsSkipped(t *testing.T) {
@@ -216,7 +218,7 @@ func TestDeriveMissingOptionalIsSkipped(t *testing.T) {
 
 	writes, err := NewEngine([]Rule{r}).Transform(m)
 	is.NoErr(err)
-	is.Equal(len(writes[0].Props), 0)
+	is.Equal(len(writes), 0)
 }
 
 func TestDeriveMissingRequiredSkipsEntity(t *testing.T) {

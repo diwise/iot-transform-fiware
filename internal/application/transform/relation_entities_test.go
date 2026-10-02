@@ -14,7 +14,7 @@ func TestEntityReferenceBetweenEntities(t *testing.T) {
 		{
 			Name: "sewer", ID: "urn:ngsi-ld:Sewer:{{id}}", Type: "Sewer", Create: true,
 			Properties: []Property{
-				{Target: "name", Type: TypeText, Field: "name", ObservedAt: ObservedAtNone},
+				{Target: "name", Type: TypeText, Const: "Source name", ObservedAt: ObservedAtNone},
 			},
 		},
 		{

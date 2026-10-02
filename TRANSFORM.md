@@ -363,40 +363,163 @@ Verifiering i `iot-transform-fiware`:
 
 Berör främst `internal/application/transform/{engine,measurement,thing,values,functions}.go`.
 
-- [ ] Implementera det fastställda prioritetskontraktet. Hantera avgränsningar
+### Arbetsplan för etapp 5
+
+1. Regressionstesta prioritet/specificitet/stabil ordning, env/port,
+   tenantisolering, otillgängliga matchfält och relationens råa måltyp.
+   Inför `priority` på regeln och `match.toType` för relationshändelser.
+   Lifecycle kräver explicit created/updated/deleted enligt målkontraktet.
+   Ge modellneutral diagnostik för konkurrerande matchningar och överlapp.
+2. Samla närvarokontroll före modifierare: null/tom text/lista/mapp och
+   saknad property-mall ger skip; noll/false är närvarande. Required
+   undertrycker entiteten. Aggregat använder närvarande ingångar men avvisar
+   samtliga typfel, även efter en tidigare avgörande boolean/coalesce-ingång.
+   Alla-saknade och tom Structured ger ingen skrivning.
+3. Förmedla observationstid/enhet från direkta källor och enkla fältmallar.
+   Default är värdets observationstid, measurement-header som fallback;
+   konstanter/namn får ingen implicit tid. Aggregat använder senaste
+   närvarande ingångstid, coalesce/firstPresent den valda ingångens tid.
+   Separera things publiceringstid (`message`) från observation (`record`)
+   och max-observation/changedAt (`header`). Bevara RFC3339Nano, utelämna
+   saknad tid och stöd tidsmetadata på alla attributtyper, inte delvärden.
+4. Behåll källenheter åtkomliga. Känd källenhet får inte märkas om utan
+   ekvivalent enhetskod eller explicit numerisk omvandling. Inför generisk
+   `convert: {from, to, factor, offset}` före befintliga transformer;
+   factor default 1, offset default 0. Saknad källenhet kräver författarens
+   uttryckliga from-deklaration vid konvertering. Ingen modellberoende
+   omvandling eller implicit numerisk omvandling används.
+5. Transformera measurements före broker/tokenförberedelse och testa no-match,
+   required/alla-saknade och fel utan brokerkontakt. Uppdatera regel-API/YAML,
+   dokumentation och webbens kopierade typer/formulär så nya fält inte tappas.
+6. Kör gofmt, fulla tester, vet och därefter go fix i berörda moduler;
+   granska fixändringar och kör om format/test/vet när koden ändras. Kör
+   race och ocachade DB-/seed-/API-tester isolerat innan etappen avbockas.
+
+- [x] Implementera det fastställda prioritetskontraktet. Hantera avgränsningar
       som env och port konsekvent och diagnostisera överlappande/skuggade regler.
-- [ ] Avvisa matchningsfält som källtypen inte kan tillhandahålla. Definiera
+- [x] Avvisa matchningsfält som källtypen inte kan tillhandahålla. Definiera
       explicit om lifecycle krävs eller om wildcard stöds.
-- [ ] Lägg till regelstyrd avgränsning för relationens målsida, exempelvis måltyp
+- [x] Lägg till regelstyrd avgränsning för relationens målsida, exempelvis måltyp
       eller generella fältpredikat, så att tankregeln kan kräva växthus som mål.
 - [x] Använd en gemensam värdekällsutvärderare för properties, `derive.of` och
       Structured. Alla tillåtna källor och modifierare ska faktiskt utvärderas.
       Genomfört och verifierat i 3.9.
-- [ ] Definiera `required`, `when: present`, tomma värden och saknad mallkälla
+- [x] Definiera `required`, `when: present`, tomma värden och saknad mallkälla
       konsekvent. Gör aggregatens beteende vid saknade ingångar explicit.
       Beslut: saknad/null/tom källa ger ingen skrivning; noll och false är giltiga.
       Rensning är explicit. Inget aggregat skriver när alla ingångar saknas.
-- [ ] Skilj saknad källa från typfel. Aggregat får inte tyst ignorera felaktiga
+- [x] Skilj saknad källa från typfel. Aggregat får inte tyst ignorera felaktiga
       typer utan ett dokumenterat regelval.
 - [x] Säkerställ att Structured-delvärden konverteras enligt deklarerad typ.
       Avvisa metadata/funktioner på delvärden som inte har implementerad semantik.
       Genomfört och verifierat i 3.9.
-- [ ] Exponera observationstid, publiceringstid och förändringstid separat.
+- [x] Exponera observationstid, publiceringstid och förändringstid separat.
       Låt regler välja tidskälla för både attributvärden och `observedAt`.
-- [ ] Gör tidsmetadata konsekvent över stödda property-typer och dokumentera
+- [x] Gör tidsmetadata konsekvent över stödda property-typer och dokumentera
       vad `header`, `record`, `message`, `field` och `none` betyder för varje källa.
       Beslut: använd värdets egen observationstid, med objektets bastid som
       measurement-fallback. Things-values använder respektive observedAt;
       relation/lifecycle använder changedAt där regeln efterfrågar den.
       Konstanter/namn får ingen automatisk tid. Saknad tid fabriceras inte.
-- [ ] Bevara tillgänglig subsekundprecision. Verifiera relativ SenML-tid,
+- [x] Bevara tillgänglig subsekundprecision. Verifiera relativ SenML-tid,
       saknad tid och flera observationer med olika mättider.
-- [ ] Gör källenheter åtkomliga och låt regler ange målens enheter och eventuell
+- [x] Gör källenheter åtkomliga och låt regler ange målens enheter och eventuell
       omvandling. Märk inte om enheten utan motsvarande dokumenterad omvandling.
-- [ ] Flytta measurement-vägens broker-/tokenförberedelse efter transformation,
+- [x] Flytta measurement-vägens broker-/tokenförberedelse efter transformation,
       så att ingen match eller inga skrivningar kan hanteras utan brokerberoende.
 
+### Genomfört och verifierat
+
+Etapp 5 slutförd 2026-10-01. Regressionstester påvisade först att prioritet
+saknades, device-filter accepterades för things, tomma källor kunde ge typfel
+eller tomma brokerskrivningar, aggregat ignorerade fel och fabricerade false,
+tider ersattes av bastid/tappade precision och källenheter kunde märkas om.
+Handler-regressioner påvisade broker/tokenförberedelse före no-match,
+required/alla-saknade och transformationsfel.
+
+`priority` väger nu före specificitet/stabil ordning; env/port hanteras
+konsekvent. `match.toType` matchar rå relationstyp på målsidan, lifecycle
+kräver explicit kind och things avvisar otillgängligt device-filter.
+Motorn ger diagnostik för potentiella överlapp och faktisk per-input-
+skuggning utan falska tenantkonflikter eller kombinerade regler.
+
+Gemensam närvarosemantik gäller före modifierare och efter transform.
+Required undertrycker entiteten; tom Structured, saknad mallkälla och
+alla-saknade aggregat skriver inte. Samtliga närvarande numeriska/boolean-
+aggregatingångar typkontrolleras före reducering; noll/false bevaras.
+Tids-/enhetsmetadata följer direkta fält, mallar och aggregat. Samtliga
+attributtyper kan bära observedAt med RFC3339Nano; saknad/zero tid
+fabriceras inte och fälttidsfel skiljs från frånvaro. Detaljer för header,
+record, message, field och none finns i regelkontraktets tidstabell.
+
+Kända källenheter får inte märkas om utan ekvivalent kod eller uttrycklig
+affin `convert`. Omvandlingens from verifieras när källenheten är känd;
+factor/offset/resultat måste vara finita, olika enheter kräver en faktisk
+numerisk förändring och numeriska listor konverteras utan mutation.
+Enhetskoder och omvandling är generiska; författaren ansvarar för fysisk
+korrekthet och för from-deklaration när källenheten saknas.
+
+Measurement-vägen transformerar en gång före broker/token och hoppar över
+no-match/inga skrivningar utan det beroendet. Regel/API/seed/snapshot och
+offline-preview delar semantiken. Webbens kopierade typer, formulär och JSON
+bevarar priority/toType/convert; dess templ-källor genererades om. Tankreglerna
+avgränsar explicit greenhouse som mål och befintlig Pa→KPA-omvandling
+deklareras i regeln. Ingen modellberoende motorkod infördes.
+
+Verifiering:
+
+- `go test ./internal/application/transform -run TestStage5 -count=1`
+  påvisade motorfelen före rättning.
+- `go test ./internal/presentation/messaging/measurements -run TestStage5 -count=1`
+  påvisade den för tidiga brokerförberedelsen före rättning.
+- Gofmt kördes på ändrade Go-filer. I `iot-transform-fiware` passerade
+  `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32770 go test ./... -count=1`,
+  därefter `go vet ./...` och `go fix ./...`. Fixändringarna granskades;
+  formatering, fulla tester och vet kördes därefter om och passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32770 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skips i isolerad PostgreSQL 16, inklusive nya rulefält i
+  DB/snapshot, seed, rollback, cancellation, omstart och revisionskonkurrens.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32770 PG_TEST_DBNAME=diwise_stage5_race go test -race ./internal/application/transform ./internal/application/measurements ./internal/application/things ./internal/presentation/messaging/measurements ./internal/presentation/messaging/things ./internal/presentation/api -count=1`
+  passerade med separat race-testdatabas.
+- I `diwise-web` passerade `go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate`,
+  `go test ./...`, `go vet ./...` och därefter `go fix ./...`. Fixändringen
+  i things-v2-testets pekarkonstruktion granskades; efterföljande tester och vet
+  passerade. `go test -race ./internal/presentation/api/handlers/rules ./internal/presentation/web/components/features/rules -count=1`
+  passerade också. Nya tester kontrollerar faktisk formulär-/JSON-serialisering
+  och avvisar felaktig priority/convert-JSON.
+- README, OpenAPI och regelkontrakt uppdaterades. `git diff --check` passerade
+  i båda repon. Den tillfälliga DB-instansen städades efter verifiering.
+
+Etapp 6–9 återstår för full dynamisk NGSI-LD-validering, brokersvar/
+leveransklassificering, beständig relationsprojektion och aktiv preview/
+slutacceptans. Dessa krav är inte avbockade genom motor-/previewtesterna ovan.
+
 ## Etapp 6 — generisk NGSI-LD-byggning och grundvalidering
+
+### Arbetsplan för etapp 6
+
+1. Regressionstesta dynamiska entitets-ID:n/typer, observedBy, reserverade
+   attribut, faktisk serialisering och sena ogiltiga skrivningar i en batch.
+   Verifiera att fel upptäcks före broker/token och att preview använder
+   samma kontroll. Leveransklassificering och partiella brokersvar följer etapp 7.
+2. Ersätt Geo-kontrollens numeriska löv med generell GeoJSON-validering för
+   de sex stödda geometrityperna: finita faktiska tal, 2D/3D med konsekvent
+   dimension, WGS84 lon/lat-intervall, rätt nästling och minsta antal
+   positioner/ringar, slutna polygonringar. Inga modellberoende geografival.
+3. Bygg och validera den serialiserade kompakta NGSI-LD-entiteten med vald
+   singleton-context. Kontrollera URI-ID, typ-/attributtermer, reserverade
+   fält, Property/GeoProperty/Relationship/LanguageProperty, typad DateTime,
+   observedAt/observedBy/unitCode, numeriska värden och osupporterade metadata.
+   Delete/remove kontrolleras som egna operationer. Hela batchen förvalideras.
+4. Återanvänd protokollhjälpare i statisk och dynamisk validering, motor,
+   presentationsgrindar, skrivarens sista kontroll och offline-preview.
+   Dokumentera profilen: ingen context-hämtning/expansion, datasetId, avancerade
+   attributformer, GeometryCollection eller temporal lagring; ingen full SDM-
+   validering eller geometrisk topologikontroll. Required är fortsatt mappningspolicy.
+5. Kontrollera samtliga typer genom faktisk JSON och kontrollerade brokeranrop;
+   dokumentera utfalls-/scopegränser. Kör gofmt, fulla tester/vet/go fix,
+   granska fixändringar och återverifiera, relevanta race-tester samt ocachade
+   DB-/seed-/API-tester isolerat innan avbockning.
 
 - [x] Låt Geo alltid använda regelns `target`, oavsett koordinatkälla och
       `observedAt`. Ta bort kodvägar som implicit väljer attributet `location`.
@@ -406,36 +529,166 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
 - [x] Validera relationsreferenser och listelement strikt enligt vald profil.
       Konvertera inte godtyckliga tal/booleska värden till URI:er och tappa inte
       felaktiga listelement tyst.
-- [ ] Kontrollera finita tal efter konvertering och transformation, även i listor.
-- [ ] Kontrollera datum/tid och grundläggande GeoJSON-struktur, inklusive
+- [x] Kontrollera finita tal efter konvertering och transformation, även i listor.
+- [x] Kontrollera datum/tid och grundläggande GeoJSON-struktur, inklusive
       geometriernas koordinatstruktur och tillämpliga dimensions-/ringkrav.
-- [ ] Validera renderade entitets-ID:n, typer, attribut och metadata innan
+- [x] Validera renderade entitets-ID:n, typer, attribut och metadata innan
       brokeranrop. Använd samma utdata-validerare i preview.
-- [ ] Säkerställ att varje property-typ serialiseras enligt den dokumenterade
+- [x] Säkerställ att varje property-typ serialiseras enligt den dokumenterade
       NGSI-LD-profilen. Testa faktisk JSON, inte bara att en dekoratör skapades.
-- [ ] Dokumentera begränsningar såsom datasetId, avancerade attributformer,
+- [x] Dokumentera begränsningar såsom datasetId, avancerade attributformer,
       context-former och temporal lagring; stöd ska inte antydas av schemat om det saknas.
-- [ ] Håll Smart Data Models-validering åtskild från protokollvalidering.
+- [x] Håll Smart Data Models-validering åtskild från protokollvalidering.
       `required` är en mappningsregel, inte ett bevis på full modellkonformitet.
+
+### Genomfört och verifierat
+
+Etapp 6 slutförd 2026-10-01. Regressionstester med dynamiska, i övrigt giltiga
+regler påvisade otestade ID-/typ-/observedBy-/attribut-/unitCode-resultat,
+felaktiga GeoJSON-dimensioner/nästling/ringar och att en senare ogiltig
+skrivning kunde passera efter en tidigare brokeroperation.
+
+Gemensamma BuildEntity/ValidateEntityWrites bygger och validerar den verkliga
+normaliserade JSON-formen. Motor och preview delar kontrollen; handlers
+verifierar även effektiv fallback-context före broker/token. Skrivarens
+sista grind förvaliderar hela batchen och låg-nivå create/merge använder
+samma grundkontroller och context-form utan att mutera dekoratörslistan.
+Delete/remove validerar header/operation/attribut, inklusive strukturfält
+och dubbletter. Eventuella brokerfel efter godkänd förvalidering är fortsatt
+separata leveransutfall i etapp 7.
+
+Attributkontrollen omfattar finita numeriska värden/listor/Structured,
+normaliserade scalar-/list-/object-former, typad DateTime, GeoProperty,
+Relationship och LanguageProperty samt observedAt/observedBy/unitCode.
+URI-percentkodning, termsyntax och context kontrolleras generellt; statisk
+regelvalidering återanvänder samma protokollhjälpare. Metadata och former
+utanför profilen avvisas, utan modellnamn eller modellberoende kodval.
+
+GeoJSON-kontrollen kräver faktiska finita tal, konsekventa 2D/3D-positioner,
+WGS84-intervall, rätt struktur och minsta storlek samt slutna polygonringar.
+Testerna täcker alla sex stödda geometrier, alla property-typers faktiska
+JSON (inklusive zero/false, DateTime och relationslista), ogiltiga metadata,
+oförändrad källgeometri, batchgrind och identiska produktions-/previewfel.
+
+README, OpenAPI och protokollprofilen dokumenterar avgränsningen: ingen
+context-expansion, full ETSI-/SDM-konformitet, geometrisk topologi/orientering,
+datasetId, avancerade attributinstanser, användardefinierad context-array/
+inline-context eller temporal lagring. Required är fortfarande frånvaropolicy.
+
+Verifiering i `iot-transform-fiware`:
+
+- `go test ./internal/application/transform ./internal/infrastructure/contextbroker -run TestStage6 -count=1`
+  påvisade de ursprungliga output-/geo-/batchfelen före rättning.
+- Gofmt kördes på ändrade Go-filer. `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32771 go test ./... -count=1`,
+  därefter `go vet ./...` och `go fix ./...` passerade. Fixändringarna
+  granskades; efterföljande formatering, fulla tester och vet passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32771 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skips mot tillfällig, isolerad PostgreSQL 16. Seed,
+  kandidatvalidering, rollback, cancellation, omstart och samtidig mutation
+  verifierades med befintliga och nya regel-/previewtester.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32771 PG_TEST_DBNAME=diwise_stage6_race go test -race ./internal/application/transform ./internal/infrastructure/contextbroker ./internal/presentation/messaging/measurements ./internal/presentation/messaging/things ./internal/presentation/api -count=1`
+  passerade med separat race-testdatabas.
+- Berörd webbklient verifierades med `go test ./internal/application/transform ./internal/presentation/api/handlers/rules ./internal/presentation/web/components/features/rules` i `diwise-web`.
+- `git diff --check` passerade. Den tillfälliga PostgreSQL-instansen städades
+  efter verifieringen. Brokersvars-/ack-/retry-klassificering, aktiv preview-
+  diagnostik och systemacceptans följer fortfarande etapp 7–9.
 
 ## Etapp 7 — brokerskrivning och leveransutfall
 
 Berör `internal/infrastructure/contextbroker`, messaging-handlers och vid behov
 det versionslåsta `context-broker`-biblioteket.
 
-- [ ] Bevara och tolka partiella brokersvar, inklusive HTTP 207. En delvis
+### Arbetsplan för etapp 7
+
+1. Verifiera låsta bibliotek: brokerklientens MergeEntityResult tappar HTTP
+   207-body; messaging nil→ack, Permanent→reject utan requeue, övriga fel→
+   tillfälligt, confirm-before-ack-retry upp till MaxDeliveryAttempts (default 5).
+   Kör bibliotekets egna executor-/retrytester före ny klassificering.
+2. Regressionstesta riktiga HTTP-svar och tokenflöden. Inför en smal skrivklient
+   i transform-modulen som behåller status/body och UpdateResult för 207;
+   updated/notUpdated valideras och delvis misslyckad skrivning ger fel.
+   Skilj brokerstatus/beroendefel från irreparabla data-/utdatafel.
+3. Behåll create-if-absent, merge-or-create (404→create, 409-race→ett merge),
+   attributrensning och delete med dokumenterat HTTP-beteende. Förvalidera
+   leveransen före I/O, avbryt skrivbatchen vid första fel och bevara redan
+   slutförda operationer i felrapport. Testa replay och idempotenta 404/409.
+4. Förmedla request-context till token och broker. Lägg konfigurerbara positiva
+   tidsbudgetar (broker 10s, token 5s), återanvänd HTTP-klienter och cached token
+   med cancellation-medveten refresh. Ersätt fast sleep och mutex-väntan med
+   verifierat synkront svar respektive context-medvetet lås.
+5. Lägg spans och strukturerade korrelationsfält för transport/applikation/
+   operation/HTTP/token, inklusive regel-ID, revision, snapshot och tenant/ID:n.
+   Kontrollera faktisk parent-kedja och Error-status; logga inte tokens,
+   credentials, hela payloads eller råa broker-/tokenbody i felsträngar.
+6. Kör gofmt, fulla tester/vet/go fix och granska fixändringar, relevanta race-
+   tester samt ocachade DB-/API-tester isolerat. Dokumentera profilutökningar,
+   retry/dedupgränser och att replay inte skyddar mot sena/omordnade händelser.
+
+- [x] Bevara och tolka partiella brokersvar, inklusive HTTP 207. En delvis
       misslyckad skrivning får inte rapporteras som full framgång.
-- [ ] Klassificera irreparabla indata-/transformations-/utdatafel separat från
+- [x] Klassificera irreparabla indata-/transformations-/utdatafel separat från
       tillfälliga beroendefel. Verifiera ack, retry och slutlig felhantering i den
       låsta messaging-versionen innan klassificeringen ändras.
-- [ ] Dokumentera create-if-absent, merge-or-create, attributrensning och delete.
+- [x] Dokumentera create-if-absent, merge-or-create, attributrensning och delete.
       Verifiera operationernas HTTP- och felbeteende mot vald NGSI-LD-profil.
-- [ ] Inför tydliga tidsbudgetar för broker- och tokenanrop. Ersätt eventuell
+- [x] Inför tydliga tidsbudgetar för broker- och tokenanrop. Ersätt eventuell
       fast väntan med dokumenterat, cancellation-medvetet beteende där väntan behövs.
-- [ ] Verifiera partiellt lyckade flerskrivningar och replay. Beskriv att
+- [x] Verifiera partiellt lyckade flerskrivningar och replay. Beskriv att
       idempotens för en isolerad operation inte ger ordningsoberoende korrekthet.
-- [ ] Förmedla context och trace till klientanrop. Logga regel-ID, regelrevision,
+- [x] Förmedla context och trace till klientanrop. Logga regel-ID, regelrevision,
       snapshotversion och relevanta käll-/mål-ID:n utan hemligheter eller hela payloads.
+
+### Genomfört och verifierat
+
+Etapp 7 slutförd 2026-10-02. Kodgranskning verifierade att låsta broker-
+bibliotekets MergeEntityResult/NewMergeEntityResult tappar 207-body; dess
+HTTP-klient är inte injicerbar. En smal skrivklient i tjänsten återanvänder
+bibliotekets typer men bevarar status/body och UpdateResult. HTTP-regressioner
+påvisade falsk framgång för partiellt/malformed 207 före rättning.
+
+Pure transformfel är Permanent; kända irreparabla brokerrequeststatus skiljs
+från auth/tenant/timeout/transport/5xx/okända beroendefel. 207-delutfall är
+retrybart och bevarat. Alla observationer i measurement-leveransen valideras
+före I/O; skrivbatchen avbryts på första fel och WriteBatchError bevarar
+slutförda tidigare skrivningar samt failed-operation/regel/orsak. Replay,
+404/409 och bounded create-race testades med riktiga HTTP-klienter.
+
+NGSI_CB_TIMEOUT/OAUTH2_TOKEN_TIMEOUT har positiva durationer och default
+10s/5s. Token hämtas under aktuell context, cache och keyed-lock kan avbrytas,
+klienter återanvänds, 401 invalidierar cached token, ingen tokenfels-fallback
+till anonymous sker. Fast sleep efter merge togs bort. Named-return-spans
+för handler, applikation, apply/operation, HTTP och token ser faktiskt fel;
+OTel-parent och HTTP traceparent samt regel/revision/snapshot verifierades.
+
+Operations-/retryprofil och avgränsningar dokumenteras i regelkontraktet,
+inklusive att PATCH-null är broker/facade-kompatibilitet och inte fullt
+ETSI-attribut-delete, och att idempotenta omtag inte ger recency-/ordningsskydd.
+Ingen producentpayload, persistent dedup eller relationsprojektion ändrades.
+
+Verifiering:
+
+- `go test ./internal/infrastructure/contextbroker -run TestStage7 -count=1`
+  påvisade den låsta klientens 207-luckor före rättning.
+- `go test github.com/diwise/messaging-golang/pkg/messaging -count=1`
+  passerade mot låst v0.0.0-20260910052156-098a088f6b4f, inklusive fake-
+  acknowledger/executor/retry- och slutlig-failure-tester. Kod verifierade
+  nil→ack, Permanent→reject(false), kontrollerad temporary retry med confirm
+  före ack och default fem totala försök. DLX-kö är separat driftkonfiguration.
+- Gofmt, `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32772 go test ./... -count=1`,
+  `go vet ./...` och därefter `go fix ./...` passerade. Fixändringar granskades
+  och efterföljande formatering/test/vet passerade.
+- `PG_TEST_HOST=127.0.0.1 PG_TEST_PORT=32772 go test ./internal/infrastructure/rules ./internal/presentation/api -count=1 -v`
+  passerade utan skips mot tillfällig, isolerad PostgreSQL 16, med seed,
+  rollback, cancellation, omstart och samtidig mutation.
+- `go test -race ./internal/infrastructure/contextbroker ./internal/presentation/messaging/... ./cmd/iot-transform-fiware -count=1 -timeout=60s`
+  passerade. HTTP-/token-/lock-budget, authorization, replay och faktisk
+  OTel parent/Error/traceparent kontrollerades i nya tester.
+- README, konfiguration och regelkontrakt uppdaterades; `git diff --check`
+  passerade. Den temporära DB-instansen städades efter verifiering.
+
+Full Compose/systemacceptans och aktiv preview/relationsprojektion följer
+fortfarande etapp 8–9; bibliotekstester och kontrollerade HTTP-servrar bevisar
+inte en viss produktionsbrokers DLX/topologi eller interna läskonsistens.
 
 ## Etapp 8 — modellregler, preview och dokumentation
 

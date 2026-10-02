@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
@@ -88,7 +87,7 @@ func TestRegisterHandlersPropagatesError(t *testing.T) {
 		},
 	}
 
-	err := registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (client.ContextBrokerClient, error) { return nil, nil }})
+	err := registerHandlers(&appConfig{messenger: messenger, cbClientFn: func(string) (contextbroker.BrokerClient, error) { return nil, nil }})
 	is.True(err != nil)
 	is.True(errors.Is(err, want))
 }
@@ -136,10 +135,10 @@ func TestTokenFailureAbortsDeliveryWithoutBrokerCall(t *testing.T) {
 	)
 
 	_, err := factory("default")
-	is.True(err != nil)
+	is.NoErr(err) // construction is lazy; token I/O belongs to request context
 
 	handler := containerHandler(factory)
-	handler(context.Background(), containerMessage(t), slog.Default())
+	is.True(handler(context.Background(), containerMessage(t), slog.Default()) != nil)
 
 	is.Equal(brokerCalls.Load(), int64(0))
 }

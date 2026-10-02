@@ -101,6 +101,7 @@ func TestObservedAtOnBooleanGeoRelationship(t *testing.T) {
 	is := is.New(t)
 
 	m := testMeasurement()
+	m.HeaderTime, m.HasHeaderTime = m.Timestamp, true
 	m.Records = []Record{{Name: "5700", Value: new(float64(1))}}
 	m.Lat, m.Lon, m.HasLatLon = 62.3, 17.5, true
 

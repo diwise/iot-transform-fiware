@@ -9,6 +9,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
 
 // RuleStore är den persistensyta Models behöver. *rules.PgStore uppfyller
@@ -84,6 +85,9 @@ func (m *Models) Refresh(ctx context.Context) error {
 			return nil
 		}
 		if m.snap.CompareAndSwap(current, snap) {
+			for _, overlap := range transform.NewEngine(candidate).PotentialOverlaps() {
+				logging.GetFromContext(ctx).Debug("rules potentially overlap", "rule_id", overlap.FirstRuleID, "other_rule_id", overlap.SecondRuleID, "snapshot_version", v)
+			}
 			break
 		}
 	}

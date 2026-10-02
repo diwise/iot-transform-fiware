@@ -10,7 +10,7 @@ typade DateTime-värde. GeoProperty använder GeoJSON och Relationship använder
 `object`. LanguageProperty använder `languageMap`. Tal måste vara finita,
 relationer absoluta URI:er och tider RFC 3339. Enhetskoder väljs av regeln.
 
-Den avsedda grundvalideringen kontrollerar struktur, värdetyper, URI:er,
+Grundvalideringen kontrollerar struktur, värdetyper, URI:er,
 tider, geometriform och konflikter med strukturfält före brokerskrivning.
 Detta är **inte fullständig ETSI-konformitetsvalidering**: JSON-LD-context
 hämtas/expanderas inte och brokerkapabiliteter förhandlas inte. Typ- och
@@ -125,9 +125,9 @@ bn/n-encoding eller metadata-tidsstämplar. Detta används gemensamt av
 produktion och preview. SenML:s tidsupplösning följer den låsta parsern;
 tillgänglig subsekundprecision bevaras i den exponerade vyn.
 
-Etapp 5 återstår för automatisk observedAt-policy, tidsdefault/fallback och
-de äldre timestamp-genvägarnas formattering. Etapp 4:s nya råa tidsvägar
-ersätter inte den separata granskningen av vilka tider målreglerna använder.
+Etapp 5 inför den konsekventa tids-/enhetspolicyn nedan, inklusive
+timestamp-genvägarnas RFC3339Nano-formattering. Modellernas val av tidskällor
+granskas separat i etapp 8.
 Adaptrarna innehåller inga modellberoende mål-URN:er eller modellval.
 
 ## Uttryck och frånvaro
@@ -163,7 +163,7 @@ Ingen JavaScript, godtycklig Go-template eller implicit modellfunktion stöds.
 
 En saknad källa är frånvarande/null, inte ett typfel. Tom text, tom lista och
 tom mapp är saknade skrivvärden; noll och false är skrivbara. Valfri property
-utelämnas, `required` undertrycker hela entiteten. Saknad mallkälla ska följa
+utelämnas, `required` undertrycker hela entiteten. Saknad mallkälla följer
 samma policy för property-värden; i entitets-ID/typ är frånvaro ett fel.
 `when: present` uttrycker närvarokravet även för aggregat. Aggregat använder
 närvarande ingångar; felaktiga typer är fel. Sum/min/max utan ingång ger
@@ -171,6 +171,16 @@ saknad källa. Även anyTrue/allTrue utan ingång ger saknad källa och ingen
 skrivning; noll/false får väljas som uttrycklig fallback i regeln.
 Derive coalesce/firstPresent väljer första icke-tomma närvarande värde.
 Alltså finns ingen implicit fallback till en Smart Data Model.
+
+Närvaro kontrolleras före prefix/konvertering/transform och efter transform.
+En tom källa kan därför inte bli en konstgjord URI via ett prefix. Tom
+Structured och entiteter utan skrivbara attribut ger inga skrivningar,
+även med create; explicit delete/removeAttributes fungerar fortsatt.
+Sum/min/max använder samma finita numeriska konvertering som Number (inklusive
+numerisk text och bool → 0/1). AnyTrue/allTrue använder bool-/numerisk
+konvertering; fel kontrolleras för alla närvarande ingångar före reducering,
+även när en tidigare ingång redan avgör boolean-resultatet. Coalesce/firstPresent
+väljer första närvarande värdet och måltypen kontrolleras på det valda resultatet.
 
 Objekt/listor i malluttryck renderas som JSON; tal/booleska värden som
 JSON-skalärer och strängar som rå text. Identitets-/metadatagenvägar har
@@ -196,11 +206,12 @@ kontrolleras för funktionens ingångstyp även när andra ingångar är dynamis
 när alla ingångar är statiska kontrolleras även aggregatets resultat.
 Transformargument måste vara finita och division med noll avvisas oavsett källa.
 
-Dynamiska mallar ersätts inte med gissade värden vid validering. Fullständig
-validering av renderade ID:n/metadata och GeoJSON-struktur återstår i etapp 6.
+Dynamiska mallar ersätts inte med gissade värden vid validering. Renderade
+ID:n/metadata och GeoJSON-struktur kontrolleras vid körning av etapp 6:s
+gemensamma utdata-validerare.
 Structured-delvärdens konvertering och gemensam källutvärdering är verifierade
-i etapp 3.9. Aggregatens närvaro-/typfelspolicy har fortsatt egna punkter i
-etapp 5. Statisk kontroll ersätter inte dessa.
+i etapp 3.9. Etapp 5 använder gemensam närvaro-/aggregat-/konverteringspolicy
+i statisk validering och körning. Statisk kontroll ersätter inte utdata-validering.
 
 ### Verifierad konstruktionsparitet (etapp 3.9)
 
@@ -219,8 +230,9 @@ Number, Boolean, text, listor, DateTime, Geo, Relationship och LanguageMap
 behåller sina respektive typkontroller. Geo normaliseras till GeoJSON och
 Relationship till URI-sträng(ar). Delvärden kan använda `derive`; required
 saknad delkälla undertrycker hela entiteten. Nästlad Structured, `array` och
-metadata `unit`/`observedAt`/`observedBy` på delvärden avvisas. Explicit
-`observedAt` på DateTime avvisas: bibliotekets typade värde har inte det stödet.
+metadata `unit`/`observedAt`/`observedBy` på delvärden avvisas. Etapp 5 utökar
+tidsmetadata till alla attributtyper, inklusive DateTime, LanguageMap och
+Structured; DateTime behåller JSON-LD:s typade value-form.
 Geo använder regelns target även för latlon och utan explicit observationstid.
 
 Referensfel pekar ut regel, entitet, attributväg och uttryck; körningsfel bär
@@ -228,11 +240,10 @@ motsvarande kontext även för aggregatingångar och Structured. Ursprungliga
 fel bevaras med wrapping. Felkontexten återger inte hela källpayloads.
 
 Detta verifierar konstruktionernas källupplösning och konvertering. Etapp 5
-återstår för den fastställda policyn om tomma värden, saknade property-mallar,
-aggregat utan ingångar, dynamiska aggregattypfel och tidskällor. Exempelvis
-ger saknad property-mallkälla fortfarande körningsfel och anyTrue/allTrue
-utan ingångar kan fortfarande ge false om `when: present` inte anges.
-Fullständig dynamisk NGSI-LD-utdatavalidering återstår i etapp 6.
+slutför policyn för tomma värden, saknade property-mallar, aggregat utan
+ingångar, dynamiska aggregattypfel och tidskällor enligt avsnitten här.
+Etapp 6 validerar den faktiska serialiserade NGSI-LD-utdatan enligt den
+begränsade profil som beskrivs nedan.
 
 ### Regeluppsättningens ID-/typkonflikter
 
@@ -275,8 +286,10 @@ tomt/osatt matchar alla portar och portlösa observationer, `"0"`, `"1"` etc.
 matchar den exakta portsträngen. En portspecifik regel får ett extra
 specificitetspoäng och vinner över en i övrigt likadan generell regel.
 Lifecycle-regler kräver explicit created/updated/deleted, inget wildcard.
-Things kräver exakt en dokumenterad eventkälla. Relationens målsida måste
-kunna avgränsas separat från from-sidan.
+Things kräver exakt en dokumenterad eventkälla. `match.device` avvisas på
+things eftersom ingen device-identitet finns där. `match.toType` avgränsar
+relationens råa toThingType separat från from-sidan och är endast giltigt
+för things.v1.relations. Det jämförs exakt och använder inte målens subType.
 
 En regel får producera flera entiteter i deklarerad ordning. Namngivna
 entitetsreferenser måste avse ett tidigare deklarerat ID; själv-/framåt-
@@ -285,6 +298,129 @@ dess eget redan renderade ID. Alla uttrycksplatser har samma referensregler.
 Matchande regler kombineras inte. Ingen match ger ett förklarbart skip utan
 broker-/tokenkontakt. En match utan skrivbara properties ger inga skrivningar.
 Överlapp/skuggning ska vara diagnostik, inte falska konflikter mellan tenants.
+
+Motorns `PotentialOverlaps` rapporterar konservativa par utan att avvisa
+överlapp; `ExplainMatch` anger varje faktiskt matchande regels prioritet,
+specificitet, stabila index, metadata och skuggningsorsak (lägre prioritet,
+lägre specificitet eller senare ordning). Snapshot-omladdning loggar potentiella
+överlapp på debug; measurement-vägen loggar förlorande matchningar med regel-ID
+och snapshotversion. Ett potentiellt överlapp bevisar inte global skuggning.
+Diagnostik i aktiv preview/GUI följer separat i etapp 8.
+
+## Tidsmetadata (etapp 5)
+
+Default observedAt är observationens egen tid. Measurements använder
+resursens tid med objektheader som fallback, aldrig meddelande-/väggtid som
+fallback. Things-värden läser metadata från samma `values.<property>.value`-
+post som värdet. Konstanter, namn, platsmetadata och rena ID-referenser får
+ingen implicit observedAt. Alla attributtyper skriver samma valda tid.
+
+| observedAt | Measurement | Things |
+| --- | --- | --- |
+| osatt | egen resurstid/header-fallback | det upplösta värdets egen observedAt |
+| record | upplöst resurstid/header-fallback | upplöst värdes egen observedAt |
+| header | objektheaderns bastid, om tillgänglig | values: max observedAt; relation/lifecycle: changedAt |
+| message | MessageAccepted.timestamp | values: event.publishedAt; relation/lifecycle: changedAt (ingen annan publiceringstid finns i kontraktet) |
+| field:<väg> | record-tid via kortnamn eller explicit tidsfält | explicit tidsfält |
+| none | ingen tid | ingen tid |
+
+`timestamp: true` använder message-tiden. `{{timestamp}}` bevarar tidigare
+källgenvägens betydelse: measurement-meddelandets timestamp eller things
+konsumenttid (max observedAt/changedAt), nu med full precision och tomt vid
+saknad tid. De explicita källvyerna gör observation/publicering/förändring
+separat valbara som DateTime-värden och observedAt.
+
+Fältmallar bevarar källmetadata; firstPresent tar metadata från sitt valda
+argument, safeURI från sitt argument. Mallar med flera mätuttryck använder
+senaste ingångstid och markerar blandade enheter. Numeriska aggregat och
+Structured använder senaste närvarande ingångstid; derive coalesce/firstPresent
+den valda ingångens tid. Metadata via `name` får ingen implicit aggregattid.
+Explicit observedAt kan alltid välja annan dokumenterad tidskälla. Saknad/zero
+tid utelämnas; ett närvarande felaktigt field-tidsvärde ger fel. Alla tider
+bevarar tillgänglig RFC3339Nano-precision, inklusive relativ SenML-tid.
+
+## Enheter och explicit konvertering (etapp 5)
+
+Källenheter är åtkomliga i observationsvyer och följer värdet även genom
+fältmallar och aggregat. Numeriska aggregat kräver ekvivalenta kända enheter;
+omärkta konstanta ingångar behandlas som författarens uttryckliga skalärer.
+AnyTrue/allTrue ger logiska, dimensionslösa resultat (C62 när enheten prövas),
+inte temperatur-/tryckvärden. Skalära numeriska/boolean-reducerare avvisas
+statiskt på måltyper som de aldrig kan producera.
+Ingen unitCode skrivs automatiskt från källenheten: `unit` eller convert.to
+anger målens kod. En känd källenhet får inte märkas om utan ekvivalens eller
+explicit `convert`; blandade mall-enheter kan inte märkas om/konverteras.
+
+Ekvivalenta stavningar/koder är generella: Cel/°C→CEL, K→KEL, ppm/PPM→59,
+%/pct/%RH→P1, Pa→PAL, kPa→KPA, m→MTR, mm→MMT, m3/m³→MTQ, S→MHO,
+1→C62. Okända koder är endast ekvivalenta vid exakt likhet. Detta är en liten
+kodaliaslista, inte fullständig fysikalisk enhets- eller SDM-validering.
+
+`convert: {from: Cel, to: KEL, offset: 273.15}` applicerar
+`värde * factor + offset` före befintliga transformsteg; factor default 1,
+offset default 0. NumberArray konverterar varje element utan att mutera
+källan eller regeluppsättningen. From/to krävs, numeriska argument och
+resultat måste vara finita, och olika icke-ekvivalenta enheter kräver en
+icke-identisk numerisk omvandling. Känd faktisk enhet måste stämma med from;
+vid saknad källenhet är from författarens uttryckliga enhetsdeklaration.
+Författaren ansvarar för fysisk korrekthet hos factor/offset. Om unit också
+anges måste den vara ekvivalent med to; annars används to som unitCode.
+Konvertering stöds endast på Number/NumberArray och kan användas på
+Structured-delvärden (som fortsatt inte skriver attributmetadata).
+
+Pa→KPA i standardregeln deklareras nu som explicit faktor 0.001; tankreglerna
+avgränsar explicit toType till greenhouse. Inga sådana modellval finns i motorn.
+
+## Implementerad NGSI-LD-grundvalidering (etapp 6)
+
+Motor och offline-preview använder samma `BuildEntity`/`ValidateEntityWrites`.
+Kontrollen bygger bibliotekets verkliga normaliserade JSON, utan att hämta
+context eller göra SDM-uppslag. Produktionsgrindarna verifierar även effektiv
+fallback-context före broker/token. Skrivarens sista grind kontrollerar hela
+batchen före första operationen, så ett senare strukturfel inte ger en
+delvis exekverad batch. Runtime header-kontroll gäller också delete/remove.
+Detta förhindrar inte partiella nätverks-/brokersvar efter godkänd validering;
+deras leveransutfall och felklassificering hör till etapp 7.
+
+- Entitets-ID:n och referenser kräver absoluta URI:er med giltig percentkodning,
+  UTF-8 och utan otillåtna tecken/whitespace/control. URI-schemans semantik
+  (utöver HTTP(S)-context) verifieras inte fullständigt.
+- Typ-/attributtermer är Unicode-bokstäver/underscore först, följt av
+  bokstäver/siffror/underscore/bindestreck/punkt, eller absoluta URI:er.
+  JSON-LD-keywords och NGSI-LD-strukturfältskollisioner avvisas.
+- Context väljs via regeln, därefter deployment-fallback, därefter bibliotekets
+  core-context. Regeln tillåter endast en HTTP(S)-URL utan credentials.
+  Biblioteket serialiserar denna singleton som en enelementsarray; det är inte
+  stöd för användardefinierade context-arrayer eller inline-context.
+- Property skriver scalar number/text/bool, homogen tal-/textlista, Structured
+  JSON eller exakt typad DateTime `{"@type":"DateTime","@value":"..."}`.
+  GeoProperty skriver GeoJSON, Relationship `object` som URI eller platt URI-lista,
+  LanguageProperty en språk-till-text-mapp (språktaggsyntax/`@none`).
+- Tal måste vara finita, även i listor och Structured. Datum/observedAt kräver
+  strikt RFC3339 med punkt som decimaltecken och högst nio decimaler; Go:s
+  datumvalidering används efter syntaxtest. Leap seconds ingår inte i profilen.
+- ObservedAt stöds på alla attributtyper. ObservedBy kräver en skalär URI-
+  Relationship på numerisk Property. UnitCode är en icke-tom kod utan whitespace/
+  control på numeriskt värde/lista; enhetsreglerna från etapp 5 gäller fortsatt.
+  Okända attributtyper/metadata (t.ex. datasetId) avvisas.
+- GeoJSON stöder Point/MultiPoint/LineString/MultiLineString/Polygon/MultiPolygon,
+  faktiska finita numeriska koordinater (inte strängar/bool), 2D eller 3D med
+  konsekvent dimension i geometrin, WGS84 lon ±180 och lat ±90. LineString har
+  minst två positioner; polygon har minst en ring, minst fyra positioner per
+  ring och identiska första/sista positioner inklusive eventuell höjd.
+  Multigeometrier måste ha minst en komponent och samma regler per komponent.
+  Geo-utdatan normaliseras till type/coordinates; bbox/foreign members behålls
+  endast i den råa källvyn, inte i målens GeoProperty.
+
+Begränsningar: ingen context-expansion/termupplösning, språkregisterkontroll,
+full URI-schema-/ETSI-/SDM-konformitet, orientering/topologi/självskärning/
+hål-inneslutning för geometrier, GeometryCollection, datasetId, VocabProperty,
+ListProperty/ListRelationship, struktur-/boolean-/date-arrayer som attribut,
+avancerade attributinstanser, inbäddad context eller temporal lagring.
+Structured-delvärden är rå JSON och saknar egen NGSI-LD-attributmetadata.
+`required` styr frånvaro och undertryckning, inte obligatoriska fält i en viss
+Smart Data Model. Nya generiska modelltyper/attribut accepteras utan modellnamn
+i validatorn, men standardreglernas modellkonformitet granskas separat i etapp 8.
 
 ## Utfall
 
@@ -306,6 +442,80 @@ Transportens faktiska retry-/dead-letter-beteende ska verifieras i den låsta
 messaging-versionen innan handlers ändras; tabellen bestämmer klassificering,
 inte obevisade leveransgarantier. Replay av enskilda operationer kan vara
 idempotent utan att sena händelser är ordningsoberoende korrekta.
+
+## Brokerskrivning och leveransutfall (etapp 7)
+
+Tjänstens produktionsklient är nu en smal skrivklient i transform-modulen.
+Den återanvänder bibliotekets entity/fragment/result-typer men läser HTTP-
+status och body själv. Den låsta brokerklientens MergeEntityResult innehåller
+inga fält och NewMergeEntityResult ignorerar 207-body; den kan därför inte
+bevisa full framgång. HTTPError och PartialUpdateError bevarar bounded body
+(max 1 MiB) och UpdateResult för diagnostik, men Error-strängar loggar endast
+status/antal och inte body, tokens eller credentials.
+
+| Regeloperation | HTTP och framgång | Omtag |
+| --- | --- | --- |
+| create | POST /ngsi-ld/v1/entities; 201 lyckas, 409 redan finns är OK | ändrar inte en redan existerande entitet |
+| merge-or-create | PATCH /ngsi-ld/v1/entities/{escapedId}; 204 eller verifierad 207 lyckas; 404 följs av POST | POST 409-race följs av exakt en PATCH, ingen oändlig lokal retry |
+| removeAttributes | samma PATCH med namngivna null-värden; 404 är OK | namngiven rensning upprepas idempotent |
+| delete | DELETE /ngsi-ld/v1/entities/{escapedId}; 204 eller 404 lyckas | saknad entitet är redan raderad |
+
+PATCH-null-rensningen är tjänstens dokumenterade broker-/facadeprofil,
+inte ett påstående om full ETSI-standardkonformitet för attribut-delete.
+Den kräver en broker/facade som stödjer denna operation. Standardens separata
+DELETE-attribute-endpoint implementeras inte av denna profil. Content-Type
+för JSON-skrivningar är application/ld+json, tenant och user-agent bevaras,
+och förvald/regelvald singleton-context skickas enligt etapp 6.
+
+207 måste vara ett entydigt UpdateResult-JSON-dokument med updated/notUpdated.
+Tomt, malformed/okänt schema, tomma/dubbla updated-namn eller ofullständig
+bekräftelse ger beroendefel, inte framgång. Alla-succeeded 207 kräver lika
+många unika bekräftelser som skickade attribut; JSON-LD-termexpansion hämtas
+inte för att jämföra compact mot expanded namn. Minst ett notUpdated ger
+PartialUpdateError med bevarade uppdaterade/misslyckade attribut/reasons.
+Reason-text matchas inte heuristiskt mot permanentfel; delutfall är retrybart.
+
+Pure indata-/regel-/transformations-/utdatafel markeras messaging.Permanent.
+Broker HTTP 400/422/413 är irreparabla requestfel, förutom NonexistentTenant
+som är ett beroende-/konfigurationsfel. 401/403/408/429/5xx, transport-, token-,
+timeout-, okända status-/beroendefel och partiella svar förblir tillfälliga.
+Skippad tenant/no-match/inga skrivningar ger nil. Deployment-fallback-context-
+fel behandlas som beroendefel, inte permanent skada i varje sensorhändelse.
+
+Messaging-kontraktet verifierades i den låsta
+v0.0.0-20260910052156-098a088f6b4f, inklusive dess egna tester:
+nil ackas; Permanent reject(false) går till slutlig hook/DLX om kökonfiguration
+finns; temporary återpubliceras med samma routing, identitet och spårning,
+inkrementerad x-diwise-attempt, confirm-before-ack. Default är fem totala
+försök; vid slutlig budget rejectas leveransen. Stopp/misslyckad retry-publicering
+nackar med requeue och behåller försöksnumret. DLX-kö/retention är driftkonfiguration,
+inte en garanti som transform-tjänsten skapar. Flera handlers kombineras med
+permanent dominans i biblioteket; transform undviker att producera blandat
+data-/beroendeutfall inom samma measurement-leverans genom att transformera
+och validera alla observationer före I/O och sedan avbryta på första skrivfel.
+
+Skrivordning är stabil. WriteBatchError bevarar antal helt slutförda tidigare
+skrivningar, misslyckad operation/regelmetadata och den underliggande orsaken,
+inklusive eventuell attr-partialitet i den misslyckade operationen. Replay
+spelar om leveransen från början; PATCH-merge, create-if-absent, rensning och
+delete konvergerar för samma isolerade operation. Ingen persistent dedup,
+recency/revisionsspärr eller garanti mot sena/omordnade händelser införs.
+En lyckad tidigare skrivning rollbackas inte av ett senare HTTP-fel.
+
+NGSI_CB_TIMEOUT (default 10s) och OAUTH2_TOKEN_TIMEOUT (default 5s) är positiva
+Go-durationer. Brokerbudget omfattar hela HTTP-operationen, inklusive eventuell
+tokenförberedelse; token har också egen kortare budget. Token refresh/cache och
+väntan på cache-/entity-lås kan avbrytas av aktuell request-context. Cache delar
+token för samma client credentials och invalidieras efter broker 401; ingen
+anonymous fallback vid tokenfel. OAuth-TLS-bool/default bevaras. Fast sleep efter
+merge är borttagen: HTTP-svaret är synkron operationsgräns, inte ett bevis på
+brokerintern läskonsistens. Standard HTTP-redirect följs inte för skriv-/tokenanrop.
+
+Handler/apply/HTTP/token-spans följer samma parent-context och fel sätts på
+operationsspan. OTel HTTP-transport förmedlar aktiv trace-context. Loggar/OTel-
+attribut bär tenant, käll-/entitets-ID, regel-ID/revision/snapshot och operation;
+producentens eventId tillförs som message_id där det finns. Inga rutinmässiga
+fulla sensorpayloads, tokens, credentials eller råa response-body loggas.
 
 ## Verifieringsstatus 2026-09-30
 

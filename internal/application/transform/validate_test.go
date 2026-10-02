@@ -238,7 +238,7 @@ func TestValidateTemplateVariables(t *testing.T) {
 	r.Entities[0].Properties[0].Source = Source{Value: "urn:ngsi-ld:X:{{safeURI(nope)}}"}
 	is.NoErr(Validate([]Rule{r}))
 	_, err = NewEngine([]Rule{r}).Transform(Measurement{DeviceID: "stable-id"})
-	is.True(err != nil)
+	is.NoErr(err) // saknad valfri property-mallkälla ger skip
 }
 
 func TestValidateAcceptsEveryKnownFunction(t *testing.T) {

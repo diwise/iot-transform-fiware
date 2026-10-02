@@ -46,6 +46,8 @@ func defaultFlags() flagMap {
 		controlPort:      "8000",
 		servicePort:      "8080",
 		contextbrokerUrl: "http://context-broker",
+		brokerTimeout:    "10s",
+		tokenTimeout:     "5s",
 
 		oauth2ClientId:     "",
 		oauth2ClientSecret: "",
@@ -99,7 +101,9 @@ func main() {
 	messenger, err := messaging.Initialize(ctx, messengerConfig)
 	exitIf(err, logger, "failed to init messenger")
 
-	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags))
+	brokerBudget, tokenBudget, err := timeoutBudgets(flags)
+	exitIf(err, logger, "invalid broker/token timeouts")
+	factory := contextbroker.NewContextBrokerClientFactory(ctx, flags[contextbrokerUrl], serviceName, serviceVersion, flags[oauth2ClientId], flags[oauth2ClientSecret], flags[oauth2TokenUrl], oauthInsecure(flags), contextbroker.WithTimeouts(brokerBudget, tokenBudget))
 
 	policies, err := os.Open(flags[policiesFile])
 	exitIf(err, logger, "unable to open opa policy file")
@@ -270,6 +274,8 @@ func parseExternalConfig(ctx context.Context, flags flagMap) (context.Context, f
 	flags[controlPort] = envOrDef(ctx, "CONTROL_PORT", flags[controlPort])
 	flags[servicePort] = envOrDef(ctx, "SERVICE_PORT", flags[servicePort])
 	flags[contextbrokerUrl] = envOrDef(ctx, "NGSI_CB_URL", flags[contextbrokerUrl])
+	flags[brokerTimeout] = envOrDef(ctx, "NGSI_CB_TIMEOUT", flags[brokerTimeout])
+	flags[tokenTimeout] = envOrDef(ctx, "OAUTH2_TOKEN_TIMEOUT", flags[tokenTimeout])
 	flags[oauth2TokenUrl] = envOrDef(ctx, "OAUTH2_TOKEN_URL", flags[oauth2TokenUrl])
 	flags[oauth2ClientId] = envOrDef(ctx, "OAUTH2_CLIENT_ID", flags[oauth2ClientId])
 	flags[oauth2ClientSecret] = envOrDef(ctx, "OAUTH2_CLIENT_SECRET", flags[oauth2ClientSecret])
@@ -315,6 +321,18 @@ func parseLogLevel(level string) slog.Level {
 	default:
 		return slog.LevelDebug
 	}
+}
+
+func timeoutBudgets(flags flagMap) (time.Duration, time.Duration, error) {
+	broker, err := time.ParseDuration(flags[brokerTimeout])
+	if err != nil || broker <= 0 {
+		return 0, 0, fmt.Errorf("NGSI_CB_TIMEOUT must be a positive duration")
+	}
+	token, err := time.ParseDuration(flags[tokenTimeout])
+	if err != nil || token <= 0 {
+		return 0, 0, fmt.Errorf("OAUTH2_TOKEN_TIMEOUT must be a positive duration")
+	}
+	return broker, token, nil
 }
 
 func exitIf(err error, logger *slog.Logger, msg string, args ...any) {

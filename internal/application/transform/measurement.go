@@ -2,6 +2,7 @@ package transform
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -60,7 +61,7 @@ func (m Measurement) Variables() map[string]string {
 		"env":        m.Env,
 		"port":       m.Port,
 		"tenant":     m.Tenant,
-		"timestamp":  m.Timestamp.UTC().Format(rfc3339),
+		"timestamp":  sourceTime(m.Timestamp),
 	}
 }
 
@@ -87,6 +88,26 @@ func (m Measurement) MatchInfo() MatchInfo {
 // Resolve slår upp en egenskaps värdekälla (resource + valfritt object,
 // eller metadata via name).
 func (m Measurement) Resolve(p Property) (resolvedValue, error) {
+	if p.Field != "" {
+		rv := resolveField(m.sourceFields(), p.Field)
+		if rv.found {
+			steps, _ := parsePath(p.Field)
+			if !rv.hasTime && m.HasHeaderTime && !m.HeaderTime.IsZero() && len(steps) == 3 && steps[0].key == "records" && steps[1].indexed && steps[2].key == "value" && steps[1].index < len(m.Records) {
+				if _, err := strconv.Atoi(m.Records[steps[1].index].Name); err == nil {
+					rv.time, rv.hasTime = m.HeaderTime, true
+				}
+			}
+			return rv, nil
+		}
+		if r, ok := m.findByRecordName(p.Field); ok {
+			if _, err := strconv.Atoi(r.Name); err == nil {
+				return m.Resolve(Property{Resource: r.Name})
+			}
+			value, err := rawValue(p, r)
+			return resolvedValue{value: value, found: present(value)}, err
+		}
+		return rv, nil
+	}
 	r, ok := m.findRecord(p)
 	if !ok {
 		return resolvedValue{}, nil
@@ -97,7 +118,11 @@ func (m Measurement) Resolve(p Property) (resolvedValue, error) {
 		return resolvedValue{}, err
 	}
 
-	return resolvedValue{value: v, time: r.Time, hasTime: r.HasTime, found: true}, nil
+	rv := resolvedValue{value: v, time: r.Time, hasTime: r.HasTime && !r.Time.IsZero(), found: present(v), unit: r.Unit}
+	if !rv.hasTime && p.Resource != "" && m.HasHeaderTime && !m.HeaderTime.IsZero() {
+		rv.time, rv.hasTime = m.HeaderTime, true
+	}
+	return rv, nil
 }
 
 func (m Measurement) ResolveTime(path string) (time.Time, bool) {
@@ -143,7 +168,7 @@ func (m Measurement) sourceFields() map[string]any {
 		case r.String != nil:
 			fields["value"] = *r.String
 		}
-		if r.HasTime {
+		if r.HasTime && !r.Time.IsZero() {
 			fields["observedAt"] = r.Time.UTC().Format(time.RFC3339Nano)
 		}
 		records[i] = fields
@@ -155,7 +180,7 @@ func (m Measurement) sourceFields() map[string]any {
 	if !m.Timestamp.IsZero() {
 		fields["message"] = map[string]any{"timestamp": m.Timestamp.UTC().Format(time.RFC3339Nano)}
 	}
-	if m.HasHeaderTime {
+	if m.HasHeaderTime && !m.HeaderTime.IsZero() {
 		fields["header"] = map[string]any{"observedAt": m.HeaderTime.UTC().Format(time.RFC3339Nano)}
 	}
 	return fields

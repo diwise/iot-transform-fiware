@@ -13,6 +13,7 @@ func TestFirstPresentFallsBackWhenFieldMissing(t *testing.T) {
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observed:{{firstPresent(current.ref, id)}}", Type: "Observed",
+		Properties: []Property{{Target: "label", Type: TypeText, Const: "identity test"}},
 	}}}
 
 	writes, err := NewEngine([]Rule{rule}).Transform(relationThing())
@@ -28,6 +29,7 @@ func TestFirstPresentUsesFieldWhenPresent(t *testing.T) {
 
 	rule := Rule{Match: Match{Kind: KindThing, Type: "Sewer"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Observed:{{firstPresent(current.ref, id)}}", Type: "Observed",
+		Properties: []Property{{Target: "label", Type: TypeText, Const: "identity test"}},
 	}}}
 
 	writes, err := NewEngine([]Rule{rule}).Transform(th)
@@ -47,6 +49,7 @@ func measurementWithResources(names ...string) Measurement {
 func resourceRule(resource string) Rule {
 	r := validRule()
 	r.Match = Match{Kind: KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Resource: resource}
+	r.Entities[0].Properties[0].Resource = resource
 	return r
 }
 
@@ -73,13 +76,13 @@ func TestValidateRejectsKindSpecificMatchFields(t *testing.T) {
 	thingWithObject := Rule{Match: Match{Kind: KindThing, Object: "urn:oma:lwm2m:ext:3303"}, Entities: []Entity{validEntity()}}
 	is.True(Validate([]Rule{thingWithObject}) != nil)
 
-	// device är tillåtet för båda enligt planen (entiteten använder en
+	// device kan inte tillhandahållas av things (entiteten använder en
 	// kind-neutral const-källa så att endast match-fältet prövas).
 	thingWithDevice := Rule{Match: Match{Kind: KindThing, Event: EventThingsV1Values, Device: "dev-1"}, Entities: []Entity{{
 		ID: "urn:ngsi-ld:Thing:x", Type: "Thing",
 		Properties: []Property{{Target: "name", Type: TypeText, Const: "x"}},
 	}}}
-	is.NoErr(Validate([]Rule{thingWithDevice}))
+	is.True(Validate([]Rule{thingWithDevice}) != nil)
 }
 
 func TestValidateRejectsObservedByOnNonNumber(t *testing.T) {

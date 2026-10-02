@@ -37,7 +37,7 @@ func TestRuleSetMatchConflicts(t *testing.T) {
 		{"source wildcard", thing(EventThingsV1Values, "", "", false), thing(EventThingsV1Values, "Source", "", false), true},
 		{"relation removal", thing(EventThingsV1Relations, "Source", "", false), thing(EventThingsV1Relations, "Source", "", true), false},
 		{"lifecycle", thing(EventThingsV1Lifecycle, "Source", "created", false), thing(EventThingsV1Lifecycle, "Source", "deleted", false), false},
-		{"empty lifecycle is exact", thing(EventThingsV1Lifecycle, "Source", "", false), thing(EventThingsV1Lifecycle, "Source", "created", false), false},
+		{"updated lifecycle is exact", thing(EventThingsV1Lifecycle, "Source", "updated", false), thing(EventThingsV1Lifecycle, "Source", "created", false), false},
 		{"different resources can coexist", Match{Kind: KindMeasurement, Resource: "5700"}, Match{Kind: KindMeasurement, Resource: "5701"}, true},
 		{"sensor case folding", Match{Kind: KindMeasurement, SensorType: "Sensor"}, Match{Kind: KindMeasurement, SensorType: "sensor"}, true},
 		{"different sensors", Match{Kind: KindMeasurement, SensorType: "First"}, Match{Kind: KindMeasurement, SensorType: "Second"}, false},
@@ -59,6 +59,7 @@ func TestRuleSetMatchConflicts(t *testing.T) {
 		{"port", func(m *Match, v string) { m.Port = v }, false},
 		{"subType", func(m *Match, v string) { m.SubType = v }, true},
 		{"relation", func(m *Match, v string) { m.Relation = v }, true},
+		{"toType", func(m *Match, v string) { m.ToType = v }, true},
 	} {
 		a, b := m(""), m("")
 		if filter.thing {

@@ -93,6 +93,9 @@ func (p Property) validateFunctions() error {
 		if !validDeriveFns[p.Derive.Fn] {
 			return fmt.Errorf("unknown derive.fn %q", p.Derive.Fn)
 		}
+		if p.Derive.Fn != FnCoalesce && p.Derive.Fn != FnFirstPresent && p.Type != TypeNumber && p.Type != TypeText && p.Type != TypeBoolean {
+			return fmt.Errorf("derive.%s returns a scalar convertible only to Number, Text or Boolean", p.Derive.Fn)
+		}
 		if len(p.Derive.Of) == 0 {
 			return errors.New("derive requires at least one source")
 		}

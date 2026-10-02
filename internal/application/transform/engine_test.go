@@ -11,6 +11,7 @@ func measurementRule(id, device, sensorType, object string) Rule {
 	r := validRule()
 	r.Match = Match{Kind: KindMeasurement, Device: device, SensorType: sensorType, Object: object}
 	r.Entities[0].ID = id
+	r.Entities[0].Properties = []Property{{Target: "label", Type: TypeText, Const: "match-test"}}
 	return r
 }
 
@@ -69,8 +70,8 @@ func TestEngineRendersTemplatesAndEntityReferences(t *testing.T) {
 	r := Rule{
 		Match: Match{Kind: KindMeasurement},
 		Entities: []Entity{
-			{Name: "device", ID: "urn:ngsi-ld:Device:{{deviceID}}", Type: "Device"},
-			{Name: "observed", ID: "urn:ngsi-ld:TemperatureObserved:{{entities.device.id}}", Type: "TemperatureObserved"},
+			{Name: "device", ID: "urn:ngsi-ld:Device:{{deviceID}}", Type: "Device", Properties: []Property{{Target: "label", Type: TypeText, Const: "device"}}},
+			{Name: "observed", ID: "urn:ngsi-ld:TemperatureObserved:{{entities.device.id}}", Type: "TemperatureObserved", Properties: []Property{{Target: "label", Type: TypeText, Const: "observed"}}},
 		},
 	}
 
@@ -87,7 +88,7 @@ func TestEngineSafeURI(t *testing.T) {
 
 	r := Rule{
 		Match:    Match{Kind: KindMeasurement},
-		Entities: []Entity{{ID: "urn:ngsi-ld:Thing:{{safeURI(deviceID)}}", Type: "Thing"}},
+		Entities: []Entity{{ID: "urn:ngsi-ld:Thing:{{safeURI(deviceID)}}", Type: "Thing", Properties: []Property{{Target: "label", Type: TypeText, Const: "identity-test"}}}},
 	}
 
 	m := testMeasurement()

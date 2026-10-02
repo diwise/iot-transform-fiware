@@ -8,6 +8,8 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/senml"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
+	"go.opentelemetry.io/otel"
 )
 
 // SensorTypeResolver slår upp en enhets sensortyp.
@@ -53,8 +55,16 @@ func (d *DynamicTransformer) Matched(ctx context.Context, msg events.MessageAcce
 // Om uppslaget misslyckas fortsätter matchningen utan sensortyp, så att
 // regler som bara matchar på object/env fungerar även när device-management
 // är otillgängligt.
-func (d *DynamicTransformer) Transform(ctx context.Context, msg events.MessageAccepted) ([]transform.EntityWrite, error) {
-	return d.engine.Transform(measurementFromMessage(msg, d.resolveSensorType(ctx, msg)))
+func (d *DynamicTransformer) Transform(ctx context.Context, msg events.MessageAccepted) (writes []transform.EntityWrite, err error) {
+	ctx, span := otel.Tracer("iot-transform-fiware/measurements").Start(ctx, "transform-measurement")
+	defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
+	in := measurementFromMessage(msg, d.resolveSensorType(ctx, msg))
+	for _, diagnostic := range d.engine.ExplainMatch(in) {
+		if !diagnostic.Winner {
+			logging.GetFromContext(ctx).Debug("matched rule shadowed", "rule_id", diagnostic.RuleID, "priority", diagnostic.Priority, "specificity", diagnostic.Specificity, "reason", diagnostic.Reason, "snapshot_version", diagnostic.SnapshotVersion)
+		}
+	}
+	return d.engine.Transform(in)
 }
 
 // measurementFromMessage normaliserar ett scopat meddelande till motorns

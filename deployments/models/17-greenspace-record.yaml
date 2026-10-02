@@ -12,7 +12,7 @@ rules:
             unit: KPA
             observedAt: header
             observedBy: "urn:ngsi-ld:Device:{{id}}"
-            transform: [{ op: divide, value: 1000 }]
+            convert: { from: Pa, to: KPA, factor: 0.001 }
           - { target: location, type: Geo, latlon: true }
           - { target: dateObserved, type: DateTime, timestamp: true }
   - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3327", env: soil }

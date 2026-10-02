@@ -180,8 +180,7 @@ kind-kontroller:
 - `LanguageMap` skriver `LanguageProperty` (`field:` mot strangmapp eller
   `const:` med mapp; tom mapp = saknad kalla). `transform`/`derive`
   avvisas pa `LanguageMap` i v1.
-- `observedAt` hedras pa `Boolean`, `Geo` och `Relationship` vid explicit
-  konfigurering (utan config ar output oforandrad).
+- `observedAt` stöds konsekvent på samtliga attributtyper.
 - Kallbackning per kind: `resource`/`object`/`env`/`name` forbjuds pa
   thing-regler, `field`/`ref` pa matvardesregler (galler aven `Derive.Of`
   och subproperties); `LanguageMap` kraver `field` eller `const`.
@@ -190,13 +189,41 @@ kind-kontroller:
   som aggregatingångar. `object`/`env` kräver `resource` eller `name`.
   Ingångens `prefix` används före aggregatet; propertyns prefix efteråt.
   Prefix kräver text eller en lista med enbart text.
+- Regelns `priority` (default 0, även negativ tillåts) väger före specificitet
+  och stabil ordning. Env och port ger båda specificitetspoäng.
+  `match.toType` avgränsar relationens råa måltyp; lifecycle kräver explicit
+  created/updated/deleted. Device-filter avvisas för things.
+- Saknad/null/tom text, lista eller mapp ger ingen skrivning. Noll och false
+  är närvarande. Required undertrycker entiteten; tom Structured och aggregat
+  utan ingångar skriver inte. Alla närvarande aggregatingångars typer prövas
+  utan att fel ignoreras. Measurement-broker/token förbereds först efter att
+  transformationen producerat skrivningar.
+- Default `observedAt` följer värdets egen observationstid, med measurement-
+  header som fallback. Konstanter och namn får ingen implicit tid. `record`,
+  `header`, `message`, `field:<väg>` och `none` väljer tid explicit och fungerar
+  på alla attributtyper med RFC3339Nano-precision. Values-eventets message-tid
+  är publiceringstid, separat från dess observationstider.
+- Kända källenheter får inte märkas om utan ekvivalent kod eller explicit
+  `convert: {from: Cel, to: KEL, offset: 273.15}`. Factor default 1, offset
+  default 0; omvandlingen sker före transform och stöder Number/NumberArray.
+  Författaren ansvarar för fysisk korrekthet. Se enhets- och tidstabeller i
+  `assets/docs/transform-contract.md` för detaljer och avgränsningar.
 - Structured-delvärden konverteras till deklarerad typ efter transform/prefix,
   och kan använda `derive`. De är råa JSON-värden, inte nästlade NGSI-LD-attribut:
   `unit`, `observedAt`, `observedBy`, `array` och nästlad Structured avvisas.
-  Explicit `observedAt` på DateTime avvisas också eftersom det inte stöds.
+  Attributets egen observedAt stöds även för Structured och DateTime.
 - Validerings- och körningsfel anger regel, entitet och relevant
-  attribut-/uttryckskontext. Kvarvarande närvaro-, aggregat- och tidsarbete
-  beskrivs i `TRANSFORM.md` etapp 5.
+  attribut-/uttryckskontext. Potentiella regelöverlapp och faktiskt skuggade
+  measurement-matchningar loggas på debug med regel-ID och snapshotversion.
+  Aktiv preview-diagnostik beskrivs separat i `TRANSFORM.md` etapp 8.
+- Motor, preview och brokerskrivare validerar faktisk serialiserad NGSI-LD-JSON
+  med samma grundprofil. ID/typ/attribut, metadata, datum, finita tal och URI-
+  referenser kontrolleras; hela batchen prövas före första brokeroperationen.
+  Effektiv context kontrolleras också före broker/tokenförberedelse.
+- GeoJSON kräver faktiska numeriska 2D/3D-koordinater med konsekvent dimension,
+  WGS84 lon/lat-intervall och rätt nästling/minsta storlek/slutna polygonringar.
+  Topologi, context-expansion och full ETSI-/SDM-konformitet ingår inte.
+  Profil och begränsningar finns i `assets/docs/transform-contract.md`.
 - Things-adaptrarna delar descriptorvy för values, lifecycle och relationer:
   `thing` respektive `relation.from`/`relation.to`. `geometry` bevarar rå
   GeoJSON för både Point och Polygon; `location` är Point-genvägen.
@@ -233,6 +260,16 @@ kräver icke-tom tenant inom egna auktoriserade tenants; globala regler
 administreras via seed-filer och ger 403 via API. `match.tenant` är ett
 matchningsvillkor, inte i sig auktorisering — ägarskapet upprätthålls i
 handlers, lagret är tenant-okunnigt med flit.
+
+### Broker- och tokenbudgetar
+
+- `NGSI_CB_TIMEOUT`: positiv Go-duration, default `10s` per brokeroperation.
+- `OAUTH2_TOKEN_TIMEOUT`: positiv Go-duration, default `5s` för token/refresh-väntan.
+
+Token och broker använder meddelandets context; klienter och token-cache
+återanvänds. HTTP 207 med misslyckade attribut rapporteras med delutfall,
+inte som full framgång. Handlerklassificering, HTTP-operationsprofil och
+replay-/DLX-gränser beskrivs i `assets/docs/transform-contract.md` etapp 7.
 
 ## Configuration files
 Modeller seedas fran `MODELS_DIR` (`/opt/diwise/config/models`) i

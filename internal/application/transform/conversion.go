@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 )
 
 // convertValue defines the same target-type conversion for attributes and
@@ -40,7 +39,7 @@ func convertValue(p Property, raw any) (any, error) {
 		if !ok {
 			return invalid("date time")
 		}
-		if _, err := time.Parse(time.RFC3339Nano, v); err != nil {
+		if err := validateTimestamp(v); err != nil {
 			return nil, fmt.Errorf("property %s: invalid date time %q: %w", p.Target, v, err)
 		}
 		return v, nil
@@ -51,11 +50,16 @@ func convertValue(p Property, raw any) (any, error) {
 				raw = geo
 			}
 		}
-		if geo, ok := toGeoJSON(raw); ok {
-			return geo, nil
+		if object, ok := raw.(map[string]any); ok {
+			if _, typed := object["type"]; typed {
+				return validateGeoJSON(object)
+			}
+			if _, coordinates := object["coordinates"]; coordinates {
+				return validateGeoJSON(object)
+			}
 		}
 		if lat, lon, ok := toLatLon(raw); ok {
-			return map[string]any{"type": "Point", "coordinates": []any{lon, lat}}, nil
+			return validateGeoJSON(map[string]any{"type": "Point", "coordinates": []any{lon, lat}})
 		}
 		return invalid("a location")
 	case TypeRelationship:
@@ -85,6 +89,11 @@ func convertValue(p Property, raw any) (any, error) {
 		v, ok := toLanguageMap(raw)
 		if !ok {
 			return invalid("a language map")
+		}
+		for language := range v {
+			if language != "@none" && !languagePattern.MatchString(language) {
+				return nil, fmt.Errorf("property %s: invalid language tag %q", p.Target, language)
+			}
 		}
 		return v, nil
 	default:

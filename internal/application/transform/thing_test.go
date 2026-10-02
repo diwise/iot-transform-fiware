@@ -69,7 +69,7 @@ func TestMeasurementDoesNotMatchThingRule(t *testing.T) {
 func thingRule(id, typ, subType, tenant string) Rule {
 	return Rule{
 		Match:    Match{Kind: KindThing, Type: typ, SubType: subType, Tenant: tenant},
-		Entities: []Entity{{ID: id, Type: "Thing"}},
+		Entities: []Entity{{ID: id, Type: "Thing", Properties: []Property{{Target: "label", Type: TypeText, Const: "match test"}}}},
 	}
 }
 

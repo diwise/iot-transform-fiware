@@ -133,7 +133,6 @@ func TestExecutionParityRejectsInactiveSelectorsAndDateMetadata(t *testing.T) {
 	for _, p := range []Property{
 		{Target: "reading", Type: TypeNumber, Const: 12, Env: "outside"},
 		{Target: "reading", Type: TypeNumber, Derive: &Derive{Fn: FnSum, Of: []Source{{Const: 12, Object: "urn:example:object"}}}},
-		{Target: "date", Type: TypeDateTime, Resource: "reading", ObservedAt: ObservedAtMessage},
 	} {
 		if err := Validate([]Rule{parityRule(Measurement{}, p)}); err == nil {
 			t.Fatalf("ignored configuration accepted: %+v", p)

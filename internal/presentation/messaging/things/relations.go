@@ -8,6 +8,7 @@ import (
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
+	delivery "github.com/diwise/iot-transform-fiware/internal/presentation/messaging"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 )
@@ -20,7 +21,9 @@ import (
 // återanvänds; händelsekällan (match.event) skiljer regeltyperna åt så att
 // värderegler aldrig aktiveras av relationshändelser och tvärtom.
 func NewThingRelationsTopicMessageHandler(cbClientFn contextbroker.ContextBrokerClientFactoryFunc, provider TransformerProvider, defaultContext string) messaging.TopicMessageHandler {
-	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) error {
+	return func(ctx context.Context, itm messaging.IncomingTopicMessage, l *slog.Logger) (err error) {
+		ctx, l, end := delivery.Begin(ctx, l, "handle-thing-relations")
+		defer func() { end(err) }()
 		log := l.With("content_type", itm.ContentType())
 
 		th, err := appthings.ThingRelationsFromJSON(itm.Body())
@@ -28,6 +31,8 @@ func NewThingRelationsTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 			log.Error("failed to unmarshal message body", "err", err.Error())
 			return messaging.Permanent(err)
 		}
+		log = log.With("thing_id", th.ID, "tenant", th.Tenant, "topic_name", transform.EventThingsV1Relations)
+		ctx = logging.NewContextWithLogger(ctx, log)
 
 		if th.Tenant == "" {
 			log.Debug("message contains no tenant, skipping")
@@ -43,11 +48,14 @@ func NewThingRelationsTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 			}
 
 			log.Error("transform failed", "err", err.Error())
-			return err
+			return delivery.DataError(err)
 		}
 
 		if len(writes) == 0 {
 			return nil
+		}
+		if err := transform.ValidateEntityWrites(writes, defaultContext); err != nil {
+			return err
 		}
 
 		log = log.With(
@@ -62,12 +70,12 @@ func NewThingRelationsTopicMessageHandler(cbClientFn contextbroker.ContextBroker
 		cbClient, err := cbClientFn(th.Tenant)
 		if err != nil {
 			log.Error("failed to create context broker client", "err", err.Error())
-			return err
+			return delivery.DependencyError(err)
 		}
 
 		if err := contextbroker.ApplyEntityWrites(ctx, cbClient, writes, defaultContext); err != nil {
 			log.Error("failed to write entity", "err", err.Error())
-			return err
+			return delivery.DependencyError(err)
 		}
 
 		log.Debug("thing relation handled successfully")

@@ -47,8 +47,7 @@ func TestLanguageMapBuildsProperty(t *testing.T) {
 	// skip-semantik), fel med required.
 	writes, err = NewEngine([]Rule{languageMapRule(Source{Field: "empty"})}).Transform(languageMapThing())
 	is.NoErr(err)
-	is.Equal(1, len(writes))
-	is.Equal(0, len(writes[0].Props))
+	is.Equal(0, len(writes))
 
 	required := languageMapRule(Source{Field: "empty"})
 	required.Entities[0].Properties[0].Required = true

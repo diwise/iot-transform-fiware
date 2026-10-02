@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	ngsilderrors "github.com/diwise/context-broker/pkg/ngsild/errors"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // nullAttributeFragment är ett PATCH-fragment som rensar namngivna attribut
@@ -45,39 +45,47 @@ var _ types.EntityFragment = nullAttributeFragment{}
 // (PATCH-null, saknad entitet är OK; delete tillkommer med lifecycle).
 // Tillfälliga fel propageras för retry; anroparen klassificerar
 // irreparabla fel.
-func ApplyEntityWrites(ctx context.Context, cbClient client.ContextBrokerClient, writes []transform.EntityWrite, defaultContext string) error {
+func ApplyEntityWrites(ctx context.Context, cbClient BrokerClient, writes []transform.EntityWrite, defaultContext string) (err error) {
+	ctx, span := tracer.Start(ctx, "apply-writes")
+	defer func() { endSpan(err, span) }()
 	log := logging.GetFromContext(ctx)
+	if err := transform.ValidateEntityWrites(writes, defaultContext); err != nil {
+		return err
+	}
 
-	for _, w := range writes {
+	for index, w := range writes {
+		span.SetAttributes(attribute.String("rule_id", w.RuleID), attribute.Int64("rule_revision", w.RuleRevision), attribute.Int64("snapshot_version", w.SnapshotVersion), attribute.String("entity_id", w.EntityID))
+		log = logging.GetFromContext(ctx).With("rule_id", w.RuleID, "rule_revision", w.RuleRevision, "snapshot_version", w.SnapshotVersion, "entity_id", w.EntityID)
+		operationCtx := logging.NewContextWithLogger(ctx, log)
 		entityContext := w.Context
 		if entityContext == "" {
 			entityContext = defaultContext
 		}
 
 		if w.Create {
-			err := CreateNewEntityWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
+			err := CreateNewEntityWithContext(operationCtx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props)
 			if err != nil && !errors.Is(err, ErrEntityAlreadyExists) {
-				return fmt.Errorf("failed to create entity %s: %w", w.EntityID, err)
+				return &WriteBatchError{Completed: index, Write: w, Operation: "create", Cause: err}
 			}
 			continue
 		}
 
 		if w.Delete {
-			if err := deleteEntity(ctx, cbClient, w.EntityID); err != nil {
-				return fmt.Errorf("failed to delete entity %s: %w", w.EntityID, err)
+			if err := deleteEntity(operationCtx, cbClient, w.EntityID); err != nil {
+				return &WriteBatchError{Completed: index, Write: w, Operation: "delete", Cause: err}
 			}
 			continue
 		}
 
 		if len(w.RemoveAttributes) > 0 {
-			if err := removeAttributes(ctx, cbClient, w.EntityID, entityContext, w.RemoveAttributes); err != nil {
-				return fmt.Errorf("failed to remove attributes from entity %s: %w", w.EntityID, err)
+			if err := removeAttributes(operationCtx, cbClient, w.EntityID, entityContext, w.RemoveAttributes); err != nil {
+				return &WriteBatchError{Completed: index, Write: w, Operation: "remove", Cause: err}
 			}
 			continue
 		}
 
-		if err := MergeOrCreateWithContext(ctx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
-			return fmt.Errorf("failed to merge or create entity %s: %w", w.EntityID, err)
+		if err := MergeOrCreateWithContext(operationCtx, cbClient, w.EntityID, w.TypeName, entityContext, w.Props); err != nil {
+			return &WriteBatchError{Completed: index, Write: w, Operation: "merge", Cause: err}
 		}
 	}
 
@@ -87,7 +95,7 @@ func ApplyEntityWrites(ctx context.Context, cbClient client.ContextBrokerClient,
 
 // removeAttributes rensar namngivna attribut med ett null-fragment.
 // Saknad entitet är framgång (inget att rensa) för idempotent retry.
-func removeAttributes(ctx context.Context, cbClient client.ContextBrokerClient, id, contextURL string, attrs []string) error {
+func removeAttributes(ctx context.Context, cbClient BrokerClient, id, contextURL string, attrs []string) error {
 	var context []string
 	if contextURL != "" {
 		context = []string{contextURL}
@@ -106,7 +114,7 @@ func removeAttributes(ctx context.Context, cbClient client.ContextBrokerClient, 
 
 // deleteEntity raderar en entitet. Saknad entitet är framgång (inget att
 // radera) för idempotent retry.
-func deleteEntity(ctx context.Context, cbClient client.ContextBrokerClient, id string) error {
+func deleteEntity(ctx context.Context, cbClient BrokerClient, id string) error {
 	_, err := cbClient.DeleteEntity(ctx, id)
 	if err != nil {
 		if errors.Is(err, ngsilderrors.ErrNotFound) {
@@ -116,3 +124,15 @@ func deleteEntity(ctx context.Context, cbClient client.ContextBrokerClient, id s
 	}
 	return nil
 }
+
+type WriteBatchError struct {
+	Completed int
+	Write     transform.EntityWrite
+	Operation string
+	Cause     error
+}
+
+func (e *WriteBatchError) Error() string {
+	return fmt.Sprintf("broker %s failed at entity %s after %d completed writes: %v", e.Operation, e.Write.EntityID, e.Completed, e.Cause)
+}
+func (e *WriteBatchError) Unwrap() error { return e.Cause }

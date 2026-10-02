@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities/decorators"
@@ -41,10 +42,14 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 		return nil, err
 	}
 
-	if p.Timestamp {
-		return decorate(p, rv.value, "", "")
+	if p.Convert != nil && p.Unit == "" {
+		p.Unit = p.Convert.To
 	}
-	return decorate(p, rv.value, observationTime(p, in, rv), observedBy)
+	observedAt, err := observationTime(p, in, rv)
+	if err != nil {
+		return nil, err
+	}
+	return decorate(p, rv.value, observedAt, observedBy)
 }
 
 // resolveSource is shared by attributes, aggregate inputs and Structured values.
@@ -52,16 +57,42 @@ func buildProperty(p Property, in Input, ids map[string]string) (entities.Entity
 func resolveSource(s Source, in Input, ids map[string]string) (resolvedValue, error) {
 	switch {
 	case s.Const != nil:
-		return resolvedValue{value: s.Const, found: true}, nil
+		return resolvedValue{value: s.Const, found: present(s.Const)}, nil
 	case s.Value != "":
 		value, err := renderTemplate(s.Value, in, ids)
-		return resolvedValue{value: value, found: err == nil}, err
+		if errors.Is(err, errExprNotFound) {
+			return resolvedValue{}, nil
+		}
+		rv := resolvedValue{value: value, found: err == nil && present(value)}
+		if err == nil {
+			parts, _ := parseTemplate(s.Value)
+			for _, part := range parts {
+				if part.expression == "" {
+					continue
+				}
+				metadata, metadataErr := templateMetadata(part.expression, in, ids)
+				if metadataErr != nil {
+					return rv, metadataErr
+				}
+				if metadata.hasTime && (!rv.hasTime || metadata.time.After(rv.time)) {
+					rv.time, rv.hasTime = metadata.time, true
+				}
+				if rv.unit != "" && metadata.unit != "" && canonicalUnit(rv.unit) != canonicalUnit(metadata.unit) {
+					rv.unitConflict = true
+				}
+				if metadata.unit != "" {
+					rv.unit = metadata.unit
+				}
+				rv.unitConflict = rv.unitConflict || metadata.unitConflict
+			}
+		}
+		return rv, err
 	case s.LatLon:
 		lat, lon, ok := in.LatLon()
 		return resolvedValue{value: map[string]any{"latitude": lat, "longitude": lon}, found: ok}, nil
 	case s.Timestamp:
 		t := in.MessageTime()
-		return resolvedValue{value: t.UTC().Format(rfc3339), found: !t.IsZero()}, nil
+		return resolvedValue{value: sourceTime(t), found: !t.IsZero()}, nil
 	default:
 		return in.Resolve(Property{Source: s})
 	}
@@ -74,34 +105,104 @@ func evaluateValue(p Property, in Input, ids map[string]string) (resolvedValue, 
 		rv, err = resolveSource(p.Source, in, ids)
 	} else {
 		values := make([]any, 0, len(p.Derive.Of))
+		inputs := make([]resolvedValue, 0, len(p.Derive.Of))
 		for i, source := range p.Derive.Of {
 			input, sourceErr := resolveSource(source, in, ids)
 			if sourceErr != nil {
 				return rv, fmt.Errorf("derive.of %d (%s): %w", i, sourceDescription(source), sourceErr)
 			}
-			if input.found {
+			if input.found && present(input.value) {
+				if source.Name != "" {
+					input.hasTime = false
+				}
 				value, prefixErr := applyPrefix(Property{Source: source}, input.value)
 				if prefixErr != nil {
 					return rv, fmt.Errorf("derive.of %d (%s): %w", i, sourceDescription(source), prefixErr)
 				}
 				values = append(values, value)
+				inputs = append(inputs, input)
 			}
 		}
-		// Aggregate absence semantics are handled separately from conversion.
-		if p.When == WhenPresent && len(values) == 0 {
+		if len(values) == 0 {
 			return rv, nil
 		}
 		rv.value, err = deriveValue(p.Derive.Fn, values)
-		rv.found = rv.value != nil
+		rv.found = present(rv.value)
+		if p.Derive.Fn == FnFirstPresent || p.Derive.Fn == FnCoalesce {
+			rv.time, rv.hasTime, rv.unit, rv.unitConflict = inputs[0].time, inputs[0].hasTime, inputs[0].unit, inputs[0].unitConflict
+		} else {
+			if p.Derive.Fn == FnAnyTrue || p.Derive.Fn == FnAllTrue {
+				rv.unit = "C62"
+			}
+			for i, input := range inputs {
+				if input.hasTime && (!rv.hasTime || input.time.After(rv.time)) {
+					rv.time, rv.hasTime = input.time, true
+				}
+				if p.Derive.Fn == FnSum || p.Derive.Fn == FnMin || p.Derive.Fn == FnMax {
+					if input.unitConflict {
+						return rv, fmt.Errorf("derive.of %d: incompatible template source units", i)
+					}
+					if rv.unit != "" && input.unit != "" && canonicalUnit(rv.unit) != canonicalUnit(input.unit) {
+						return rv, fmt.Errorf("derive.of %d: incompatible source units %q and %q", i, rv.unit, input.unit)
+					}
+					if input.unit != "" {
+						rv.unit = input.unit
+					}
+				}
+			}
+		}
 	}
-	if err != nil || !rv.found {
+	if err != nil || !rv.found || !present(rv.value) {
+		rv.found = false
+		return rv, err
+	}
+	if rv.unitConflict && (p.Unit != "" || p.Convert != nil) {
+		return rv, errors.New("incompatible template source units cannot be relabeled or converted")
+	}
+	rv.value, rv.unit, err = applyConversion(p, rv.value, rv.unit)
+	if err != nil {
 		return rv, err
 	}
 	rv.value, err = applyTransforms(p, rv.value)
-	if err == nil {
+	if err == nil && present(rv.value) {
 		rv.value, err = applyPrefix(p, rv.value)
 	}
+	rv.found = present(rv.value)
 	return rv, err
+}
+
+func templateMetadata(expr string, in Input, ids map[string]string) (resolvedValue, error) {
+	expr = strings.TrimSpace(expr)
+	_, args, call, err := templateCall(expr)
+	if err != nil {
+		return resolvedValue{}, err
+	}
+	if call {
+		name, _, _ := strings.Cut(expr, "(")
+		if name == "safeURI" {
+			return templateMetadata(args[0], in, ids)
+		}
+		if name == "firstPresent" {
+			for _, arg := range args {
+				value, err := resolveExpr(arg, in.Variables(), in, ids)
+				if errors.Is(err, errExprNotFound) {
+					continue
+				}
+				if err != nil {
+					return resolvedValue{}, err
+				}
+				if value != "" {
+					return templateMetadata(arg, in, ids)
+				}
+			}
+		}
+		return resolvedValue{}, nil
+	}
+	path := strings.TrimSpace(strings.TrimPrefix(expr, "field:"))
+	if _, variable := in.Variables()[path]; variable || strings.HasPrefix(path, "entities.") {
+		return resolvedValue{}, nil
+	}
+	return in.Resolve(Property{Field: path})
 }
 
 // applyPrefix prependar en sträng till ett skalärt värde eller till varje
@@ -148,14 +249,6 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 	if err != nil {
 		return nil, err
 	}
-	// explicitObservedAt hedras på Boolean/Geo/Relationship endast vid
-	// explicit konfiguration (p.ObservedAt != ""): utan config förblir
-	// output exakt som före (utdataneutralt — ingen seed-regel sätter det
-	// i dag). Number/Text/TextList/NumberArray behåller sin header-default.
-	explicit := ""
-	if p.ObservedAt != "" {
-		explicit = observedAt
-	}
 	switch p.Type {
 	case TypeNumber:
 		v := raw.(float64)
@@ -179,14 +272,14 @@ func decorate(p Property, raw any, observedAt, observedBy string) (entities.Enti
 		return textDecorator(p.Target, s, opts...), nil
 	case TypeBoolean:
 		b := raw.(bool)
-		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b, ObservedAt: explicit}), nil
+		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: b, ObservedAt: observedAt}), nil
 	case TypeDateTime:
 		s := raw.(string)
-		return decorators.DateTime(p.Target, s), nil
+		return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: map[string]any{"@type": "DateTime", "@value": s}, ObservedAt: observedAt}), nil
 	case TypeGeo:
-		return entities.P(p.Target, &genericGeoProperty{Type_: "GeoProperty", Value_: raw, ObservedAt: explicit}), nil
+		return entities.P(p.Target, &genericGeoProperty{Type_: "GeoProperty", Value_: raw, ObservedAt: observedAt}), nil
 	case TypeRelationship:
-		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: raw, ObservedAt: explicit}), nil
+		return entities.R(p.Target, &genericRelationship{Type_: "Relationship", Object_: raw, ObservedAt: observedAt}), nil
 	case TypeTextArray:
 		ss := raw.([]string)
 		tlp := properties.NewTextListProperty(ss)
@@ -261,6 +354,7 @@ func relationshipObjects(raw any, array bool) (any, error) {
 // delproperties.
 func buildStructured(p Property, in Input, ids map[string]string) (entities.EntityDecoratorFunc, error) {
 	obj := map[string]any{}
+	latest := resolvedValue{}
 
 	for _, sp := range p.Subproperties {
 		rv, err := evaluateValue(sp, in, ids)
@@ -280,13 +374,23 @@ func buildStructured(p Property, in Input, ids map[string]string) (entities.Enti
 		}
 
 		obj[sp.Target] = val
+		if rv.hasTime && (!latest.hasTime || rv.time.After(latest.time)) {
+			latest.time, latest.hasTime = rv.time, true
+		}
 	}
 
-	if len(obj) == 0 && p.Required {
-		return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+	if len(obj) == 0 {
+		if p.Required {
+			return nil, fmt.Errorf("%w: %s", ErrRequiredSourceMissing, p.Target)
+		}
+		return nil, nil
 	}
 
-	return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: obj}), nil
+	observedAt, err := observationTime(p, in, latest)
+	if err != nil {
+		return nil, err
+	}
+	return entities.P(p.Target, &genericProperty{Type_: "Property", Value_: obj, ObservedAt: observedAt}), nil
 }
 
 // genericProperty täcker NGSI-LD-properties som biblioteket saknar
@@ -310,6 +414,7 @@ func (g *genericProperty) Value() any { return g.Value_ }
 type languageMapProperty struct {
 	Type_       string            `json:"type"`
 	LanguageMap map[string]string `json:"languageMap"`
+	ObservedAt  string            `json:"observedAt,omitempty"`
 }
 
 func (l *languageMapProperty) Type() string { return l.Type_ }
@@ -342,7 +447,11 @@ func buildLanguageMap(p Property, in Input, ids map[string]string) (entities.Ent
 		return nil, nil
 	}
 
-	return entities.P(p.Target, &languageMapProperty{Type_: "LanguageProperty", LanguageMap: m}), nil
+	observedAt, err := observationTime(p, in, rv)
+	if err != nil {
+		return nil, err
+	}
+	return entities.P(p.Target, &languageMapProperty{Type_: "LanguageProperty", LanguageMap: m, ObservedAt: observedAt}), nil
 }
 
 // toLanguageMap normaliserar en strängmapp (från JSON-avkodning eller YAML
@@ -390,50 +499,6 @@ type genericRelationship struct {
 func (r *genericRelationship) Type() string { return r.Type_ }
 
 func (r *genericRelationship) Object() any { return r.Object_ }
-
-// toGeoJSON normaliserar ett GeoJSON-objekt (Point/LineString/Polygon/
-// MultiPoint/MultiLineString/MultiPolygon med numeriska koordinater) till
-// NGSI-LD-value-form. Ogiltig form ger false (fel, inte tyst skip —
-// anroparen rapporterar typfel).
-func toGeoJSON(v any) (map[string]any, bool) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil, false
-	}
-	t, ok := m["type"].(string)
-	if !ok {
-		return nil, false
-	}
-	switch t {
-	case "Point", "LineString", "Polygon", "MultiPoint", "MultiLineString", "MultiPolygon":
-	default:
-		return nil, false
-	}
-	coords, ok := m["coordinates"]
-	if !ok || !numericLeaves(coords) {
-		return nil, false
-	}
-	return map[string]any{"type": t, "coordinates": coords}, true
-}
-
-// numericLeaves kräver att alla löv i en nästlad koordinatstruktur är tal.
-func numericLeaves(v any) bool {
-	switch x := v.(type) {
-	case []any:
-		if len(x) == 0 {
-			return false
-		}
-		for _, e := range x {
-			if !numericLeaves(e) {
-				return false
-			}
-		}
-		return true
-	default:
-		f, ok := toFloat(x)
-		return ok && finite(f)
-	}
-}
 
 func toStringSlice(v any) ([]string, bool) {
 	switch x := v.(type) {
@@ -551,6 +616,20 @@ func applyTransform(t Transform, raw any) (any, error) {
 }
 
 func deriveValue(fn string, values []any) (any, error) {
+	presentValues := make([]any, 0, len(values))
+	for i, v := range values {
+		if !present(v) {
+			continue
+		}
+		if err := validateAggregateInput(fn, v); err != nil {
+			return nil, fmt.Errorf("derive.of %d: %w", i, err)
+		}
+		presentValues = append(presentValues, v)
+	}
+	values = presentValues
+	if len(values) == 0 {
+		return nil, nil
+	}
 	switch fn {
 	case FnAnyTrue:
 		for _, v := range values {
@@ -607,28 +686,47 @@ func deriveValue(fn string, values []any) (any, error) {
 
 // observationTime bestämmer propertyns observationstid enligt
 // observedAt: header (default), record, message, field:<väg> eller none.
-func observationTime(p Property, in Input, rv resolvedValue) string {
+func observationTime(p Property, in Input, rv resolvedValue) (string, error) {
 	switch p.ObservedAt {
 	case ObservedAtNone:
-		return ""
+		return "", nil
 	case ObservedAtRecord:
 		if rv.hasTime {
-			return rv.time.UTC().Format(rfc3339)
+			return sourceTime(rv.time), nil
 		}
-		return ""
+		return "", nil
 	case ObservedAtMessage:
-		return in.MessageTime().UTC().Format(rfc3339)
-	case ObservedAtHeader, "":
+		return sourceTime(in.MessageTime()), nil
+	case ObservedAtHeader:
 		if t, ok := in.BaseTime(); ok {
-			return t.UTC().Format(rfc3339)
+			return sourceTime(t), nil
 		}
-		return in.MessageTime().UTC().Format(rfc3339)
+		return "", nil
+	case "":
+		if p.Name != "" || p.Timestamp {
+			return "", nil
+		}
+		if rv.hasTime {
+			return sourceTime(rv.time), nil
+		}
+		return "", nil
 	default:
 		path := strings.TrimPrefix(string(p.ObservedAt), "field:")
 		if t, ok := in.ResolveTime(path); ok {
-			return t.UTC().Format(rfc3339)
+			return sourceTime(t), nil
 		}
-		return ""
+		if value, ok := in.ResolvePath(path); ok && present(value) {
+			if t, ok := value.(time.Time); ok && t.IsZero() {
+				return "", nil
+			}
+			if text, ok := value.(string); ok {
+				if t, err := time.Parse(time.RFC3339Nano, text); err == nil && t.IsZero() {
+					return "", nil
+				}
+			}
+			return "", fmt.Errorf("observedAt field %q: expected RFC3339 date time", path)
+		}
+		return "", nil
 	}
 }
 
@@ -675,6 +773,9 @@ func toBool(v any) (bool, bool) {
 	case bool:
 		return x, true
 	case float64:
+		if !finite(x) {
+			return false, false
+		}
 		return x != 0, true
 	case int:
 		return x != 0, true
@@ -692,9 +793,27 @@ func toLatLon(v any) (float64, float64, bool) {
 	if !ok {
 		return 0, 0, false
 	}
-	lat, latOK := toFloat(m["latitude"])
-	lon, lonOK := toFloat(m["longitude"])
+	lat, latOK := coordinateNumber(m["latitude"])
+	lon, lonOK := coordinateNumber(m["longitude"])
 	return lat, lon, latOK && lonOK && finite(lat) && finite(lon)
 }
 
-const rfc3339 = "2006-01-02T15:04:05Z07:00"
+const rfc3339 = time.RFC3339Nano
+
+func validateAggregateInput(fn string, value any) error {
+	switch fn {
+	case FnSum, FnMin, FnMax:
+		v, ok := toFloat(value)
+		if !ok || !finite(v) {
+			return errors.New("expected finite number")
+		}
+	case FnAnyTrue, FnAllTrue:
+		if v, ok := value.(float64); ok && !finite(v) {
+			return errors.New("expected finite boolean input")
+		}
+		if _, ok := toBool(value); !ok {
+			return errors.New("expected boolean")
+		}
+	}
+	return nil
+}

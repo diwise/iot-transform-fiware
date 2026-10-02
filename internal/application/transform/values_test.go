@@ -120,8 +120,7 @@ func TestMissingOptionalSourceIsSkipped(t *testing.T) {
 
 	writes, err := NewEngine([]Rule{r}).Transform(m)
 	is.NoErr(err)
-	is.Equal(len(writes), 1)
-	is.Equal(len(writes[0].Props), 0)
+	is.Equal(len(writes), 0)
 }
 
 func TestObservedAtModes(t *testing.T) {

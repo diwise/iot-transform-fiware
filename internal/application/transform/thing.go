@@ -40,7 +40,13 @@ func (t Thing) Kind() Kind { return KindThing }
 
 func (t Thing) TenantID() string { return t.Tenant }
 
-func (t Thing) MessageTime() time.Time { return t.ObservedAt }
+func (t Thing) MessageTime() time.Time {
+	if t.Event == EventThingsV1Values {
+		value, _ := t.ResolveTime("event.publishedAt")
+		return value
+	}
+	return t.ObservedAt
+}
 
 func (t Thing) BaseTime() (time.Time, bool) { return t.ObservedAt, !t.ObservedAt.IsZero() }
 
@@ -54,6 +60,8 @@ func (t Thing) LatLon() (float64, float64, bool) {
 func (t Thing) HasResource(string) bool { return false }
 
 func (t Thing) MatchInfo() MatchInfo {
+	toType, _ := lookupPath(t.Fields, "relation.to.type")
+	rawType, _ := toType.(string)
 	return MatchInfo{
 		Tenant:          t.Tenant,
 		Type:            t.Type,
@@ -62,6 +70,7 @@ func (t Thing) MatchInfo() MatchInfo {
 		Relation:        t.Relation,
 		RelationRemoved: t.RelationRemoved,
 		Lifecycle:       t.Lifecycle,
+		ToType:          rawType,
 	}
 }
 
@@ -75,7 +84,7 @@ func (t Thing) Variables() map[string]string {
 		"alternativeName": t.AlternativeName,
 		"uuid":            trailingSegment(t.ID),
 		"tenant":          t.Tenant,
-		"timestamp":       t.ObservedAt.UTC().Format(rfc3339),
+		"timestamp":       sourceTime(t.ObservedAt),
 	}
 }
 
@@ -88,23 +97,7 @@ func (t Thing) Resolve(p Property) (resolvedValue, error) {
 		return resolvedValue{}, nil
 	}
 
-	v, ok := lookupPath(t.Fields, path)
-	if !ok {
-		return resolvedValue{}, nil
-	}
-
-	rv := resolvedValue{value: v, found: true}
-
-	switch tv := v.(type) {
-	case time.Time:
-		rv.time, rv.hasTime = tv, true
-	case string:
-		if parsed, err := time.Parse(time.RFC3339, tv); err == nil {
-			rv.time, rv.hasTime = parsed, true
-		}
-	}
-
-	return rv, nil
+	return resolveField(t.Fields, path), nil
 }
 
 func (t Thing) ResolveTime(path string) (time.Time, bool) {
@@ -113,16 +106,7 @@ func (t Thing) ResolveTime(path string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 
-	switch tv := v.(type) {
-	case time.Time:
-		return tv, true
-	case string:
-		if parsed, err := time.Parse(time.RFC3339, tv); err == nil {
-			return parsed, true
-		}
-	}
-
-	return time.Time{}, false
+	return parseSourceTime(v)
 }
 
 func (t Thing) ResolvePath(path string) (any, bool) {
@@ -138,6 +122,10 @@ func lookupPath(root map[string]any, path string) (any, bool) {
 	if err != nil {
 		return nil, false
 	}
+	return lookupSteps(root, steps)
+}
+
+func lookupSteps(root map[string]any, steps []pathStep) (any, bool) {
 	var cur any = root
 	for _, step := range steps {
 		if !step.indexed {

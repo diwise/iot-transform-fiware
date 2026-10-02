@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/diwise/context-broker/pkg/ngsild"
-	"github.com/diwise/context-broker/pkg/ngsild/client"
 	"github.com/diwise/context-broker/pkg/ngsild/types"
 	clienttest "github.com/diwise/context-broker/pkg/test"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/messaging-golang/pkg/messaging"
 	"github.com/matryer/is"
 )
@@ -47,7 +47,7 @@ func TestThingRelationsHandlerMalformedIsPermanent(t *testing.T) {
 	is := is.New(t)
 
 	handler := NewThingRelationsTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) { return nil, nil },
+		func(string) (contextbroker.BrokerClient, error) { return nil, nil },
 		staticThingsProvider{appthings.NewDynamicThingTransformer([]transform.Rule{})},
 		"",
 	)
@@ -68,7 +68,7 @@ func TestThingRelationsHandlerSkipsEmptyTenant(t *testing.T) {
 
 	called := false
 	handler := NewThingRelationsTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			called = true
 			return nil, nil
 		},
@@ -91,7 +91,7 @@ func TestThingRelationsHandlerSkipsWithoutRule(t *testing.T) {
 
 	called := false
 	handler := NewThingRelationsTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			called = true
 			return nil, nil
 		},
@@ -112,7 +112,7 @@ func TestThingRelationsHandlerReturnsBrokerError(t *testing.T) {
 	is := is.New(t)
 
 	handler := NewThingRelationsTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) {
+		func(string) (contextbroker.BrokerClient, error) {
 			return nil, errBrokerDown{}
 		},
 		staticThingsProvider{appthings.NewDynamicThingTransformer(relationRules())},
@@ -145,7 +145,7 @@ func TestThingRelationsHandlerWritesReference(t *testing.T) {
 		},
 	}
 	handler := NewThingRelationsTopicMessageHandler(
-		func(string) (client.ContextBrokerClient, error) { return cbClient, nil },
+		func(string) (contextbroker.BrokerClient, error) { return cbClient, nil },
 		staticThingsProvider{appthings.NewDynamicThingTransformer(relationRules())},
 		"",
 	)

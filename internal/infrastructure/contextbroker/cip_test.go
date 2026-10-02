@@ -8,12 +8,15 @@ import (
 func TestKeyedLocksSerializesSameKey(t *testing.T) {
 	kl := newKeyedLocks()
 
-	unlockFirst := kl.lock("same-entity")
+	unlockFirst, err := kl.lock(t.Context(), "same-entity")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	acquired := make(chan func())
 
 	go func() {
-		unlockSecond := kl.lock("same-entity")
+		unlockSecond, _ := kl.lock(t.Context(), "same-entity")
 		acquired <- unlockSecond
 	}()
 
@@ -41,12 +44,15 @@ func TestKeyedLocksSerializesSameKey(t *testing.T) {
 func TestKeyedLocksAllowsDifferentKeysInParallel(t *testing.T) {
 	kl := newKeyedLocks()
 
-	unlockFirst := kl.lock("entity-a")
+	unlockFirst, err := kl.lock(t.Context(), "entity-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	acquired := make(chan func())
 
 	go func() {
-		unlockSecond := kl.lock("entity-b")
+		unlockSecond, _ := kl.lock(t.Context(), "entity-b")
 		acquired <- unlockSecond
 	}()
 
@@ -67,7 +73,10 @@ func TestKeyedLocksAllowsDifferentKeysInParallel(t *testing.T) {
 func TestKeyedLocksRemovesEntryAfterLastUnlock(t *testing.T) {
 	kl := newKeyedLocks()
 
-	unlock := kl.lock("entity-a")
+	unlock, err := kl.lock(t.Context(), "entity-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	entry, ok := kl.locks["entity-a"]
 	if !ok {

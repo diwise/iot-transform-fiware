@@ -26,14 +26,14 @@ rules:
         type: IndoorEnvironmentObserved
         properties: []
         removeAttributes: [refParent]
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank, toType: greenhouse }
     entities:
       - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
         type: AgriGreenhouse
         context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
         properties:
           - { target: hasWaterQualityObserved, type: Relationship, array: true, value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", required: true }
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: tank }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: tank, toType: greenhouse }
     entities:
       - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
         type: AgriGreenhouse
