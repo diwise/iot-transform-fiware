@@ -8,6 +8,9 @@ import (
 )
 
 // thingDescriptor speglar producentens ThingDescriptorV1 för samtliga event.
+// Tråd (topics/JSON), inte Go-moduler, är kopplingen mellan tjänsterna:
+// ingen import av producentpaketet sker här. JSON avkodas utan
+// DisallowUnknownFields så att additiva producentfält tolereras.
 type thingDescriptor struct {
 	ThingID         string            `json:"thingId"`
 	Name            string            `json:"name"`
@@ -45,7 +48,12 @@ func descriptorFields(id, sourceType string, descriptor *thingDescriptor) map[st
 	if len(descriptor.Location) > 0 {
 		var location map[string]any
 		if json.Unmarshal(descriptor.Location, &location) == nil && location != nil {
+			// Rå GeoJSON exponeras konsekvent under både location och
+			// geometry i deskriptorn; Point-genvägen (top-level
+			// location) kompletterar men ersätter aldrig detta råa
+			// värde och döljer aldrig Polygon/3D.
 			fields["location"] = location
+			fields["geometry"] = location
 		}
 	}
 	return fields
@@ -53,17 +61,23 @@ func descriptorFields(id, sourceType string, descriptor *thingDescriptor) map[st
 
 // descriptorInput keeps the envelope's identity authoritative while exposing
 // the descriptor, raw GeoJSON and optional Point shortcut for every source.
+// Motorn ser deskriptorn under både thing och descriptor (alias); rå GeoJSON
+// ligger under geometry (alltid) och thing.location/descriptor.location
+// (alltid rått). Top-level location är enbart Point-genvägen
+// {latitude,longitude} och sätts aldrig för Polygon/3D.
 func descriptorInput(id, sourceType, tenant string, descriptor *thingDescriptor) transform.Thing {
 	desc := descriptorFields(id, sourceType, descriptor)
 	fields := make(map[string]any, len(desc)+1)
 	for key, value := range desc {
-		if key != "location" {
+		if key != "location" && key != "geometry" {
 			fields[key] = value
 		}
 	}
-	fields["thingId"], fields["tenant"], fields["thing"] = id, tenant, desc
+	fields["thingId"], fields["tenant"], fields["thing"], fields["descriptor"] = id, tenant, desc, desc
 	if descriptor != nil {
 		if geometry, ok := desc["location"]; ok {
+			fields["geometry"] = geometry
+		} else if geometry, ok := desc["geometry"]; ok {
 			fields["geometry"] = geometry
 		}
 		if point, ok := geoPointToLatLon(descriptor.Location); ok {

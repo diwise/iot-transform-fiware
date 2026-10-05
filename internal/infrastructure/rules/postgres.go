@@ -104,6 +104,16 @@ func (s *PgStore) Close() {
 	s.pool.Close()
 }
 
+// Pool exponerar den delade poolen för A:s wiring: projektionslagret
+// (F) lindas via projection.NewForPool utan att ta över stängning.
+// Endast A äger livscykeln; anropare får aldrig stänga poolen via detta.
+func (s *PgStore) Pool() *pgxpool.Pool {
+	if s == nil {
+		return nil
+	}
+	return s.pool
+}
+
 func (s *PgStore) migrate(ctx context.Context) error {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {

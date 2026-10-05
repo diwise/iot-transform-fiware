@@ -6,7 +6,180 @@
 # samma mönster som 90-92 — utan typ skulle första regeln vinna alla
 # deletes), så created/updated/värdes/relations-händelser aktiverar dem
 # aldrig. properties: [] krävs av OpenAPI-kontraktet.
+#
+# J2(b): created/updated-regler skapar/uppdaterar beskrivande saker utan nya
+# mätningar (deskriptor-bara lifecycle från producentens bootstrap/underlag).
+# Samma id/typ-mallar som värde-reglerna (konsistenta mål-ID:n); endast
+# deskriptorfält (namn/plats/beskrivning + händelsetid) mappas — inga
+# values.*-källor, inga required-flaggor (deskriptor-tolerant skalbild).
+# Mätvärdesburna entiteter (t.ex. WeatherObserved/WaterQualityObserved)
+# undertrycks inte här utan utelämnas: de skapas vid första värdeseventet.
+# Saknad källa är skip (aldrig rensning); merge-semantik.
 rules:
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: room }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
+        type: IndoorEnvironmentObserved
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: room }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
+        type: IndoorEnvironmentObserved
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: wastebin }
+    entities:
+      - id: "urn:ngsi-ld:WasteContainer:{{id}}"
+        type: WasteContainer
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: wastebin }
+    entities:
+      - id: "urn:ngsi-ld:WasteContainer:{{id}}"
+        type: WasteContainer
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: lifebuoy }
+    entities:
+      - id: "urn:ngsi-ld:Lifebuoy:{{id}}"
+        type: Lifebuoy
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: lifebuoy }
+    entities:
+      - id: "urn:ngsi-ld:Lifebuoy:{{id}}"
+        type: Lifebuoy
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: desk }
+    entities:
+      - id: "urn:ngsi-ld:Device:{{id}}"
+        type: Device
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: controlledProperty, type: TextArray, const: ["occupancy"], observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: desk }
+    entities:
+      - id: "urn:ngsi-ld:Device:{{id}}"
+        type: Device
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: controlledProperty, type: TextArray, const: ["occupancy"], observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: pumpingstation }
+    entities:
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{id}}"
+        type: SewagePumpingStation
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: pumpingstation }
+    entities:
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{id}}"
+        type: SewagePumpingStation
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: sewer }
+    entities:
+      - id: "urn:ngsi-ld:Sewer:{{id}}"
+        type: Sewer
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: sewer }
+    entities:
+      - id: "urn:ngsi-ld:Sewer:{{id}}"
+        type: Sewer
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: sewer, subType: CombinedSewerOverflow }
+    entities:
+      - id: "urn:ngsi-ld:CombinedSewerOverflow:{{id}}"
+        type: CombinedSewerOverflow
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: sewer, subType: CombinedSewerOverflow }
+    entities:
+      - id: "urn:ngsi-ld:CombinedSewerOverflow:{{id}}"
+        type: CombinedSewerOverflow
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: pointofinterest }
+    entities:
+      - id: "urn:ngsi-ld:PointOfInterest:{{id}}"
+        type: PointOfInterest
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: pointofinterest }
+    entities:
+      - id: "urn:ngsi-ld:PointOfInterest:{{id}}"
+        type: PointOfInterest
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: pointofinterest, subType: Beach }
+    entities:
+      - id: "urn:ngsi-ld:Beach:{{id}}"
+        type: Beach
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: pointofinterest, subType: Beach }
+    entities:
+      - id: "urn:ngsi-ld:Beach:{{id}}"
+        type: Beach
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry }
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: room }
     entities:
       - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
@@ -17,18 +190,6 @@ rules:
     entities:
       - id: "urn:ngsi-ld:WasteContainer:{{id}}"
         type: WasteContainer
-        properties: []
-        delete: true
-  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: greenhouse }
-    entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
-        type: AgriGreenhouse
-        properties: []
-        delete: true
-  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: tank }
-    entities:
-      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
-        type: WaterQualityObserved
         properties: []
         delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: lifebuoy }
@@ -55,9 +216,29 @@ rules:
         type: Sewer
         properties: []
         delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: sewer, subType: CombinedSewerOverflow }
+    entities:
+      - id: "urn:ngsi-ld:CombinedSewerOverflow:{{id}}"
+        type: CombinedSewerOverflow
+        properties: []
+        delete: true
   - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pointofinterest }
     entities:
       - id: "urn:ngsi-ld:PointOfInterest:{{id}}"
         type: PointOfInterest
+        properties: []
+        delete: true
+      - id: "urn:ngsi-ld:WeatherObserved:{{id}}"
+        type: WeatherObserved
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: pointofinterest, subType: Beach }
+    entities:
+      - id: "urn:ngsi-ld:Beach:{{id}}"
+        type: Beach
+        properties: []
+        delete: true
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
+        type: WaterQualityObserved
         properties: []
         delete: true

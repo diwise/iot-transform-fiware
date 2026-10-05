@@ -320,15 +320,17 @@ ingen implicit observedAt. Alla attributtyper skriver samma valda tid.
 | osatt | egen resurstid/header-fallback | det upplösta värdets egen observedAt |
 | record | upplöst resurstid/header-fallback | upplöst värdes egen observedAt |
 | header | objektheaderns bastid, om tillgänglig | values: max observedAt; relation/lifecycle: changedAt |
-| message | MessageAccepted.timestamp | values: event.publishedAt; relation/lifecycle: changedAt (ingen annan publiceringstid finns i kontraktet) |
+| message | MessageAccepted.timestamp | values: max observedAt (fallback event.publishedAt utan värdetider); relation/lifecycle: changedAt |
 | field:<väg> | record-tid via kortnamn eller explicit tidsfält | explicit tidsfält |
 | none | ingen tid | ingen tid |
 
-`timestamp: true` använder message-tiden. `{{timestamp}}` bevarar tidigare
-källgenvägens betydelse: measurement-meddelandets timestamp eller things
-konsumenttid (max observedAt/changedAt), nu med full precision och tomt vid
-saknad tid. De explicita källvyerna gör observation/publicering/förändring
-separat valbara som DateTime-värden och observedAt.
+J2(a): `timestamp: true` använder konsumenttiden (aldrig transporttid):
+measurement-meddelandets timestamp respektive things max-observedAt/
+changedAt, nu med full precision och tomt vid saknad tid. `{{timestamp}}`
+är samma konsumenttid. `event.publishedAt` förblir explicit valbar via
+`{{event.publishedAt}}` för diagnostik. De explicita källvyerna gör
+observation/publicering/förändring separat valbara som DateTime-värden
+och observedAt.
 
 Fältmallar bevarar källmetadata; firstPresent tar metadata från sitt valda
 argument, safeURI från sitt argument. Mallar med flera mätuttryck använder
@@ -368,8 +370,9 @@ anges måste den vara ekvivalent med to; annars används to som unitCode.
 Konvertering stöds endast på Number/NumberArray och kan användas på
 Structured-delvärden (som fortsatt inte skriver attributmetadata).
 
-Pa→KPA i standardregeln deklareras nu som explicit faktor 0.001; tankreglerna
-avgränsar explicit toType till greenhouse. Inga sådana modellval finns i motorn.
+Pa→KPA i standardregeln deklareras nu som explicit faktor 0.001; rums
+partOf-regel avgränsar explicit toType till building. Inga sådana modellval
+finns i motorn.
 
 ## Implementerad NGSI-LD-grundvalidering (etapp 6)
 

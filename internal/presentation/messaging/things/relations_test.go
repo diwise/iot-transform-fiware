@@ -18,7 +18,7 @@ import (
 )
 
 const relationSetBody = `{
-	"relationId":"partof-tank-1","type":"partOf",
+	"relationId":"v1/t/tank-1/relations/partOf/2/set","type":"partOf",
 	"fromId":"tank-1","toId":"greenhouse-a","tenant":"t",
 	"revision":2,"changedAt":"2026-09-17T12:00:00Z",
 	"fromThingType":"tank",

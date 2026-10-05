@@ -21,6 +21,37 @@ func (s staticThingsProvider) ThingsTransformer() *appthings.DynamicThingTransfo
 	return s.t
 }
 
+// diagnosticStaticProvider är C2:s testprovider med precis diagnostik via
+// E:s MatchedRule/ExplainSkipped. Produktionens Models bär ännu endast
+// TransformerProvider (A äger wiring); handlers faller tillbaka till
+// generisk skip-logg utan brokerkontakt när providern saknar diagnostik.
+type diagnosticStaticProvider struct {
+	t *appthings.DynamicThingTransformer
+	e *transform.Engine
+}
+
+func (s diagnosticStaticProvider) ThingsTransformer() *appthings.DynamicThingTransformer {
+	return s.t
+}
+
+func (s diagnosticStaticProvider) MatchedRule(th transform.Thing) (transform.Rule, bool) {
+	if s.e != nil {
+		return s.e.MatchedRule(th)
+	}
+	return transform.Rule{}, false
+}
+
+func (s diagnosticStaticProvider) ExplainSkipped(th transform.Thing) []transform.Diagnostic {
+	if s.e != nil {
+		return s.e.ExplainSkipped(th)
+	}
+	return nil
+}
+
+func providerWithEngine(rules []transform.Rule) diagnosticStaticProvider {
+	return diagnosticStaticProvider{t: appthings.NewDynamicThingTransformer(rules), e: transform.NewEngine(rules)}
+}
+
 // Tom tenant ska hoppas över utan brokeranrop även i dynamiskt läge.
 func TestDynamicThingHandlerSkipsEmptyTenant(t *testing.T) {
 	is := is.New(t)

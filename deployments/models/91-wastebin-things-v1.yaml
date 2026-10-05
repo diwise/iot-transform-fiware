@@ -1,5 +1,7 @@
 # WasteContainer från versionerade värdesevent (things.v1.values).
 # Stabil identitet från thingId; namn är attribut. required: id, type, location.
+# J2(a): dateObserved är max-observedAt (mättid, timestamp:true), aldrig
+# publiceringstid; fallback publiceringstid endast för deskriptor-bara event.
 rules:
   - match: { kind: thing, event: things.v1.values, type: wastebin }
     entities:
@@ -9,4 +11,5 @@ rules:
           - { target: name, type: Text, field: name, observedAt: none }
           - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: fillingLevel, type: Number, field: values.fillRate.value, observedAt: "field:values.fillRate.observedAt", required: true }
-          - { target: location, type: Geo, field: location, required: true }
+          - { target: location, type: Geo, field: geometry, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true }

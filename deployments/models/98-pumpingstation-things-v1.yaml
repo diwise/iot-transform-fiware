@@ -12,4 +12,4 @@ rules:
           - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: status, type: Text, field: values.run.value, observedAt: "field:values.run.observedAt", transform: [{ op: numToOnOff }] }
           - { target: dateObserved, type: DateTime, timestamp: true }
-          - { target: location, type: Geo, field: location }
+          - { target: location, type: Geo, field: geometry }

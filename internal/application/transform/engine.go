@@ -1,6 +1,8 @@
 package transform
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/diwise/context-broker/pkg/ngsild/types/entities"
+	"github.com/diwise/iot-transform-fiware/internal/application/relations"
 )
 
 // Input är den normaliserade indata motorn arbetar på. Implementeras av
@@ -37,6 +40,12 @@ type Input interface {
 var errExprNotFound = errors.New("template expression not found")
 
 // MatchInfo är de fält en regel kan matcha mot, oavsett indatatyp.
+//
+// PLAN1050 E: ThingTypeVersion/VariantID/VariantVersion är exakta
+// strängfilter för things (tom wildcard), lästa från Thing via explicita
+// fält eller C1-källvyer. Mätvärden bär alltid tomma versioner, så
+// versionerade things-regler träffar dem aldrig. Ingen recency- eller
+// revisionspåverkan.
 type MatchInfo struct {
 	Device     string
 	SensorType string
@@ -56,6 +65,12 @@ type MatchInfo struct {
 	// (likhetsmatchning, ingen score).
 	Lifecycle string
 	ToType    string
+	// ThingTypeVersion avgränsar things-regler till exakt mallversion.
+	ThingTypeVersion string
+	// VariantID avgränsar things-regler till exakt variant.
+	VariantID string
+	// VariantVersion avgränsar things-regler till exakt variantversion.
+	VariantVersion string
 }
 
 // resolvedValue är resultatet av en värdekälleuppslagning.
@@ -151,6 +166,119 @@ func cloneConfiguration(v reflect.Value) reflect.Value {
 func (e *Engine) Matched(in Input) bool {
 	_, ok := e.match(in)
 	return ok
+}
+
+// MatchedRule returnerar den valda regeln (högst prioritet/specificitet)
+// för preview/diagnostik, även när den sedan undertrycks (tomma writes).
+// Tenant-avgränsad via matches(); offline (ingen I/O).
+func (e *Engine) MatchedRule(in Input) (Rule, bool) {
+	return e.match(in)
+}
+
+// ExplainSkipped förklarar varför en matchad regel inte producerade
+// entiteter: per entitet/attribut med D:s diagnoskoder (required-missing
+// m.fl.), tenant-avgränsat via den valda regeln. Tom vid ingen matchning
+// eller vid träffar. Pure funktion, ingen I/O, inga modellnamn.
+func (e *Engine) ExplainSkipped(in Input) []Diagnostic {
+	rule, ok := e.match(in)
+	if !ok {
+		return nil
+	}
+	// Snabbväg: om Transform ger skrivningar eller fel är inget undertryckt.
+	writes, err := e.Transform(in)
+	if err != nil || len(writes) > 0 {
+		return nil
+	}
+	var out []Diagnostic
+	tenant := in.TenantID()
+	thingID := ""
+	if th, ok := in.(Thing); ok {
+		thingID = th.ID
+	} else if m, ok := in.(Measurement); ok {
+		thingID = m.DeviceID
+	}
+	ids := map[string]string{}
+	for index, ent := range rule.Entities {
+		id, err := renderTemplate(ent.ID, in, ids)
+		if err != nil {
+			out = append(out, Diagnostic{
+				Code: CodeTargetNotFound, RuleID: rule.ID, RuleRevision: rule.Revision,
+				SnapshotVersion: rule.SnapshotVersion, Entity: entityLabel(ent, index),
+				Expression: ent.ID, Tenant: tenant, ThingID: thingID,
+				Detail: "entity id cannot be rendered from example event",
+			})
+			continue
+		}
+		if ent.Name != "" {
+			ids[ent.Name] = id
+		}
+		if ent.Delete || len(ent.RemoveAttributes) > 0 {
+			continue
+		}
+		for _, p := range ent.Properties {
+			if _, err := buildProperty(p, in, ids); err != nil {
+				out = append(out, skipDiagnostic(rule, ent, index, p, tenant, thingID, err))
+			}
+		}
+		// Entitet utan någon skrivbar property efter skip: rapportera
+		// entitetsnivå när ingen attributdiagnos fångade orsaken (t.ex.
+		// tom properties-lista efter undertryckning).
+	}
+	if len(out) == 0 {
+		out = append(out, Diagnostic{
+			Code: CodeRequiredMissing, RuleID: rule.ID, RuleRevision: rule.Revision,
+			SnapshotVersion: rule.SnapshotVersion, Tenant: tenant, ThingID: thingID,
+			Detail: "matched rule produced no entities (required source missing or suppressed)",
+		})
+	}
+	return out
+}
+
+func entityLabel(ent Entity, index int) string {
+	if ent.Name != "" {
+		return ent.Name
+	}
+	return fmt.Sprintf("entity %d", index)
+}
+
+// skipDiagnostic mappar byggfel till D:s diagnoskoder (best-effort;
+// feltext bevaras i Detail). Okända roller → target-notfound,
+// enhetsfel → unit-conflict, geometri → geometry-invalid,
+// ID/typ/attribut → ngsild-invalid, övriga källfel → required-missing
+// när required, annars invalid-source.
+func skipDiagnostic(rule Rule, ent Entity, index int, p Property, tenant, thingID string, err error) Diagnostic {
+	msg := err.Error()
+	code := CodeInvalidSource
+	switch {
+	case containsAny(msg, []string{"unknown entity", "references unknown"}):
+		code = CodeTargetNotFound
+	case containsAny(msg, []string{"source unit", "convert", "incompatible template source units"}):
+		code = CodeUnitConflict
+	case containsAny(msg, []string{"location", "Geo", "coordinate", "polygon", "geometry"}):
+		code = CodeGeometryInvalid
+	case containsAny(msg, []string{"entity.id", "entity.type", "attribute", "conflicting types", "URI", "context", "DateTime", "relationship"}):
+		code = CodeNGSILDInvalid
+	default:
+		if errors.Is(err, ErrRequiredSourceMissing) || strings.Contains(msg, ErrRequiredSourceMissing.Error()) {
+			code = CodeRequiredMissing
+		}
+	}
+	expr := p.Field
+	if expr == "" {
+		expr = p.Ref
+	}
+	if expr == "" && p.Value != "" {
+		expr = p.Value
+	}
+	if expr == "" && p.Derive != nil {
+		expr = "derive " + p.Derive.Fn
+	}
+	return Diagnostic{
+		Code: code, RuleID: rule.ID, RuleRevision: rule.Revision,
+		SnapshotVersion: rule.SnapshotVersion, Entity: entityLabel(ent, index),
+		Attribute: p.Target, Expression: expr, Tenant: tenant, ThingID: thingID,
+		Detail: msg,
+	}
 }
 
 // Transform matchar indatat mot den mest specifika regeln och producerar
@@ -310,6 +438,18 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 	if mm.Tenant != "" && mm.Tenant != info.Tenant {
 		return false
 	}
+	// PLAN1050 D/E: exakt versions-/variantmatchning för things (tom
+	// wildcard). Mätvärden bär alltid tomma versioner och träffar därför
+	// aldrig versionerade things-regler.
+	if mm.ThingTypeVersion != "" && mm.ThingTypeVersion != info.ThingTypeVersion {
+		return false
+	}
+	if mm.VariantID != "" && mm.VariantID != info.VariantID {
+		return false
+	}
+	if mm.VariantVersion != "" && mm.VariantVersion != info.VariantVersion {
+		return false
+	}
 	// Händelsekälla måste stämma exakt; tomt matchar endast omärkt indata
 	// (ursprungliga källor), så gamla regler aldrig aktiveras av nya event.
 	if mm.Event != info.Event {
@@ -327,6 +467,10 @@ func (mm Match) matches(in Input, info MatchInfo) bool {
 	return true
 }
 
+// score rangordnar regler vid samma prioritet. PLAN1050 D-specificitet är
+// inkopplad här (E äger match): thingTypeVersion/variantId/variantVersion
+// ger +1 vardera (enkelräkning). specificityD() är identisk med score();
+// ingen dubbelräkning, ordning bevarad. Ingen recency-/revisionspåverkan.
 func (mm Match) score() int {
 	s := 0
 	if mm.Device != "" {
@@ -357,6 +501,15 @@ func (mm Match) score() int {
 		s += 2
 	}
 	if mm.Tenant != "" {
+		s++
+	}
+	if mm.ThingTypeVersion != "" {
+		s++
+	}
+	if mm.VariantID != "" {
+		s++
+	}
+	if mm.VariantVersion != "" {
 		s++
 	}
 	return s
@@ -442,4 +595,99 @@ func stringify(v any) string {
 		return s
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// Specificity exponerar motorns rangordningstal för preview/diagnostik
+// (samma score som match() använder, inkl. D-versions/variant-specificitet).
+// Högre värde = mer specifik regel. Ingen recency-/revisionspåverkan.
+func (mm Match) Specificity() int { return mm.score() }
+
+// PendingOperation mappar en EntityWrite till F:s neutrala brokeroperation.
+// Protokollverb, inga modellnamn.
+func PendingOperation(w EntityWrite) string {
+	switch {
+	case w.Delete:
+		return relations.OpDelete
+	case len(w.RemoveAttributes) > 0:
+		return relations.OpRemoveAttributes
+	case w.Create:
+		return relations.OpCreate
+	default:
+		return relations.OpMerge
+	}
+}
+
+// EntityWritesToPending serialiserar validerade skrivningar till F:s
+// PendingWrite med stabila idempotensnycklar för C2/projektion. Validerar
+// faktisk serialiserad NGSI-LD (hela batchen) före någon nyckel/payload
+// byggs; ogiltig output ger fel före I/O. Pure funktion (ingen brokerkontakt,
+// ingen mutation), deterministisk: samma tenant+skrivning ger samma nyckel
+// och payload, så replay är ofarlig (ON CONFLICT DO NOTHING i F-lagret).
+// Nyckeln är unik per tenant och bär regel/revision/snapshotversion,
+// operation, entitets-ID och payload-hash. Inga modellnamn; payload är
+// ogenomskinlig NGSI-LD-JSON som F aldrig tolkar.
+func EntityWritesToPending(tenant string, writes []EntityWrite, defaultContext string) ([]relations.PendingWrite, error) {
+	if err := ValidateEntityWrites(writes, defaultContext); err != nil {
+		return nil, err
+	}
+	out := make([]relations.PendingWrite, 0, len(writes))
+	for _, w := range writes {
+		op := PendingOperation(w)
+		payload, err := pendingPayload(w, defaultContext)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(payload)
+		hash := hex.EncodeToString(sum[:])
+		rule := w.RuleID
+		if rule == "" {
+			rule = "inline"
+		}
+		key := fmt.Sprintf("%s|%s|%s|%s|rev%d|snap%d|%s",
+			tenant, op, w.EntityID, rule, w.RuleRevision, w.SnapshotVersion, hash)
+		out = append(out, relations.PendingWrite{
+			IdempotencyKey: key,
+			Operation:      op,
+			EntityID:       w.EntityID,
+			Payload:        payload,
+			RuleID:         w.RuleID,
+			RuleRevision:   w.RuleRevision,
+		})
+	}
+	return out, nil
+}
+
+// pendingPayload serialiserar en skrivning till stabil NGSI-LD-JSON.
+// Create/merge valideras via BuildEntity (faktisk serialiserad output);
+// removeAttributes/delete bär minimal deterministisk JSON med effektiv
+// context så att nyckeln förblir stabil utan brokerkontakt.
+func pendingPayload(w EntityWrite, defaultContext string) ([]byte, error) {
+	if w.Delete {
+		contextURL := w.Context
+		if contextURL == "" {
+			contextURL = defaultContext
+		}
+		doc := map[string]any{"id": w.EntityID, "type": w.TypeName, "operation": relations.OpDelete}
+		if contextURL != "" {
+			doc["@context"] = contextURL
+		}
+		return json.Marshal(doc)
+	}
+	if len(w.RemoveAttributes) > 0 {
+		contextURL := w.Context
+		if contextURL == "" {
+			contextURL = defaultContext
+		}
+		attrs := append([]string(nil), w.RemoveAttributes...)
+		doc := map[string]any{"id": w.EntityID, "type": w.TypeName, "removeAttributes": attrs, "operation": relations.OpRemoveAttributes}
+		if contextURL != "" {
+			doc["@context"] = contextURL
+		}
+		return json.Marshal(doc)
+	}
+	ent, err := BuildEntity(w, defaultContext)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(ent)
 }

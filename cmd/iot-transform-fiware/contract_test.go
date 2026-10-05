@@ -46,3 +46,28 @@ func TestRegisterHandlersRegistersDynamicHandlers(t *testing.T) {
 
 	is.Equal(len(messenger.RegisterTopicMessageHandlerWithFilterCalls()), 0)
 }
+
+// Våg 4 K: med THINGS_V1_VALUES registreras även versionerade sakhändelser
+// (relations/lifecycle med F:s projektionsstore; nil ger direktväg utan
+// ändrat ack/retry-kontrakt).
+func TestRegisterHandlersWithThingsV1AndStore(t *testing.T) {
+	is := is.New(t)
+
+	messenger := &messaging.MsgContextMock{
+		RegisterTopicMessageHandlerFunc: func(string, messaging.TopicMessageHandler) error {
+			return nil
+		},
+	}
+
+	is.NoErr(registerHandlers(&appConfig{messenger: messenger, thingsV1Values: true}))
+
+	topics := map[string]bool{}
+	for _, c := range messenger.RegisterTopicMessageHandlerCalls() {
+		topics[c.RoutingKey] = true
+	}
+	is.True(topics[MessageAcceptedTopic])
+	is.True(topics[ThingValuesV1Topic])
+	is.True(topics[ThingRelationsV1Topic])
+	is.True(topics[ThingLifecycleV1Topic])
+	is.Equal(len(messenger.RegisterTopicMessageHandlerCalls()), 4)
+}

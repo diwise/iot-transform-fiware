@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/projection"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/messaging/measurements"
@@ -39,6 +41,16 @@ const ruleSyncInterval = 5 * time.Second
 // shutdownTimeout är en egen övre gräns för att stoppa inflöde och dränera
 // pågående arbete. Runnerns shutdown-hook får ingen egen timeout.
 const shutdownTimeout = 10 * time.Second
+
+// Projektionsworkerns budgetar (Våg 4 K): poll-intervall, batchstorlek,
+// claim-lease och slutdräneringsbudget inom shutdownTimeout. Workern äger
+// aldrig lagret — Close sköter A via ruleStore/projectionStore.
+const (
+	projectionWorkerInterval   = 5 * time.Second
+	projectionWorkerBatch      = 50
+	projectionWorkerLease      = time.Minute
+	projectionWorkerStopBudget = 8 * time.Second
+)
 
 func defaultFlags() flagMap {
 	return flagMap{
@@ -109,12 +121,18 @@ func main() {
 	exitIf(err, logger, "unable to open opa policy file")
 
 	// Reglerna lever i postgres (enda backend, som övriga tjänster);
-	// YAML-filerna är seed som läggs in idempotent vid start.
+	// YAML-filerna är seed som läggs in idempotent vid start. Imagen
+	// innehåller ingen seed: saknad eller tom MODELS_DIR betyder tom
+	// regeluppsättning vid start (varning, ingen startspärr). Trasiga
+	// YAML-filer stoppar starten som förr.
 	ruleStore, err := rules.NewPostgres(ctx, storageConfigFromFlags(flags))
 	exitIf(err, logger, "failed to connect to rule storage")
-	seeded, err := rules.SeedDir(ctx, ruleStore, flags[modelsDir])
-	exitIf(err, logger, "failed to seed model configuration")
-	if seeded.Added+seeded.Updated+seeded.Pruned > 0 {
+	if empty, reason := modelsDirEmpty(flags[modelsDir]); empty {
+		logger.Warn("models directory empty or missing, starting with empty rule set",
+			"models_dir", flags[modelsDir], "reason", reason)
+	} else if seeded, err := rules.SeedDir(ctx, ruleStore, flags[modelsDir]); err != nil {
+		exitIf(err, logger, "failed to seed model configuration")
+	} else if seeded.Added+seeded.Updated+seeded.Pruned > 0 {
 		logger.Info("seeded model rules", "added", seeded.Added, "updated", seeded.Updated, "pruned", seeded.Pruned, "skipped", seeded.Skipped)
 	}
 	var sensorTypes devicemanagement.SensorTypeResolver
@@ -139,6 +157,30 @@ func main() {
 		defaultContext: flags[defaultContextUrl],
 		thingsV1Values: thingsV1ValuesEnabled(flags),
 	}
+
+	// F-projektion på delad pool (Våg 4 K): NewForPool tar aldrig över
+	// stängning (ruleStore äger poolen); schemat är redan migrerat via
+	// regellagrets 005 men EnsureSchema är idempotent och verifierar.
+	// IsReady ändrar inte probesemantiken (stubbar förblir OK) — den
+	// verifieras här vid start och loggas.
+	cfg.projectionStore = projection.NewForPool(ruleStore.Pool())
+	if err := cfg.projectionStore.EnsureSchema(ctx); err != nil {
+		exitIf(err, logger, "failed to ensure projection schema")
+	}
+	readyCtx, readyCancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := cfg.projectionStore.IsReady(readyCtx); err != nil {
+		readyCancel()
+		exitIf(err, logger, "projection store is not ready")
+	}
+	readyCancel()
+	worker, err := projection.NewWorker(
+		cfg.projectionStore,
+		things.WorkerBrokerFunc(factory),
+		projectionWorkerInterval, projectionWorkerBatch,
+		projectionWorkerLease, projectionWorkerStopBudget,
+	)
+	exitIf(err, logger, "failed to create projection worker")
+	cfg.projectionWorker = worker
 
 	runner, err := initialize(ctx, flags, cfg, policies)
 	exitIf(err, logger, "failed to initialize service runner")
@@ -172,11 +214,47 @@ func initialize(ctx context.Context, flags flagMap, cfg *appConfig, policiesFile
 				return fmt.Errorf("failed to start messenger: %w", err)
 			}
 
-			return registerHandlers(svcCfg)
+			if err := registerHandlers(svcCfg); err != nil {
+				return err
+			}
+
+			// Bakgrundsdränering (F Worker): ägd loop med livscykel-context
+			// (verklig rot, inte request-context). Run blockerar tills
+			// cancel och gör därefter en sista dränering inom stopBudget
+			// (WithoutCancel inuti Workern) innan den returnerar.
+			if svcCfg.projectionWorker != nil {
+				wctx, cancel := context.WithCancel(context.Background())
+				svcCfg.workerCancel = cancel
+				done := make(chan struct{})
+				svcCfg.workerDone = done
+				go func() {
+					defer close(done)
+					_ = svcCfg.projectionWorker.Run(wctx)
+				}()
+			}
+			return nil
 		}),
 		onshutdown(func(ctx context.Context, svcCfg *appConfig) error {
+			// Stoppa inflöde: avbryt workern och invänta avslutad
+			// slutdränering inom budget (oberoende av avbruten stoppsignal).
+			if svcCfg.workerCancel != nil {
+				svcCfg.workerCancel()
+			}
+			if svcCfg.workerDone != nil {
+				select {
+				case <-svcCfg.workerDone:
+				case <-time.After(projectionWorkerStopBudget + time.Second):
+					logging.GetFromContext(ctx).Debug("projection worker did not stop in budget")
+				}
+			}
 			if err := shutdownMessenger(ctx, svcCfg.messenger); err != nil {
 				logging.GetFromContext(ctx).Debug("failed to shut down messenger", "err", err.Error())
+			}
+			// Delad pool: projectionStore.Close stänger aldrig den delade
+			// poolen (NewForPool, owned=false) — idempotent och nil-säker.
+			// ruleStore äger och stänger poolen.
+			if svcCfg.projectionStore != nil {
+				svcCfg.projectionStore.Close()
 			}
 			if svcCfg.ruleStore != nil {
 				svcCfg.ruleStore.Close()
@@ -220,14 +298,16 @@ func registerHandlers(svcCfg *appConfig) error {
 	// cutover till nya kontrakt är ett explicit driftbeslut. Samma flagga
 	// gates relations- (things.v1.relations) och livscykelhändelser
 	// (things.v1.lifecycle): ett cutover-beslut för hela things.v1.*-familjen.
+	// Relations/lifecycle-handlers kopplas med F:s projektionsstore
+	// (WithStore; nil ger direktväg utan ändrat ack/retry-kontrakt).
 	if svcCfg.thingsV1Values {
 		if err := messenger.RegisterTopicMessageHandler(ThingValuesV1Topic, things.NewThingValuesTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
 			return fmt.Errorf("failed to register thing values handler: %w", err)
 		}
-		if err := messenger.RegisterTopicMessageHandler(ThingRelationsV1Topic, things.NewThingRelationsTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
+		if err := messenger.RegisterTopicMessageHandler(ThingRelationsV1Topic, things.NewThingRelationsTopicMessageHandlerWithStore(cbClientFn, svcCfg.models, svcCfg.defaultContext, svcCfg.projectionStore)); err != nil {
 			return fmt.Errorf("failed to register thing relations handler: %w", err)
 		}
-		if err := messenger.RegisterTopicMessageHandler(ThingLifecycleV1Topic, things.NewThingLifecycleTopicMessageHandler(cbClientFn, svcCfg.models, svcCfg.defaultContext)); err != nil {
+		if err := messenger.RegisterTopicMessageHandler(ThingLifecycleV1Topic, things.NewThingLifecycleTopicMessageHandlerWithStore(cbClientFn, svcCfg.models, svcCfg.defaultContext, svcCfg.projectionStore)); err != nil {
 			return fmt.Errorf("failed to register thing lifecycle handler: %w", err)
 		}
 	}
@@ -333,6 +413,27 @@ func timeoutBudgets(flags flagMap) (time.Duration, time.Duration, error) {
 		return 0, 0, fmt.Errorf("OAUTH2_TOKEN_TIMEOUT must be a positive duration")
 	}
 	return broker, token, nil
+}
+
+// modelsDirEmpty rapporterar om dir saknas eller inte innehåller några
+// .yaml/.yml-filer (samma urval som rules.SeedDir). Tjänsten startar då
+// med tom regeluppsättning i stället för att vägra starta; regler
+// tillförs via mount på MODELS_DIR eller via regel-API:t.
+func modelsDirEmpty(dir string) (bool, string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return true, err.Error()
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		switch strings.ToLower(filepath.Ext(e.Name())) {
+		case ".yaml", ".yml":
+			return false, ""
+		}
+	}
+	return true, "no model rules found"
 }
 
 func exitIf(err error, logger *slog.Logger, msg string, args ...any) {

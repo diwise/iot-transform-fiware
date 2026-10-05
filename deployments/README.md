@@ -12,8 +12,9 @@ Tjänsten lagrar regler i postgres (tabell `transform_rules`) och seedar
 YAML-modeller från `MODELS_DIR` (`/opt/diwise/config/models`) i
 lexikografisk filnamnsordning vid start (aldrig överskrivning av
 API-ändringar; varje API-skrivning laddar om körningsmotorerna atomärt).
-Strikt avkodning och validering stoppar starten vid fel. Imagen har
-standardmodellerna från `deployments/models` inbakade som seed.
+Strikt avkodning och validering stoppar starten vid fel. Imagen
+innehåller ingen seed: saknad eller tom `MODELS_DIR` ger tom
+regeluppsättning vid start (varning i logg, ingen startspärr).
 
 ```bash
 docker run --rm \
@@ -43,8 +44,9 @@ vara read-only eftersom seed bara läser.
 ## Rökprov utan RabbitMQ/context-broker (med postgres)
 
 Startar med `RABBITMQ_DISABLED=true` mot postgres; kontrollservern svarar
-`204` på `/health` och `/readyz`. En trasig `MODELS_DIR` ska ge seed-fel
-och avsluta processen. Regel-API:t (`SERVICE_PORT`) svarar 401 utan token.
+`204` på `/health` och `/readyz`. Trasiga YAML-filer i `MODELS_DIR` ska ge
+seed-fel och avsluta processen; saknad eller tom katalog startar med tom
+regeluppsättning. Regel-API:t (`SERVICE_PORT`) svarar 401 utan token.
 
 ## e2e i compose
 
@@ -64,11 +66,12 @@ en partOf-länk på `things.v1.relations` sätter/rensar relationsattribut
 
 ## Utrullningsordning
 
-1. Bygg och tagga imagen. Standardmodellerna är inbakade som seed, så ingen separat
-   config-fil behövs för grundfallet. Sätt `POSTGRES_*` (kravs) och
-   `SERVICE_PORT` + `POLICIES_FILE` för regel-API:t.
-2. Används en delad `MODELS_DIR`-mount: uppdatera modellerna och imagen i samma
-   rullning så att versionerna inte glider isär. Seed skriver aldrig över
+1. Bygg och tagga imagen. Imagen innehåller ingen seed, så montera
+   modellkatalogen (`MODELS_DIR`, t.ex. `-v "$PWD/deployments/models:/models:ro"`
+   med `MODELS_DIR=/models`) eller skapa regler via regel-API:t.
+   Sätt `POSTGRES_*` (kravs) och `SERVICE_PORT` + `POLICIES_FILE` för regel-API:t.
+2. Håll `MODELS_DIR`-mounten och imagen i samma rullning så att
+   versionerna inte glider isär. Seed skriver aldrig över
    API-ändringar (`source=api`); redigerade seed-filer uppdaterar seed-rader
    vid omstart. Tjänsten validerar modellerna vid start och vägrar starta vid fel.
 3. Rulla ut och verifiera `/health`/`/readyz` samt att `message.accepted` och
@@ -83,8 +86,8 @@ enda vägen.
 ## Rollback
 
 Tjänsten är tillståndslös och skriver entiteter med idempotent merge/create, så
-en rollback är att rulla tillbaka till föregående image-tagg (och, om mount
-används, föregående modellkatalog).
+en rollback är att rulla tillbaka till föregående image-tagg och
+föregående modellkatalog.
 
 Observera att entiteter som redan skrivits ligger kvar i context-broker. Eftersom
 migreringen bytte vissa attributnamn till modellens (`co2` i stället för `CO2`,

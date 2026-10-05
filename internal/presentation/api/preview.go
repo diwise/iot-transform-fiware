@@ -41,6 +41,19 @@ type previewResponse struct {
 	// SkippedReason förklarar matchad regel utan entiteter (t.ex. required
 	// saknas → undertryckt). Tom vid ingen matchning eller vid träffar.
 	SkippedReason string `json:"skippedReason,omitempty"`
+	// RuleID/RuleRevision/SnapshotVersion är den valda regelns identitet
+	// (PLAN1050 E). Inline-preview bär tom ID/0-versioner; lagrade regler
+	// bär full identitet via produktionssnapshoten. Alltid satt vid match.
+	RuleID          string `json:"ruleId,omitempty"`
+	RuleRevision    int64  `json:"ruleRevision,omitempty"`
+	SnapshotVersion int64  `json:"snapshotVersion,omitempty"`
+	// Competing är konkurrerande matchningar tenant-avgränsat (samma
+	// ExplainMatch som produktion loggar; offline, ingen I/O).
+	Competing []transform.MatchDiagnostic `json:"competing,omitempty"`
+	// Skipped är precisa skiporsaker per entitet/attribut med D:s
+	// diagnoskoder (required-missing m.fl.). Tom vid ingen matchning
+	// eller vid träffar.
+	Skipped []transform.Diagnostic `json:"skipped,omitempty"`
 }
 
 type previewEntity struct {
@@ -50,10 +63,16 @@ type previewEntity struct {
 	// Context är entitetens JSON-LD-context (faller tillbaka till
 	// deployment-default i produktion; tom här betyder default).
 	Context string `json:"context,omitempty"`
+	// EffectiveContext är den faktiska context som produktion serialiserar
+	// med (explicit eller bibliotekets default). Aldrig tom vid träff.
+	EffectiveContext string `json:"effectiveContext,omitempty"`
 	// Operation är create (POST), merge (PATCH/merge), remove
 	// (PATCH-null) eller delete (DELETE) — samma semantik som produktion
 	// skriver mot brokern.
 	Operation string `json:"operation"`
+	// RemoveAttributes bär de rensade attributen vid operation remove
+	// (explicit rensning; tom annars).
+	RemoveAttributes []string `json:"removeAttributes,omitempty"`
 }
 
 type staticSensorType string
@@ -98,16 +117,40 @@ func (h *handler) previewModel(w http.ResponseWriter, r *http.Request) {
 		writeAPIError(w, err)
 		return
 	}
-	writes, matched, observations, err := previewTransform(r.Context(), req)
+	// Offline torr körning: samma normalisering/validering som produktion
+	// (delad C1-adapter + engine), aldrig brokerkontakt eller mutation.
+	detail, err := previewDetailed(r.Context(), req)
 	if err != nil {
-		writeAPIError(w, err)
+		// Preview har inga infradependenser (ingen DB/broker); fel från
+		// regel/exempel är klientfel (400), aldrig 500. Bevara meddelandet.
+		if errors.Is(err, errValidation) {
+			writeAPIError(w, err)
+		} else {
+			writeAPIError(w, fmt.Errorf("%w: %v", errValidation, err))
+		}
 		return
 	}
-	out := previewResponse{Matched: matched, Entities: []previewEntity{}, Observations: observations}
-	if matched && len(writes) == 0 {
-		out.SkippedReason = "matched rule produced no entities (required source missing or suppressed)"
+	out := previewResponse{
+		Matched: detail.Matched, Entities: []previewEntity{},
+		Observations: detail.Observations,
+		RuleID:       detail.RuleID, RuleRevision: detail.RuleRevision,
+		SnapshotVersion: detail.SnapshotVersion,
+		Competing:       detail.Competing, Skipped: detail.Skipped,
 	}
-	for _, wr := range writes {
+	if detail.Matched && len(detail.Writes) == 0 {
+		out.SkippedReason = "matched rule produced no entities (required source missing or suppressed)"
+		if len(detail.Skipped) == 0 {
+			// Fallback när motorn inte kunde precisera (t.ex. mätvärden
+			// utan per-attributdiagnostik): behåll ärlig, om än generell,
+			// orsak i stället för tyst tomhet.
+			out.Skipped = []transform.Diagnostic{{
+				Code: transform.CodeRequiredMissing, RuleID: detail.RuleID,
+				RuleRevision: detail.RuleRevision, SnapshotVersion: detail.SnapshotVersion,
+				Detail: "matched rule produced no entities (required source missing or suppressed)",
+			}}
+		}
+	}
+	for _, wr := range detail.Writes {
 		props, err := entityProperties(wr.EntityID, wr.TypeName, wr.Props)
 		if err != nil {
 			writeAPIError(w, fmt.Errorf("%w: %v", errValidation, err))
@@ -123,9 +166,150 @@ func (h *handler) previewModel(w http.ResponseWriter, r *http.Request) {
 		if wr.Delete {
 			op = "delete"
 		}
-		out.Entities = append(out.Entities, previewEntity{ID: wr.EntityID, Type: wr.TypeName, Properties: props, Context: wr.Context, Operation: op})
+		effective := wr.Context
+		if effective == "" {
+			effective = entities.DefaultContextURL
+		}
+		out.Entities = append(out.Entities, previewEntity{
+			ID: wr.EntityID, Type: wr.TypeName, Properties: props,
+			Context: wr.Context, EffectiveContext: effective, Operation: op,
+			RemoveAttributes: append([]string(nil), wr.RemoveAttributes...),
+		})
+	}
+	// Validera faktisk serialiserad NGSI-LD för hela batchen före svar
+	// (samma ValidateEntityWrites som produktion kör före broker-I/O).
+	if err := transform.ValidateEntityWrites(detail.Writes, ""); err != nil {
+		writeAPIError(w, fmt.Errorf("%w: %v", errValidation, err))
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// previewDetail är den rika torra körningen för PLAN1050 E: skrivningar +
+// vald regel/revision/snapshotversion, konkurrerande matchningar
+// tenant-avgränsat och precisa skiporsaker. Offline: samma C1-normalisering
+// och engine som produktion, aldrig brokerkontakt eller mutation.
+type previewDetail struct {
+	Writes          []transform.EntityWrite
+	Matched         bool
+	Observations    int
+	RuleID          string
+	RuleRevision    int64
+	SnapshotVersion int64
+	Competing       []transform.MatchDiagnostic
+	Skipped         []transform.Diagnostic
+}
+
+// previewDetailed kör en inline-regel torrt med full diagnostik. Delar
+// normalisering med produktion (samma ThingValuesFromJSON/
+// ThingRelationsFromJSON/ThingLifecycleFromJSON/PartitionMessage + engine).
+func previewDetailed(ctx context.Context, req previewRequest) (previewDetail, error) {
+	engine := transform.NewEngine([]transform.Rule{req.Rule})
+	detailFor := func(in transform.Thing, observations int) (previewDetail, error) {
+		matched := engine.Matched(in)
+		if !matched {
+			return previewDetail{Matched: false, Observations: observations,
+				Writes: []transform.EntityWrite{}}, nil
+		}
+		rule, _ := engine.MatchedRule(in)
+		competing := engine.ExplainMatch(in)
+		writes, err := engine.Transform(in)
+		if errors.Is(err, transform.ErrNoMatchingRule) {
+			return previewDetail{Matched: false, Observations: observations,
+				Writes: []transform.EntityWrite{}}, nil
+		}
+		if err != nil {
+			return previewDetail{Matched: true, Observations: observations,
+				RuleID: rule.ID, RuleRevision: rule.Revision, SnapshotVersion: rule.SnapshotVersion,
+				Competing: competing}, err
+		}
+		var skipped []transform.Diagnostic
+		if len(writes) == 0 {
+			skipped = engine.ExplainSkipped(in)
+		}
+		return previewDetail{Writes: writes, Matched: true, Observations: observations,
+			RuleID: rule.ID, RuleRevision: rule.Revision, SnapshotVersion: rule.SnapshotVersion,
+			Competing: competing, Skipped: skipped}, nil
+	}
+	switch req.Event.Kind {
+	case transform.EventThingsV1Values:
+		th, err := things.ThingValuesFromJSON(req.Event.Message)
+		if err != nil {
+			return previewDetail{}, fmt.Errorf("%w: invalid values envelope: %v", errValidation, err)
+		}
+		return detailFor(th, 1)
+	case string(transform.KindMeasurement):
+		var msg events.MessageAccepted
+		if err := json.Unmarshal(req.Event.Message, &msg); err != nil {
+			return previewDetail{}, fmt.Errorf("%w: invalid measurement envelope: %v", errValidation, err)
+		}
+		d := measurements.NewDynamicTransformer([]transform.Rule{req.Rule}, staticSensorType(req.Event.SensorType))
+		// Samma delning som produktion: varje objektobservation för sig.
+		observations, err := measurements.PartitionMessage(msg, time.Now().UTC())
+		if err != nil {
+			return previewDetail{}, fmt.Errorf("%w: invalid measurement pack: %v", errValidation, err)
+		}
+		if len(observations) == 0 {
+			return previewDetail{Matched: false, Observations: 0, Writes: []transform.EntityWrite{}}, nil
+		}
+		var all []transform.EntityWrite
+		matchedAny := false
+		for _, obs := range observations {
+			if d.Matched(ctx, obs) {
+				matchedAny = true
+			}
+			writes, err := d.Transform(ctx, obs)
+			if errors.Is(err, transform.ErrNoMatchingRule) {
+				continue
+			}
+			if err != nil {
+				return previewDetail{Matched: true, Observations: len(observations),
+					RuleID: req.Rule.ID, RuleRevision: req.Rule.Revision, SnapshotVersion: req.Rule.SnapshotVersion}, err
+			}
+			all = append(all, writes...)
+		}
+		if all == nil {
+			all = []transform.EntityWrite{}
+		}
+		var skipped []transform.Diagnostic
+		if matchedAny && len(all) == 0 {
+			skipped = []transform.Diagnostic{{
+				Code: transform.CodeRequiredMissing, RuleID: req.Rule.ID,
+				RuleRevision: req.Rule.Revision, SnapshotVersion: req.Rule.SnapshotVersion,
+				Detail: "matched rule produced no entities (required source missing or suppressed)",
+			}}
+		}
+		// Konkurrerande matchningar för en-regels inline-preview är triviala;
+		// tenant-avgränsning bevisas via match (främmande tenant ger no-match).
+		var competing []transform.MatchDiagnostic
+		if matchedAny {
+			competing = []transform.MatchDiagnostic{{
+				Index: 0, RuleID: req.Rule.ID, Revision: req.Rule.Revision,
+				SnapshotVersion: req.Rule.SnapshotVersion, Priority: req.Rule.Priority,
+				Specificity: req.Rule.Match.Specificity(), Winner: true, Reason: "winner",
+			}}
+		}
+		_ = engine
+		return previewDetail{Writes: all, Matched: matchedAny, Observations: len(observations),
+			RuleID: req.Rule.ID, RuleRevision: req.Rule.Revision, SnapshotVersion: req.Rule.SnapshotVersion,
+			Competing: competing, Skipped: skipped}, nil
+	case transform.EventThingsV1Relations:
+		th, err := things.ThingRelationsFromJSON(req.Event.Message)
+		if err != nil {
+			return previewDetail{}, fmt.Errorf("%w: invalid relations envelope: %v", errValidation, err)
+		}
+		return detailFor(th, 1)
+	case transform.EventThingsV1Lifecycle:
+		th, err := things.ThingLifecycleFromJSON(req.Event.Message)
+		if err != nil {
+			return previewDetail{}, fmt.Errorf("%w: invalid lifecycle envelope: %v", errValidation, err)
+		}
+		return detailFor(th, 1)
+	default:
+		return previewDetail{}, fmt.Errorf("%w: event.kind must be %q, %q, %q or %q", errValidation,
+			transform.KindMeasurement, transform.EventThingsV1Values,
+			transform.EventThingsV1Relations, transform.EventThingsV1Lifecycle)
+	}
 }
 
 // entityProperties marshalar en EntityWrite till NGSI-LD-JSON och returnerar

@@ -302,13 +302,25 @@ func TestStage5OwnObservationTimeAndConstants(t *testing.T) {
 	if _, set := out["constant"].(map[string]any)["observedAt"]; set {
 		t.Error("constant acquired measurement time")
 	}
-	if !in.MessageTime().Equal(published) {
-		t.Errorf("published time aliased to observation: %v", in.MessageTime())
+	// J2(a): timestamp:true för values är max-observedAt (mättid), inte
+	// transporttid. event.publishedAt förblir åtkomlig explicit via mall.
+	if !in.MessageTime().Equal(observed.Add(time.Minute)) {
+		t.Errorf("message time must be max observedAt, got %v", in.MessageTime())
 	}
 	m := Measurement{DeviceID: "sensor", Timestamp: published, HeaderTime: observed.Add(-time.Minute), HasHeaderTime: true, Records: []Record{{Name: "5700", Value: new(12.0), Time: observed, HasTime: true}}}
 	out = stage5Output(t, m, stage5Rule(m, Property{Target: "reading", Type: TypeNumber, Resource: "5700"}))
 	if got := out["reading"].(map[string]any)["observedAt"]; got != observed.Format(time.RFC3339Nano) {
 		t.Errorf("measurement time=%v", got)
+	}
+}
+
+func TestStage5ValuesMessageTimeFallsBackToPublished(t *testing.T) {
+	published := time.Date(2026, 10, 1, 13, 0, 0, 0, time.UTC)
+	in := Thing{ID: "object", Event: EventThingsV1Values, Fields: map[string]any{
+		"event": map[string]any{"publishedAt": published.Format(time.RFC3339Nano)},
+	}}
+	if !in.MessageTime().Equal(published) {
+		t.Errorf("descriptor-only values event must fall back to publishedAt, got %v", in.MessageTime())
 	}
 }
 

@@ -1,0 +1,26 @@
+# Beach från versionerade värdesevent (things.v1.values).
+# Delad från generisk PointOfInterest: type pointofinterest + subType Beach
+# vinner över 100-pointofinterest via specificitet (subType ger +4).
+# En regel ger två entiteter: Beach-entiteten (name/location/description)
+# samt WaterQualityObserved per beach-sak (temperatur från sakens egna
+# kopplade sensorer via values.temperature). Ref ligger på WQO som
+# refLocation mot Beach-entiteten; ingen länk skrivs på Beach.
+# ID är stabilt {{id}} (thingId) för båda.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: pointofinterest, subType: Beach }
+    entities:
+      - id: "urn:ngsi-ld:Beach:{{id}}"
+        type: Beach
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry, required: true }
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
+        type: WaterQualityObserved
+        properties:
+          - { target: temperature, type: Number, field: values.temperature.value, observedAt: "field:values.temperature.observedAt", required: true }
+          - { target: description, type: Text, field: metadata.description, observedAt: none }
+          - { target: location, type: Geo, field: geometry, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: refLocation, type: Relationship, value: "urn:ngsi-ld:Beach:{{id}}" }

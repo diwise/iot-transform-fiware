@@ -78,6 +78,10 @@ type Model struct {
 // Rule matchar en källa och beskriver vilka entiteter som ska skrivas.
 type Rule struct {
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+	// Name är fritext endast för användaren (t.ex. "Rum – temperatur till
+	// WeatherObserved"). Det påverkar aldrig matchning, körning,
+	// prioritet eller specificitet och behöver inte vara unikt.
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 	// Körningsmetadata kommer från lagret, aldrig från regelpayloaden.
 	ID              string   `yaml:"-" json:"-"`
 	Revision        int64    `yaml:"-" json:"-"`
@@ -88,6 +92,13 @@ type Rule struct {
 
 // Match beskriver vilka källor en regel gäller. Tomma skalära filter är
 // wildcard, men Kind, Event, Lifecycle och RelationRemoved jämförs exakt.
+//
+// PLAN1050 D (additiv v1): thingTypeVersion, variantId och variantVersion är
+// exakta strängmatchningar för things-regler. Tom variantId/variantVersion
+// är wildcard; tom thingTypeVersion matchar alla versioner men regeln måste
+// då deklarera thingType (version utan typ avvisas). configRevision är aldrig
+// ett matchfilter och har därför inget fält här (okänt fält nekas strikt i
+// YAML/JSON). Gamla regler utan de nya fälten fortsätter att gälla oförändrat.
 type Match struct {
 	Kind   Kind   `yaml:"kind" json:"kind"`
 	Device string `yaml:"device,omitempty" json:"device,omitempty"`
@@ -120,9 +131,29 @@ type Match struct {
 	// Jämförs som hårt filter utan score-påverkan, så livscykelregler
 	// aldrig korsaktiveras av värdes- eller relationshändelser.
 	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
+	// ThingTypeVersion avgränsar things-regler till en exakt mallversion
+	// (eventets thingTypeVersion). Tomt är wildcard över alla versioner.
+	// Kräver match.type; endast giltig för things. Exakt strängmatchning.
+	ThingTypeVersion string `yaml:"thingTypeVersion,omitempty" json:"thingTypeVersion,omitempty"`
+	// VariantID avgränsar things-regler till en exakt variant (descriptorns
+	// variantId). Tomt är wildcard. Endast giltig för things.
+	VariantID string `yaml:"variantId,omitempty" json:"variantId,omitempty"`
+	// VariantVersion avgränsar things-regler till en exakt variantversion
+	// (descriptorns variantVersion). Tomt är wildcard. Endast giltig för
+	// things. Oberoende wildcard från variantId.
+	VariantVersion string `yaml:"variantVersion,omitempty" json:"variantVersion,omitempty"`
 }
 
 // Entity beskriver en NGSI-LD-entitet som ska skrivas.
+//
+// PLAN1050 D: Name är den deklarativa målrollen (fri sträng, tom = anonym).
+// ID-mallar använder stabila käll-ID:n, företrädesvis
+// "urn:ngsi-ld:<Typ>:{{id}}", samt {{entities.<roll>.id}} för
+// rollreferenser, {{field:<väg>}}, {{safeURI(...)}} och
+// {{firstPresent(...)}}. Framåt-/självref i ID samt dubblett-target
+// (samma ID-mall två gånger i samma regel) avvisas; okända roller,
+// cykler och oförenliga definitioner ger 400 + diagnostik. En sak kan
+// mappas till flera målentiteter i deklarerad ordning.
 type Entity struct {
 	Name       string     `yaml:"name,omitempty" json:"name,omitempty"`
 	ID         string     `yaml:"id" json:"id"`
@@ -141,6 +172,21 @@ type Entity struct {
 }
 
 // Source beskriver var ett värde hämtas. Exakt en källa ska vara satt.
+//
+// PLAN1050 D delta/snapshot-syntax (things): field/slutledda vägar använder
+// values.<id>.value|observedAt|quality|unit|source (skrivbar vy, endast
+// ok/uncertain), snapshot.<id>.* och delta.<id>.* (samma bladnamn),
+// descriptor|thing.* (rå descriptor), event.* (kuvertmetadata),
+// observations[] (proveniens utan värden), relations[]/relation.*,
+// lifecycle.*, geometry/location/metadata samt standardgenvägar
+// (id/type/typeName/subType/name/alternativeName/tenant/timestamp/uuid).
+// Citerade vägar (values."a.b".value) och [n]-index stöds. {{}}-mallar med
+// safeURI/firstPresent samt derive[sum|min|max|anyTrue|allTrue|
+// coalesce|firstPresent] inom samma event stöds. Fria metadata/repeat ger
+// aldrig falsk fullständig garanti: saknad dynamisk/valfri källa är skip
+// (required undertrycker entiteten), inte ett statiskt omöjligt bygge.
+// Create:true kräver validerad snapshot som full create (giltig PATCH ≠
+// giltig create); default är merge-or-create med delta för deluppdateringar.
 type Source struct {
 	Resource  string `yaml:"resource,omitempty" json:"resource,omitempty"`
 	Object    string `yaml:"object,omitempty" json:"object,omitempty"`

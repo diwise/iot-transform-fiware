@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
+
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/devicemanagement"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/projection"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
 	"github.com/diwise/iot-transform-fiware/internal/presentation/api"
 	"github.com/diwise/messaging-golang/pkg/messaging"
@@ -67,6 +70,18 @@ type appConfig struct {
 	// default; sätts på vid cutover till nya kontrakt (E7). Samma motor och
 	// modeller återanvänds; händelsekällan (match.event) skiljer reglerna åt.
 	thingsV1Values bool
+
+	// projectionStore persisterar F:s neutrala relationsprojektion +
+	// återställbart väntande brokerarbete på delad pool (NewForPool;
+	// A äger livscykeln, Close är idempotent). Nil utan DB.
+	projectionStore *projection.Store
+
+	// projectionWorker dränerar väntande arbete i bakgrunden (DrainOnce).
+	// A äger start/stopp; workerCancel avbryter loopen, workerDone
+	// inväntas inom shutdown-budget.
+	projectionWorker *projection.Worker
+	workerCancel     context.CancelFunc
+	workerDone       chan struct{}
 }
 
 var onstarting = servicerunner.OnStarting[appConfig]

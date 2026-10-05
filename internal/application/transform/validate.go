@@ -85,7 +85,28 @@ func (r Rule) validate() error {
 		}
 	}
 
+	if err := r.validateDuplicateTargets(); err != nil {
+		return err
+	}
+
 	return r.validateReferences()
+}
+
+// validateDuplicateTargets förbjuder dubblett-target i samma regel: två
+// entiteter får inte dela identisk ID-malltext, även med samma typmall.
+// Samma ID-/typmall får återanvändas mellan regler (konfliktkontrollen i
+// Validate avvisar endast oförenliga typmallar vid överlapp); inom en regel
+// vore två skrivningar mot samma målidentitet tvetydiga. Jämför malltext,
+// renderar inga uttryck.
+func (r Rule) validateDuplicateTargets() error {
+	seen := map[string]int{}
+	for i, e := range r.Entities {
+		if prev, dup := seen[e.ID]; dup {
+			return fmt.Errorf("entity %d: duplicate entity id template %q (also entity %d)", i, e.ID, prev)
+		}
+		seen[e.ID] = i
+	}
+	return nil
 }
 
 // validateReferences kontrollerar att {{entities.<namn>.id}} pekar på en
@@ -157,6 +178,9 @@ func (mm Match) validateForKind() error {
 		if mm.Type != "" || mm.SubType != "" {
 			return errors.New("match.type/subType is only valid for things")
 		}
+		if mm.ThingTypeVersion != "" || mm.VariantID != "" || mm.VariantVersion != "" {
+			return errors.New("match.thingTypeVersion/variantId/variantVersion is only valid for things")
+		}
 		if mm.Event != "" {
 			return errors.New("match.event is only valid for things")
 		}
@@ -187,6 +211,12 @@ func (mm Match) validateForKind() error {
 		}
 		if mm.Lifecycle != "" && mm.Event != EventThingsV1Lifecycle {
 			return errors.New("match.lifecycle requires event things.v1.lifecycle")
+		}
+		// PLAN1050 D: version utan typ är meningslös. Tom version är
+		// wildcard över alla versioner; angiven version kräver typ.
+		// configRevision har inget matchfält (nekat som okänt fält).
+		if mm.ThingTypeVersion != "" && mm.Type == "" {
+			return errors.New("match.thingTypeVersion requires match.type")
 		}
 	}
 	return nil
@@ -327,6 +357,9 @@ func validateSourceKind(s Source, kind Kind) error {
 			if _, err := parsePath(path); err != nil {
 				return err
 			}
+			if err := validateFieldPathForKind(path, kind); err != nil {
+				return err
+			}
 		}
 	}
 	switch kind {
@@ -349,6 +382,47 @@ func validateSourceKind(s Source, kind Kind) error {
 		}
 		if s.Ref != "" {
 			return errors.New("ref is only valid for things")
+		}
+	}
+	return nil
+}
+
+// validateFieldPathForKind skiljer statiskt omöjliga fältvägar från
+// dynamiska/valfria källor (PLAN1050 D). Syntax fel avvisas redan av
+// parsePath. Här avvisas endast strukturellt omöjliga konstruktioner:
+//
+//   - values/snapshot/delta kräver egenskaps-ID (minst två steg) och är
+//     mappar, inte listor (values[0] avvisas). Bladnamn och index efter
+//     egenskaps-ID är dynamiska: okända blad är saknad källa vid körning
+//     (skip/required), inte ett statiskt fel. Citerade nycklar
+//     (values."a.b".value) och [n]-index är giltiga generella former.
+//   - observations[]/relations[] är listor med proveniens utan värden;
+//     alla former accepteras statiskt (metadata-bypass ger skip, inte fel).
+//   - Övriga rötter (descriptor/thing/event/relation/lifecycle/geometry/
+//     location/metadata samt standardgenvägar) är dynamiska descriptor-/
+//     kuvertfält; okända rötter förblir dynamiska för framåtkompatibilitet.
+//     Fria metadata/repeat ger aldrig falsk fullständig garanti.
+//
+// Mätvärden använder inte field/ref (avvisas ovan); deras {{}}-mallar
+// förblir dynamiska (record-namn är datadrivna).
+func validateFieldPathForKind(path string, kind Kind) error {
+	if kind != KindThing {
+		return nil
+	}
+	steps, err := parsePath(path)
+	if err != nil {
+		return err
+	}
+	if len(steps) == 0 {
+		return fmt.Errorf("invalid field path %q", path)
+	}
+	switch steps[0].key {
+	case "values", "snapshot", "delta":
+		if len(steps) < 2 {
+			return fmt.Errorf("field %q requires a property id (e.g. %s.<id>.value)", path, steps[0].key)
+		}
+		if steps[1].indexed {
+			return fmt.Errorf("field %q: %s is a map by property id, not a list", path, steps[0].key)
 		}
 	}
 	return nil

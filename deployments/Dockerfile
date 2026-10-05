@@ -22,8 +22,9 @@ WORKDIR /opt/diwise
 
 COPY --from=builder --chown=1001 /app/cmd/iot-transform-fiware/iot-transform-fiware /opt/diwise
 
-# Bakade standardmodeller. En mount på MODELS_DIR ersätter dem vid drift.
-COPY --chown=1001 deployments/models /opt/diwise/config/models
+# Ingen seed bakas in i imagen: regelmallar tillförs via mount på
+# MODELS_DIR eller skapas via regel-API:t. Saknad/tom katalog betyder
+# tom regeluppsättning vid start (varning i logg, ingen startspärr).
 ENV MODELS_DIR=/opt/diwise/config/models
 
 RUN chown -R 1001 /opt/diwise

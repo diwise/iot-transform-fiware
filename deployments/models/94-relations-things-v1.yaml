@@ -4,39 +4,26 @@
 # gamla producenter utan typfält aldrig träffar (fail fast i stället för
 # tysta felskrivningar eller omsändningsloopar).
 #
-# Exempel 1 (generellt mönster): rums partOf-länk skrivs som refParent på
-# rummets observationsentitet (samma id-mall som 90-room-things-v1.yaml).
-# Förälder-entiteten förväntas existera (skapad av egen regel); NGSI-LD
-# tolererar dangling-referenser.
+# Rums partOf-länk skrivs som refParent på rummets observationsentitet
+# (samma id-mall som 90-room-things-v1.yaml). Förälder-entiteten förväntas
+# existera (skapad av egen regel); NGSI-LD tolererar dangling-referenser.
+# Greenhouse/tank är borttagna tills nya mallar tas fram.
 #
-# Exempel 2 (verifierat scenario växthus+tank): tankens partOf-länk skrivs
-# som hasWaterQualityObserved (array enligt modellen) på växthusets
-# AgriGreenhouse-entitet (samma id-mall som 92-greenhouse-things-v1.yaml).
-# Bortkoppling rensar attributet (1-tank-antagande: hela arrayen rensas).
+# J2(c): värdet är avsiktligt hårdkodat till Building-URN och regeln är
+# avgränsad med match.toType: building. Mål av annan källtyp träffar inte
+# (no-match, skip utan brokerkontakt) i stället för tyst felskrivning mot
+# Building-URN. Generisk avvikelse dokumenterad: fler måltyper kräver nya
+# regler med egen toType + URN-mall (ingen modellberoende motorkod).
 rules:
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: room }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: room, toType: building }
     entities:
       - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties:
           - { target: refParent, type: Relationship, value: "urn:ngsi-ld:Building:{{relation.to.thingId}}" }
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: room }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: room, toType: building }
     entities:
       - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
         type: IndoorEnvironmentObserved
         properties: []
         removeAttributes: [refParent]
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank, toType: greenhouse }
-    entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
-        type: AgriGreenhouse
-        context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
-        properties:
-          - { target: hasWaterQualityObserved, type: Relationship, array: true, value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", required: true }
-  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: tank, toType: greenhouse }
-    entities:
-      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
-        type: AgriGreenhouse
-        context: "https://raw.githubusercontent.com/smart-data-models/dataModel.Agrifood/master/context.jsonld"
-        properties: []
-        removeAttributes: [hasWaterQualityObserved]

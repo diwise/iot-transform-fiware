@@ -1,11 +1,9 @@
 # PointOfInterest från versionerade värdesevent (things.v1.values).
-# Ersätter 60-point-of-interest.yaml (thing.updated) delvis — produktbeslut
-# (PLAN001 7.2): legacy skapade Beach + WaterQualityObserved från inbäddade
-# current.*-fält som saknar v2-motsvarighet (POI-mallen har endast valfri
-# temperature). WaterQualityObserved-delen utgår (levande mätdata hör till
-# mätvärdesburna saker i v2); PointOfInterest-entiteten (name/location/
-# description) byggs från deskriptorfält. POI-temperatur lämnas omappad
-# (samma medvetna princip som tankens co2/waterLevel i 95).
+# Generisk POI-mall: PointOfInterest-entiteten (name/location/description)
+# byggs alltid från deskriptorfält. Sakens temperatur (values.temperature,
+# kopplad sensor) mappas dessutom till WeatherObserved per sak-ID; saknad
+# temperatur undertrycker endast Weather-entiteten (required).
+# Beach har egen mall i 101-beach (vinner via subType-specificitet).
 rules:
   - match: { kind: thing, event: things.v1.values, type: pointofinterest }
     entities:
@@ -15,4 +13,11 @@ rules:
           - { target: name, type: Text, field: name, observedAt: none, required: true }
           - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
           - { target: description, type: Text, field: metadata.description, observedAt: none }
-          - { target: location, type: Geo, field: location }
+          - { target: location, type: Geo, field: geometry }
+      - id: "urn:ngsi-ld:WeatherObserved:{{id}}"
+        type: WeatherObserved
+        properties:
+          - { target: temperature, type: Number, field: values.temperature.value, observedAt: "field:values.temperature.observedAt", required: true }
+          - { target: source, type: Text, field: values.temperature.source, observedAt: none }
+          - { target: location, type: Geo, field: geometry, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }

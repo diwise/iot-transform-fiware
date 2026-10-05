@@ -234,6 +234,46 @@ paths:
                         operation: { type: string, enum: [create, merge, remove, delete], description: Skrivsemantik mot brokern }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /models/compat:
+    post:
+      tags: [Models]
+      summary: Kompatibilitetskontroll mot explicit mallversion + källkontrakt (kräver transforms.write; förslag till A)
+      description: >-
+        Offline kontroll av en kandidatregeluppsättning mot explicit
+        mallversion (thingType/subType/thingTypeVersion/variantId/variantVersion)
+        och källkontrakt (egenskaps-ID:n/enheter, relationsplatser/tillåtna
+        mål/kardinalitet, geometri/metadata). Torr, ingen persistens, ingen
+        brokerkontakt, inget dolt kataloguppslag per mätning. Returnerar
+        compatible + strukturerad diagnostik
+        {code,ruleId,ruleRevision,snapshotVersion,entity,attribute,expression,
+        tenant,thingId,configRevision} med koder required-missing |
+        invalid-source | no-match | ambiguous-match | unit-conflict |
+        geometry-invalid | ngsild-invalid | revision-conflict | tenant-denied |
+        target-notfound | cardinality | deleted-target. Statiskt omöjliga
+        konstruktioner (syntax, okända roller, cykler, framåt-/självref,
+        dubblett-target, oförenliga ID/typdefinitioner, enhets/geometri-fel
+        där underlag räcker) ger compatible:false; dynamiska/valfria källor
+        (saknad valfri källa, fria metadata/repeat) ger aldrig falsk
+        fullständig garanti utan skip vid körning/preview. Full
+        JSON-LD-context-expansion, versionerad SDM-schemavalidering och
+        brokerns faktiska existens verifieras INTE; NGSI-LD-profilen
+        validerar faktisk serialiserad output via gemensamma protokollhjälpare.
+        Mätvärdesregler berörs inte av mallversion/variant (additivt).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompatRequest'
+      responses:
+        '200':
+          description: Kompatibilitetsutfall med diagnostik (tom lista vid full kompatibilitet)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompatResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 components:
   parameters:
     IfMatch:
@@ -296,6 +336,9 @@ components:
           type: integer
           default: 0
           description: 'Högsta prioritet vinner, därefter specificitet och stabil snapshotordning. Ändrar inte tenantgrinden.'
+        name:
+          type: string
+          description: 'Fritextnamn endast för användaren (visningsnamn). Påverkar aldrig matchning, körning, prioritet eller specificitet.'
         match:
           $ref: '#/components/schemas/Match'
         entities:
@@ -324,14 +367,17 @@ components:
         toType: { type: string, description: 'Exakt rå toThingType, separat från from-sidans type/subType. Endast things.v1.relations; tomt är wildcard.' }
         relationRemoved: { type: boolean, description: Bortkoppling (true) eller koppling (osatt); endast med match.relation }
         lifecycle: { type: string, enum: [created, updated, deleted], description: 'Krävs explicit med event things.v1.lifecycle; inget wildcard. Avvisas på övriga event.' }
+        thingTypeVersion: { type: string, description: 'Exakt mallversion (eventets thingTypeVersion). Tomt matchar alla versioner men kräver match.type; configRevision är aldrig matchfilter. Endast things; additivt, gamla regler utan fältet gäller oförändrat.' }
+        variantId: { type: string, description: 'Exakt variant (descriptorns variantId). Tomt är wildcard. Endast things; additivt.' }
+        variantVersion: { type: string, description: 'Exakt variantversion (descriptorns variantVersion). Tomt är wildcard, oberoende av variantId. Endast things; additivt.' }
     Entity:
       type: object
       required: [id, type, properties]
       properties:
-        name: { type: string }
+        name: { type: string, description: 'Deklarativ målroll (fri sträng, tom = anonym). {{entities.<roll>.id}} refererar bakåt till tidigare deklarerat ID; framåt-/självref i ID, okända roller, cykler och dubblett-target avvisas. En sak kan mappas till flera målentiteter i deklarerad ordning.' }
         id:
           type: string
-          description: 'Rekommenderad ID-mall använder stabilt käll-ID (helst GUID/UUID) via {{id}}. Namn mappas till attribut. Dynamiska {{fält}} och nästlade fältvägar stöds; inga namnbaserade fallback-ID:n skapas.'
+          description: 'Rekommenderad ID-mall använder stabilt käll-ID (helst GUID/UUID) via {{id}}, t.ex. urn:ngsi-ld:<Typ>:{{id}}. Stöds: {{entities.<roll>.id}} (bakåtreferens), {{field:<väg>}}, {{safeURI(...)}} och {{firstPresent(...)}}. Namn mappas till attribut. Dynamiska {{fält}} och nästlade fältvägar stöds; inga namnbaserade fallback-ID:n skapas.'
           example: 'urn:ngsi-ld:X:{{id}}'
         type: { type: string }
         context: { type: string }
@@ -385,15 +431,15 @@ components:
           type: string
           description: 'Measurement-selector som kräver resource eller name; gäller även derive.of.'
         name: { type: string }
-        field: { type: string }
-        ref: { type: string }
+        field: { type: string, description: 'Things-källa: values.<id>.value|observedAt|quality|unit|source, snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[]/relations[]/relation.*/lifecycle.*/geometry/location/metadata samt standardgenvägar. Citerade vägar (values."a.b".value) och [n]-index stöds. Fria metadata/repeat ger aldrig falsk fullständig garanti.' }
+        ref: { type: string, description: 'Alias för field (things). Samma delta/snapshot-syntax som field.' }
         const:
           description: Konstant värde (valfri JSON-typ).
         latlon: { type: boolean }
         timestamp: { type: boolean }
         value:
           type: string
-          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Källvyer omfattar event/thing/geometry och kvalitetsfiltrerade values för things, samt records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt för measurements. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview.'
+          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Things-källvyer: values.<id>.* (kvalitetsfiltrerat, endast ok/uncertain), snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[] (proveniens utan värden), relations[]/relation.*, lifecycle.*, removed, geometry/location/metadata. Measurements: records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview. Aggregat endast via derive (sum/min/max/anyTrue/allTrue/coalesce/firstPresent) inom samma event.'
           example: '{{metadata.description}}'
         prefix:
           type: string
@@ -421,3 +467,72 @@ components:
           description: 'Endast Structured. Delvärden konverteras enligt deklarerad typ och kan använda derive. De är råa JSON-värden: unit, observedAt, observedBy, array och nästlad Structured avvisas.'
           items:
             $ref: '#/components/schemas/Property'
+    CompatRequest:
+      type: object
+      required: [template, rules]
+      properties:
+        template:
+          type: object
+          required: [thingType]
+          properties:
+            thingType: { type: string, description: 'Explicit malltyp (match.type).' }
+            subType: { type: string }
+            thingTypeVersion: { type: string, description: 'Explicit mallversion; tom = wildcard.' }
+            variantId: { type: string }
+            variantVersion: { type: string }
+        sources:
+          type: object
+          description: 'Explicit källkontrakt; tomt = okänt underlag (endast statiskt omöjliga konstruktioner rapporteras).'
+          properties:
+            properties:
+              type: array
+              items:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string }
+                  unit: { type: string }
+            relations:
+              type: array
+              items:
+                type: object
+                required: [name]
+                properties:
+                  name: { type: string }
+                  allowedTargets: { type: array, items: { type: string } }
+                  min: { type: integer }
+                  max: { type: integer, description: '0 = obegränsat.' }
+            geometry: { type: boolean }
+            location: { type: boolean }
+            metadata: { type: array, items: { type: string } }
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+        tenant: { type: string }
+        thingId: { type: string }
+        configRevision: { type: integer }
+    CompatResult:
+      type: object
+      required: [compatible, diagnostics]
+      properties:
+        compatible: { type: boolean }
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnostic'
+    Diagnostic:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, enum: [required-missing, invalid-source, no-match, ambiguous-match, unit-conflict, geometry-invalid, ngsild-invalid, revision-conflict, tenant-denied, target-notfound, cardinality, deleted-target] }
+        ruleId: { type: string }
+        ruleRevision: { type: integer }
+        snapshotVersion: { type: integer }
+        entity: { type: string, description: Målroll (Entity.name) eller entity-index }
+        attribute: { type: string }
+        expression: { type: string }
+        tenant: { type: string }
+        thingId: { type: string }
+        configRevision: { type: integer }
+        detail: { type: string }

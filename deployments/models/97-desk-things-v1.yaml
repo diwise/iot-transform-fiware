@@ -12,4 +12,4 @@ rules:
           - { target: controlledProperty, type: TextArray, const: ["occupancy"], observedAt: none }
           - { target: dateLastValueReported, type: DateTime, timestamp: true }
           - { target: status, type: Text, field: values.presence.value, observedAt: "field:values.presence.observedAt", transform: [{ op: numToOnOff }] }
-          - { target: location, type: Geo, field: location }
+          - { target: location, type: Geo, field: geometry }

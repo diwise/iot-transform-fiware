@@ -75,6 +75,12 @@ func staticSource(s Source) (any, bool) {
 }
 
 func (p Property) validateStatic() error {
+	// PLAN1050 D: skilj omöjligt från dynamiskt/valfritt. Kända statiska
+	// källor (const/värdemall utan uttryck) kontrolleras genom körningens
+	// transformer/prefix/typkonvertering och gemensamma NGSI-LD-hjälpare
+	// (decorate/BuildEntity). Dynamiska källor (field/ref, malluttryck,
+	// derive med dynamisk ingång) ger ingen statisk garanti: de prövas vid
+	// körning/preview. Fria metadata/repeat ger aldrig falsk fullständighet.
 	if p.ObservedBy != "" && staticTemplate(p.ObservedBy) {
 		if err := validateURI(p.ObservedBy); err != nil {
 			return fmt.Errorf("observedBy %q: %w", p.ObservedBy, err)

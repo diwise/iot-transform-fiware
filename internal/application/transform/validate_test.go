@@ -1,6 +1,7 @@
 package transform
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/matryer/is"
@@ -264,3 +265,22 @@ func TestValidateAcceptsEveryKnownFunction(t *testing.T) {
 
 //go:fix inline
 func ptr(f float64) *float64 { return new(f) }
+
+func TestValidateIgnoresRuleName(t *testing.T) {
+	is := is.New(t)
+	r := validRule()
+	r.Name = "Mätvärde till observerad entitet"
+	is.NoErr(Validate([]Rule{r}))
+
+	// Namnet ska överleva JSON-roundtrip (API/seed/lagring).
+	raw, err := json.Marshal(r)
+	is.NoErr(err)
+	var back Rule
+	is.NoErr(json.Unmarshal(raw, &back))
+	is.Equal(back.Name, r.Name)
+
+	// Samma regel med och utan namn ska vara likvärdiga för matchning:
+	// namnet påverkar varken giltighet eller specificitet.
+	plain := validRule()
+	is.Equal(r.Match.Specificity(), plain.Match.Specificity())
+}

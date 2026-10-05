@@ -53,8 +53,8 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 	}
 	engine := things.NewDynamicThingTransformer(rules)
 	for sourceType, modelType := range map[string]string{
-		"room": "IndoorEnvironmentObserved", "wastebin": "WasteContainer", "greenhouse": "AgriGreenhouse",
-		"tank": "WaterQualityObserved", "lifebuoy": "Lifebuoy", "desk": "Device", "pumpingstation": "SewagePumpingStation", "sewer": "Sewer", "pointofinterest": "PointOfInterest",
+		"room": "IndoorEnvironmentObserved", "wastebin": "WasteContainer",
+		"lifebuoy": "Lifebuoy", "desk": "Device", "pumpingstation": "SewagePumpingStation", "sewer": "Sewer", "pointofinterest": "PointOfInterest",
 	} {
 		t.Run(sourceType, func(t *testing.T) {
 			wantedID := "urn:ngsi-ld:" + modelType + ":" + sourceGUID
@@ -65,23 +65,23 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 					t.Fatal(err)
 				}
 				writes, err := engine.Transform(input)
-				if err != nil || len(writes) != 1 {
+				if sourceType == "pointofinterest" {
+					if err != nil || len(writes) != 2 {
+						t.Fatalf("values: %+v %v", writes, err)
+					}
+					if writes[0].EntityID != wantedID {
+						t.Fatalf("name/subtype affected identity: %s", writes[0].EntityID)
+					}
+					if writes[1].EntityID != "urn:ngsi-ld:WeatherObserved:"+sourceGUID || writes[1].TypeName != "WeatherObserved" {
+						t.Fatalf("poi weather identity lost: %+v", writes[1])
+					}
+				} else if err != nil || len(writes) != 1 {
 					t.Fatalf("values: %+v %v", writes, err)
 				}
 				if writes[0].EntityID != wantedID {
 					t.Fatalf("name/subtype affected identity: %s", writes[0].EntityID)
 				}
 				entity := writeJSON(t, writes[0])
-				if sourceType == "greenhouse" {
-					co2 := entity["co2"].(map[string]any)
-					humidity := entity["relativeHumidity"].(map[string]any)
-					if co2["value"] != 21.5 || co2["unitCode"] != "59" {
-						t.Fatalf("PPM value relabeled or converted: %+v", co2)
-					}
-					if humidity["value"] != 0.215 {
-						t.Fatalf("%%RH was not converted to 0–1: %+v", humidity)
-					}
-				}
 				if entity["name"].(map[string]any)["value"] != names[0] || entity["alternateName"].(map[string]any)["value"] != names[1] {
 					t.Fatalf("names not mapped as attributes: %+v", entity)
 				}
@@ -94,7 +94,14 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 					t.Fatal(err)
 				}
 				deleted, err := engine.Transform(lifecycle)
-				if err != nil || len(deleted) != 1 || !deleted[0].Delete || deleted[0].EntityID != wantedID {
+				if sourceType == "pointofinterest" {
+					if err != nil || len(deleted) != 2 || !deleted[0].Delete || !deleted[1].Delete {
+						t.Fatalf("delete identity differs from values: %+v %v", deleted, err)
+					}
+					if deleted[0].EntityID != wantedID || deleted[1].EntityID != "urn:ngsi-ld:WeatherObserved:"+sourceGUID {
+						t.Fatalf("poi delete identities lost: %+v", deleted)
+					}
+				} else if err != nil || len(deleted) != 1 || !deleted[0].Delete || deleted[0].EntityID != wantedID {
 					t.Fatalf("delete identity differs from values: %+v %v", deleted, err)
 				}
 			}
@@ -108,9 +115,9 @@ func TestShippedRelationIDsMatchValuesDespiteRenames(t *testing.T) {
 		t.Fatal(err)
 	}
 	engine := things.NewDynamicThingTransformer(rules)
-	for _, names := range [][2]string{{"Tank original", "Greenhouse original"}, {"Tank renamed", "Greenhouse renamed"}} {
+	for _, names := range [][2]string{{"Room original", "Building original"}, {"Room renamed", "Building renamed"}} {
 		body := map[string]any{"relationId": "neutral-link", "type": "partOf", "fromId": sourceGUID, "toId": parentGUID, "tenant": "test", "changedAt": "2026-10-01T12:00:00Z",
-			"fromThingType": "tank", "toThingType": "greenhouse", "from": map[string]any{"thingId": sourceGUID, "name": names[0]}, "to": map[string]any{"thingId": parentGUID, "name": names[1]}}
+			"fromThingType": "room", "toThingType": "building", "from": map[string]any{"thingId": sourceGUID, "name": names[0]}, "to": map[string]any{"thingId": parentGUID, "name": names[1]}}
 		input, err := things.ThingRelationsFromJSON(marshalPayload(t, body))
 		if err != nil {
 			t.Fatal(err)
@@ -119,12 +126,12 @@ func TestShippedRelationIDsMatchValuesDespiteRenames(t *testing.T) {
 		if err != nil || len(writes) != 1 {
 			t.Fatalf("relation: %+v %v", writes, err)
 		}
-		if writes[0].EntityID != "urn:ngsi-ld:AgriGreenhouse:"+parentGUID {
+		if writes[0].EntityID != "urn:ngsi-ld:IndoorEnvironmentObserved:"+sourceGUID {
 			t.Fatalf("target ID derived from name: %s", writes[0].EntityID)
 		}
-		objects := writeJSON(t, writes[0])["hasWaterQualityObserved"].(map[string]any)["object"].([]any)
-		if len(objects) != 1 || objects[0] != "urn:ngsi-ld:WaterQualityObserved:"+sourceGUID {
-			t.Fatalf("reference not same as tank values ID: %+v", objects)
+		ref := writeJSON(t, writes[0])["refParent"].(map[string]any)["object"]
+		if ref != "urn:ngsi-ld:Building:"+parentGUID {
+			t.Fatalf("reference not stable across renames: %+v", ref)
 		}
 		body["removed"] = true
 		removed, err := things.ThingRelationsFromJSON(marshalPayload(t, body))
@@ -132,7 +139,7 @@ func TestShippedRelationIDsMatchValuesDespiteRenames(t *testing.T) {
 			t.Fatal(err)
 		}
 		cleared, err := engine.Transform(removed)
-		if err != nil || len(cleared) != 1 || cleared[0].EntityID != writes[0].EntityID || strings.Join(cleared[0].RemoveAttributes, ",") != "hasWaterQualityObserved" {
+		if err != nil || len(cleared) != 1 || cleared[0].EntityID != writes[0].EntityID || strings.Join(cleared[0].RemoveAttributes, ",") != "refParent" {
 			t.Fatalf("remove ID differs: %+v %v", cleared, err)
 		}
 	}

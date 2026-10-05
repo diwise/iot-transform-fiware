@@ -162,12 +162,40 @@ likadan generell regel. Porten hämtas från den partitionerade observationens
 header; olika portar får inte dela värden eller mättider. Radioport och rå
 Channel-metadata används inte för att gissa fysisk port.
 
-### Växthusets enheter
+### Borttagna mallar
 
-AgriGreenhouse-regeln har ett uttryckligt modellavsteg: CO₂ skrivs som PPM
-med UN/CEFACT `unitCode: "59"`, i stället för modellens mg/L. Värdet omvandlas
-inte. Relativ luftfuktighet från `%RH` divideras med 100 till modellens 0–1.
-Detta är regelstyrd mappning; grundvalideringen intygar inte full SDM-konformitet.
+Greenhouse/tank-mallarna är borttagna i väntan på nya mallar; ingen
+AgriGreenhouse- eller tank-WaterQualityObserved-regel levereras tills vidare.
+
+### Standardregler (PLAN1050 J2)
+
+Beslut efter neutral acceptans (J1); motorn/adaptrarna är generella
+(inga modellnamn), valen ligger i regler och modelltester
+(`internal/infrastructure/config/j2_standard_test.go`):
+
+- `dateObserved` (`timestamp: true`) är max-observedAt (mättid), aldrig
+  publiceringstid; fallback publiceringstid endast för deskriptor-bara event.
+  `{{timestamp}}` och `timestamp: true` är därmed samma konsumenttid.
+- Lifecycle `created`/`updated` skapar beskrivande skal (namn/plats/
+  beskrivning + händelsetid) utan mätningar, med samma mål-ID:n som
+  värde-reglerna; mätburna entiteter (WeatherObserved/WaterQualityObserved)
+  tillkommer vid första värdeseventet. Saknad källa är skip, aldrig rensning.
+- Rums `partOf`→`refParent` är hårdkodad Building-URN med
+  `match.toType: building`; andra måltyper ger no-match (skip utan
+  brokerkontakt). Fler måltyper kräver nya regler med egen toType + URN-mall.
+- Sewer kräver plats/tid (skärpt); `overflowTime` och `refDevice` mappas inte
+  (ingen v2-källa) — dokumenterade avsteg, entiteten skrivs utan dem.
+- Greenhouse/tank-regler förblir borttagna; mallar utan regler är avsiktligt.
+- Plats läses via `field: geometry` (rå GeoJSON för Point/Polygon/3D);
+  Point-genvägen `location` döljer aldrig övriga geometrier.
+- Relationsidentiteten är
+  `v1/<tenant>/<from>/relations/<typ>/<to>/<revision>/<set|removed>`
+  (To för unicitet vid flera mål; paritet med producenten). Legacy v1 utan
+  To förblir läsbar (ingen To-kontroll); icke-v1 nekas strikt i F medan
+  C1 läser tolerant opakt.
+- Specificitet räknas enkelt: `thingTypeVersion`/`variantId`/`variantVersion`
+  ger +1 vardera i både `score()` (körning) och `specificityD()`
+  (kompatibilitet).
 
 Motorn ar delad, sa konstruktionerna nedan fungerar for bade matvarden och
 things-v2-handelser; kall-specifikt ar endast adaptrarna och valideringens
@@ -201,8 +229,10 @@ kind-kontroller:
 - Default `observedAt` följer värdets egen observationstid, med measurement-
   header som fallback. Konstanter och namn får ingen implicit tid. `record`,
   `header`, `message`, `field:<väg>` och `none` väljer tid explicit och fungerar
-  på alla attributtyper med RFC3339Nano-precision. Values-eventets message-tid
-  är publiceringstid, separat från dess observationstider.
+  på alla attributtyper med RFC3339Nano-precision. `timestamp: true` för
+  values-event är max-observedAt (mättid; J2), med publiceringstid som fallback
+  endast när inga värdetider finns; `{{timestamp}}` är samma konsumenttid.
+  `event.publishedAt` förblir explicit valbar via mall för diagnostik.
 - Kända källenheter får inte märkas om utan ekvivalent kod eller explicit
   `convert: {from: Cel, to: KEL, offset: 273.15}`. Factor default 1, offset
   default 0; omvandlingen sker före transform och stöder Number/NumberArray.
@@ -226,8 +256,10 @@ kind-kontroller:
   Profil och begränsningar finns i `assets/docs/transform-contract.md`.
 - Things-adaptrarna delar descriptorvy för values, lifecycle och relationer:
   `thing` respektive `relation.from`/`relation.to`. `geometry` bevarar rå
-  GeoJSON för både Point och Polygon; `location` är Point-genvägen.
-  Metadata, kategori och variantfält är åtkomliga även för lifecycle.
+  GeoJSON för både Point, Polygon och 3D; `location` är Point-genvägen.
+  Standardreglerna läser plats via `field: geometry` så att alla
+  geometrityper mappas (J2). Metadata, kategori och variantfält är åtkomliga
+  även för lifecycle.
 - Kuvertmetadata finns under `event`. Skrivbara `values.<propertyId>` bär
   hela proveniensen inklusive messageId och separata källtider.
   `observations[]` exponerar samtliga observationers kvalitet/proveniens,
@@ -314,7 +346,7 @@ Precedens: default < miljovariabel < CLI-flagga. RabbitMQ konfigureras i ovrigt 
 
 Health paths pa kontrollservern (`CONTROL_PORT`): `/health`, `/healthz`, `/livez`, `/readyz`, `/readyz/{check}`.
 
-Konsumerar `message.accepted` (en handler per topic; matchning sker pa innehall) samt, nar `THINGS_V1_VALUES=true`, `things.v1.values` (versionerade vardesevent med `values.<egenskap>.*`-vagar; regler avgransas med `match.event: things.v1.values`, se `deployments/models/90-*.yaml`), `things.v1.relations` (partOf set/removed med from/to-descriptors; regler avgransas med `match.event` + `match.relation`/`match.relationRemoved`, se `deployments/models/94-relations-things-v1.yaml`) och `things.v1.lifecycle` (created/updated/deleted; delete-regler raderar entiteten idempotent med `match.lifecycle: deleted`, se `deployments/models/93-lifecycle-things-v1.yaml`). `thing.updated` konsumeras inte langre (legacy thing-regler ersatta av things-v2-regler; topicen publiceras fortsatt for andra konsumenter). Ingen `message.transformed` publiceras i nulaget.
+Konsumerar `message.accepted` (en handler per topic; matchning sker pa innehall) samt, nar `THINGS_V1_VALUES=true`, `things.v1.values` (versionerade vardesevent med `values.<egenskap>.*`-vagar; regler avgransas med `match.event: things.v1.values`, se `deployments/models/90-*.yaml`), `things.v1.relations` (partOf set/removed med from/to-descriptors; regler avgransas med `match.event` + `match.relation`/`match.relationRemoved` + `match.toType`, se `deployments/models/94-relations-things-v1.yaml`) och `things.v1.lifecycle` (created/updated skapar beskrivande skal utan matningar, deleted raderar entiteten idempotent; avgransas med `match.lifecycle`, se `deployments/models/93-lifecycle-things-v1.yaml`). Relations/lifecycle-handlers persisterar F:s neutrala projektion + väntande brokerarbete atomärt (delad pool via `NewForPool`, schema via migration 005/`EnsureSchema`) och dräneras via `DrainOnce` direkt samt av en bakgrunds-Worker (sista dränering inom stoppbudget vid shutdown). `thing.updated` konsumeras inte langre (legacy thing-regler ersatta av things-v2-regler; topicen publiceras fortsatt for andra konsumenter). Ingen `message.transformed` publiceras i nulaget.
 
 Extern paverkan (BASE-002): imagen exponerar kontrollporten (`EXPOSE 8000`) och den publika porten (`EXPOSE 8080`). Externa Kubernetes- och Compose-definitioner ska anvanda kontrollporten for health-prober och den publika porten for regel-API:t.
 
@@ -328,7 +360,8 @@ Slutstruktur:
 ```text
 cmd/iot-transform-fiware
 internal/application/{measurements,things,transform}
-internal/infrastructure/{config,contextbroker,devicemanagement,rules}
+internal/application/relations (neutral projektionsdomän, F)
+internal/infrastructure/{config,contextbroker,devicemanagement,rules,projection}
 internal/presentation/{api,messaging/{measurements,things}}
 ```
 

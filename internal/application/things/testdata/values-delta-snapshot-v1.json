@@ -1,0 +1,37 @@
+{
+  "schema": "v1",
+  "eventId": "v1/tenant-a/object-1/message-2",
+  "tenant": "tenant-a",
+  "thingId": "object-1",
+  "thingType": "source-template",
+  "thingTypeVersion": "2",
+  "configRevision": 7,
+  "publishedAt": "2026-10-01T12:03:00.123456789Z",
+  "thing": {
+    "thingId": "object-1",
+    "name": "Raw name å",
+    "alternativeName": "Raw alias",
+    "subType": "raw-subtype",
+    "category": "source-category",
+    "variantId": "variant-a",
+    "variantVersion": "3",
+    "metadata": {"description": "Source description"},
+    "location": {"type": "Point", "coordinates": [17, 62, 9]}
+  },
+  "values": [
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.average", "value": 22, "quality": "ok", "unit": "Cel", "source": "sensor/2/3303/5700", "messageId": "message-2", "observedAt": "2026-10-01T12:02:00.123456789Z", "receivedAt": "2026-10-01T12:02:30.234567891Z", "computedAt": "2026-10-01T12:02:00.345678912Z", "publishedAt": "2026-10-01T12:03:00.456789123Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-2/reading.average"},
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.stale", "value": 99, "quality": "invalid", "source": "sensor/2/3304/5700", "messageId": "message-2", "observedAt": "2026-10-01T12:02:01Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-2/reading.stale"}
+  ],
+  "delta": [
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.average", "value": 22, "quality": "ok", "unit": "Cel", "source": "sensor/2/3303/5700", "messageId": "message-2", "observedAt": "2026-10-01T12:02:00.123456789Z", "receivedAt": "2026-10-01T12:02:30.234567891Z", "computedAt": "2026-10-01T12:02:00.345678912Z", "publishedAt": "2026-10-01T12:03:00.456789123Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-2/reading.average"},
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.stale", "value": 99, "quality": "invalid", "source": "sensor/2/3304/5700", "messageId": "message-2", "observedAt": "2026-10-01T12:02:01Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-2/reading.stale"}
+  ],
+  "snapshot": [
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.average", "value": 22, "quality": "ok", "unit": "Cel", "source": "sensor/2/3303/5700", "messageId": "message-2", "observedAt": "2026-10-01T12:02:00.123456789Z", "receivedAt": "2026-10-01T12:02:30.234567891Z", "computedAt": "2026-10-01T12:02:00.345678912Z", "publishedAt": "2026-10-01T12:03:00.456789123Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-2/reading.average"},
+    {"schema": "v1", "thingId": "object-1", "tenant": "tenant-a", "propertyId": "reading.peak", "value": 21.5, "quality": "ok", "unit": "Cel", "source": "sensor/2/3303/5700", "messageId": "message-1", "observedAt": "2026-10-01T12:00:00.123456789Z", "receivedAt": "2026-10-01T12:01:00.234567891Z", "publishedAt": "2026-10-01T12:03:00.456789123Z", "configRevision": 7, "eventId": "v1/tenant-a/object-1/message-1/reading.peak"}
+  ],
+  "removed": ["reading.obsolete"],
+  "relations": [
+    {"relationId": "relation-1", "type": "source-relation", "fromId": "object-1", "toId": "object-2", "tenant": "tenant-a", "revision": 4, "changedAt": "2026-10-01T12:00:00.123456789Z", "fromThingType": "source-template", "fromThingTypeVersion": "2", "from": {"thingId": "object-1"}, "toThingType": "other-template", "toThingTypeVersion": "1", "to": {"thingId": "object-2", "metadata": {"description": "Other source"}}}
+  ]
+}

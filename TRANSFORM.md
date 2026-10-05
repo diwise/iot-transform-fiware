@@ -700,12 +700,22 @@ regelmotorn ska inte innehålla specialfall för en viss standardregel eller mod
       Modellnamn och URN-prefix får endast finnas i regeln och modelltesterna.
 - [x] Uppdatera medföljande ID-mallar till `{{id}}` respektive generella relationsfält och
       verifiera konsistens mellan values-, relations- och lifecycle-regler.
-- [ ] Rätta modellregler som läser oexponerade fält, exempelvis POI-beskrivning,
+- [x] Rätta modellregler som läser oexponerade fält, exempelvis POI-beskrivning,
       och gör platsmappning konsekvent för Point och Polygon.
-- [ ] Gå igenom modellernas tidskällor, enheter och obligatoriska värdekällor.
-      Redovisa olösta modellfrågor, exempelvis greenhouse-CO2, i reglernas dokumentation.
-      Beslut: växthusets co2 behålls med explicit PPM-enhet, som ett dokumenterat
-      avsteg från AgriGreenhouse-modellens mg/L; ingen implicit omvandling.
+      Verifierat i PLAN1050 J2: POI-beskrivning läses från
+      `metadata.description` (identitetstest); plats läses via
+      `field: geometry` (rå GeoJSON för Point/Polygon/3D) i samtliga
+      things-värde- och lifecycle-regler (90/91/93/96/97/98/99/100/101);
+      J2-modelltester bevisar Point- och Polygon-mappning end-to-end.
+- [x] Gå igenom modellernas tidskällor, enheter och obligatoriska värdekällor.
+      Redovisa olösta modellfrågor i reglernas dokumentation.
+      Verifierat i PLAN1050 J2: `dateObserved` (`timestamp: true`) är
+      max-observedAt (mättid, aldrig publiceringstid); Sewer kräver plats/tid
+      (skärpt) medan `overflowTime`/`refDevice` är dokumenterade avsteg
+      (ingen v2-källa); enheter bevaras genom grinden utan förvanskning.
+      Tidigare växthus-CO2-beslut (PPM-avsteg) är överspelat: greenhouse/
+      tank-reglerna är borttagna i väntan på nya mallar (J2e) och ingen
+      AgriGreenhouse-regel levereras.
 - [ ] Håll växthusets tankreferenser kompletta vid set/remove/flytt: flera tankar
       per växthus, högst ett växthus per tank. Varje tank behåller egen mätentitet;
       inga tankvärden aggregeras till växthusets mätdata.

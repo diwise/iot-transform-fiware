@@ -121,6 +121,10 @@ func RegisterHandlers(ctx context.Context, mux *http.ServeMux, models *Models, p
 		r.Post("", withAccess(authz, TransformCreate, h.createModel))
 		r.Post("validate", withAccess(authz, TransformWrite, h.validateModel))
 		r.Post("preview", withAccess(authz, TransformWrite, h.previewModel))
+		// PLAN1050 D: offline kompatibilitetskontroll (torr, ingen
+		// persistens, ingen tenant-påverkan; förslag till A). Kräver
+		// transforms.write som validate/preview.
+		r.Post("compat", withAccess(authz, TransformWrite, h.compatModel))
 		r.Group(func(r router.ServeMux) {
 			r.Use(authz.RequireAccess(TransformUpdate))
 			r.Put("{id}", h.updateModel)
@@ -544,4 +548,46 @@ func (h *handler) deleteModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// compatRequest är offline kompatibilitetskontroll (PLAN1050 D): explicit
+// mallversion + källkontrakt mot en kandidatregeluppsättning. Torr,
+// ingen persistens, ingen brokerkontakt. Extra mallunderlag är explicit
+// indata här, aldrig ett dolt obligatoriskt kataloguppslag per mätning.
+type compatRequest struct {
+	Template       transform.TemplateVersion `json:"template"`
+	Sources        transform.SourceContract  `json:"sources"`
+	Rules          []transform.Rule          `json:"rules"`
+	Tenant         string                    `json:"tenant,omitempty"`
+	ThingID        string                    `json:"thingId,omitempty"`
+	ConfigRevision int64                     `json:"configRevision,omitempty"`
+}
+
+type compatResponse struct {
+	Compatible  bool                   `json:"compatible"`
+	Diagnostics []transform.Diagnostic `json:"diagnostics"`
+}
+
+func (h *handler) compatModel(w http.ResponseWriter, r *http.Request) {
+	if _, err := authorizedTenants(r, TransformWrite); err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	var req compatRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	if len(req.Rules) == 0 {
+		writeAPIError(w, fmt.Errorf("%w: rules is required", errValidation))
+		return
+	}
+	res := transform.CheckCompatibility(transform.CompatRequest{
+		Template: req.Template, Sources: req.Sources, Rules: req.Rules,
+		Tenant: req.Tenant, ThingID: req.ThingID, ConfigRevision: req.ConfigRevision,
+	})
+	if res.Diagnostics == nil {
+		res.Diagnostics = []transform.Diagnostic{}
+	}
+	writeJSON(w, http.StatusOK, compatResponse{Compatible: res.Compatible, Diagnostics: res.Diagnostics})
 }
