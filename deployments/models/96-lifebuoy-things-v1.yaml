@@ -1,0 +1,14 @@
+# Lifebuoy från versionerade värdesevent (things.v1.values). Ersätter
+# 80-lifebuoy.yaml (thing.updated). v2-presence anländer som 1/0 (aldrig
+# bool) — därför numToOnOff i stället för boolToOnOff.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: lifebuoy }
+    entities:
+      - id: "urn:ngsi-ld:Lifebuoy:{{id}}"
+        type: Lifebuoy
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+          - { target: status, type: Text, field: values.presence.value, observedAt: "field:values.presence.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: location, type: Geo, field: geometry }

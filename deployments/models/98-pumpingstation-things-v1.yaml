@@ -1,0 +1,15 @@
+# SewagePumpingStation från versionerade värdesevent (things.v1.values).
+# Ersätter 82-pumping-station.yaml (thing.updated). v2-run anländer som 1/0
+# — därför numToOnOff. runTime (pumpens gångtid) har ingen legacy-motsvarighet
+# och mappas inte.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: pumpingstation }
+    entities:
+      - id: "urn:ngsi-ld:SewagePumpingStation:{{id}}"
+        type: SewagePumpingStation
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: status, type: Text, field: values.run.value, observedAt: "field:values.run.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: dateObserved, type: DateTime, timestamp: true }
+          - { target: location, type: Geo, field: geometry }

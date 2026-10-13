@@ -1,0 +1,32 @@
+# WaterConsumptionObserved (dataModel.WaterConsumption). required: id, type.
+# waterConsumption är en kumulativ volym i kubikmeter (MTQ).
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3424" }
+    entities:
+      - id: "urn:ngsi-ld:WaterConsumptionObserved:{{id}}"
+        type: WaterConsumptionObserved
+        properties:
+          - { target: location, type: Geo, latlon: true }
+          - target: alarmStopsLeaks
+            type: Number
+            observedAt: none
+            derive: { fn: anyTrue, of: [{ resource: "9" }] }
+          - target: alarmWaterQuality
+            type: Number
+            observedAt: none
+            derive: { fn: anyTrue, of: [{ resource: "11" }] }
+          - target: alarmTamper
+            type: Number
+            observedAt: none
+            derive: { fn: anyTrue, of: [{ resource: "64007" }] }
+          - target: alarmInProgress
+            type: Number
+            observedAt: none
+            derive: { fn: anyTrue, of: [{ resource: "9" }, { resource: "11" }, { resource: "64007" }] }
+          - { target: alternateName, type: Text, resource: "3", observedAt: none }
+          - target: waterConsumption
+            type: Number
+            resource: "1"
+            unit: MTQ
+            observedAt: record
+            observedBy: "urn:ngsi-ld:Device:{{id}}"

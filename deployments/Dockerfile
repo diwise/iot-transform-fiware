@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM docker.io/golang:1.26 AS builder
+FROM --platform=$BUILDPLATFORM docker.io/golang:1.27 AS builder
 
 # Set the Current Working Directory inside the container
 WORKDIR /app
@@ -22,9 +22,14 @@ WORKDIR /opt/diwise
 
 COPY --from=builder --chown=1001 /app/cmd/iot-transform-fiware/iot-transform-fiware /opt/diwise
 
-RUN chown 1001 /opt/diwise
+# Ingen seed bakas in i imagen: regelmallar tillförs via mount på
+# MODELS_DIR eller skapas via regel-API:t. Saknad/tom katalog betyder
+# tom regeluppsättning vid start (varning i logg, ingen startspärr).
+ENV MODELS_DIR=/opt/diwise/config/models
 
-EXPOSE 8080
+RUN chown -R 1001 /opt/diwise
+
+EXPOSE 8000 8080
 USER 1001
 
 ENTRYPOINT ["/opt/diwise/iot-transform-fiware"]

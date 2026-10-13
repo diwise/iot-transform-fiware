@@ -1,0 +1,29 @@
+# Relationshändelser (things.v1.relations) mappade med samma motor som
+# värdesevent. Reglerna avgränsas med match.event + match.relation (+
+# match.relationRemoved för bortkoppling) och match.type/subType, så att
+# gamla producenter utan typfält aldrig träffar (fail fast i stället för
+# tysta felskrivningar eller omsändningsloopar).
+#
+# Rums partOf-länk skrivs som refParent på rummets observationsentitet
+# (samma id-mall som 90-room-things-v1.yaml). Förälder-entiteten förväntas
+# existera (skapad av egen regel); NGSI-LD tolererar dangling-referenser.
+# Greenhouse/tank är borttagna tills nya mallar tas fram.
+#
+# J2(c): värdet är avsiktligt hårdkodat till Building-URN och regeln är
+# avgränsad med match.toType: building. Mål av annan källtyp träffar inte
+# (no-match, skip utan brokerkontakt) i stället för tyst felskrivning mot
+# Building-URN. Generisk avvikelse dokumenterad: fler måltyper kräver nya
+# regler med egen toType + URN-mall (ingen modellberoende motorkod).
+rules:
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: room, toType: building }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
+        type: IndoorEnvironmentObserved
+        properties:
+          - { target: refParent, type: Relationship, value: "urn:ngsi-ld:Building:{{relation.to.thingId}}" }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: room, toType: building }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
+        type: IndoorEnvironmentObserved
+        properties: []
+        removeAttributes: [refParent]

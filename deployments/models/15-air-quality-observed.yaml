@@ -1,0 +1,19 @@
+# AirQualityObserved (dataModel.Environment). required: id, type, dateObserved,
+# location. Modellens attributnamn är gemener (co2, pm10, pm25, pm1, no2, no).
+# temperature (3303/5700 i samma observation, legacy main) är valfri och
+# utelämnas när källan saknas; ingen join mellan separata observationer görs.
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3428" }
+    entities:
+      - id: "urn:ngsi-ld:AirQualityObserved:{{id}}"
+        type: AirQualityObserved
+        properties:
+          - { target: temperature, type: Number, resource: "5700", observedAt: header }
+          - { target: co2, type: Number, resource: "17", observedAt: header }
+          - { target: pm10, type: Number, resource: "1", observedAt: header }
+          - { target: pm25, type: Number, resource: "3", observedAt: header }
+          - { target: pm1, type: Number, resource: "5", observedAt: header }
+          - { target: no2, type: Number, resource: "15", observedAt: header }
+          - { target: no, type: Number, resource: "19", observedAt: header }
+          - { target: location, type: Geo, latlon: true, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }

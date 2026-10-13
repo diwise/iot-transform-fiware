@@ -1,0 +1,20 @@
+# IndoorEnvironmentObserved från versionerade värdesevent (things.v1.values).
+# Stabil identitet från thingId; namn är attribut. Värden läses via values.<propertyId>.*-vägar
+# (egenskaps-ID:n innehåller punkt och citeras därför); konsumenttid är
+# max(values[].observedAt) (timestamp: true). Plats läses via geometry (rå
+# GeoJSON för Point/Polygon/3D, aldrig enbart Point-genvägen).
+# required: id, type, dateObserved, location.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: room }
+    entities:
+      - id: "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}"
+        type: IndoorEnvironmentObserved
+        properties:
+          - { target: location, type: Geo, field: geometry, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: temperature, type: Number, field: values."temperature.average".value, observedAt: "field:values.\"temperature.average\".observedAt", required: true }
+          - { target: relativeHumidity, type: Number, field: values.humidity.value, observedAt: "field:values.humidity.observedAt" }
+          - { target: illuminance, type: Number, field: values.illuminance.value, observedAt: "field:values.illuminance.observedAt" }
+          - { target: co2, type: Number, field: values.co2.value, observedAt: "field:values.co2.observedAt" }
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }

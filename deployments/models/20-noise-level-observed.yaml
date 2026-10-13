@@ -1,0 +1,12 @@
+# NoiseLevelObserved (dataModel.Environment). required: id, type,
+# dateObservedFrom, dateObservedTo, location. Ljudnivån är LAeq.
+rules:
+  - match: { kind: measurement, object: "urn:oma:lwm2m:ext:3324" }
+    entities:
+      - id: "urn:ngsi-ld:NoiseLevelObserved:{{id}}"
+        type: NoiseLevelObserved
+        properties:
+          - { target: LAeq, type: Number, resource: "5700", observedAt: header }
+          - { target: location, type: Geo, latlon: true, required: true }
+          - { target: dateObservedFrom, type: DateTime, timestamp: true, required: true }
+          - { target: dateObservedTo, type: DateTime, timestamp: true, required: true }

@@ -1,0 +1,15 @@
+# Desk -> Device från versionerade värdesevent (things.v1.values). Ersätter
+# 81-desk.yaml (thing.updated). v2-presence anländer som 1/0 — därför
+# numToOnOff i stället för boolToOnOff.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: desk }
+    entities:
+      - id: "urn:ngsi-ld:Device:{{id}}"
+        type: Device
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: controlledProperty, type: TextArray, const: ["occupancy"], observedAt: none }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+          - { target: status, type: Text, field: values.presence.value, observedAt: "field:values.presence.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: location, type: Geo, field: geometry }

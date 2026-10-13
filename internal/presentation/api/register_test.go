@@ -1,0 +1,986 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/iot-transform-fiware/internal/presentation/api/auth"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/matryer/is"
+)
+
+// pgTestModels öppnar regel­lagret mot lokal testdatabas och tömmer det.
+// Utan nåbar databas skippas testerna (husets mönster).
+// Egen databas per paket: go test kör paket parallellt och delad tabell
+// ger interferens (TF-08). Kan överstyras med PG_TEST_DBNAME (samma namn
+// i flera paket återinför interferens).
+func pgTestModels(t *testing.T) *Models {
+	t.Helper()
+	get := func(key, def string) string {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+		return def
+	}
+	newCfg := func(dbname string) rules.Config {
+		return rules.NewConfig(
+			get("PG_TEST_HOST", "localhost"),
+			get("PG_TEST_USER", "postgres"),
+			get("PG_TEST_PASSWORD", "password"),
+			get("PG_TEST_PORT", "5434"),
+			dbname,
+			get("PG_TEST_SSLMODE", "disable"),
+		)
+	}
+	dbname := get("PG_TEST_DBNAME", "diwise_test_api")
+	admin, err := pgx.Connect(context.Background(), newCfg("postgres").ConnStr())
+	if err != nil {
+		t.Skipf("no test database server: %v", err)
+	}
+	_, err = admin.Exec(context.Background(), fmt.Sprintf(`CREATE DATABASE %s`, pgx.Identifier{dbname}.Sanitize()))
+	admin.Close(context.Background())
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42P04" {
+			t.Skipf("cannot create test database: %v", err)
+		}
+	}
+	store, err := rules.NewPostgres(context.Background(), newCfg(dbname))
+	if err != nil {
+		t.Skipf("no test database: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	// Töm via list+delete (samma API-yta som koden använder).
+	list, err := store.ListRules(t.Context())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, st := range list {
+		if err := store.DeleteRule(t.Context(), st.ID, st.Revision); err != nil {
+			t.Fatalf("truncate %s: %v", st.ID, err)
+		}
+	}
+	m := NewModels(store, nil)
+	if err := m.Refresh(t.Context()); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	return m
+}
+
+func testRule() transform.Rule {
+	return transform.Rule{
+		Match: transform.Match{Kind: transform.KindThing, Event: transform.EventThingsV1Values, Type: "Room", Tenant: "t"},
+		Entities: []transform.Entity{{
+			ID:   "urn:ngsi-ld:Room:{{id}}",
+			Type: "Room",
+			Properties: []transform.Property{{
+				Target: "name", Type: transform.TypeText, ObservedAt: transform.ObservedAtNone,
+				Field: "name",
+			}},
+		}},
+	}
+}
+
+// fullAccess ger samtliga scopes i angivna tenants (testmotsvarigheten
+// till en OPA-policy som beviljat allt).
+func fullAccess(tenants ...string) context.Context {
+	m := map[string]map[auth.Scope]struct{}{}
+	for _, t := range tenants {
+		m[t] = map[auth.Scope]struct{}{
+			TransformRead:   {},
+			TransformCreate: {},
+			TransformUpdate: {},
+			TransformDelete: {},
+			TransformWrite:  {},
+		}
+	}
+	return auth.WithAccess(context.Background(), m)
+}
+
+// writeOnly ger endast avtalat write-scope för torra författarverktyg
+// (validate/preview) — utan skapanderätt (TF-07).
+func writeOnly(tenants ...string) context.Context {
+	m := map[string]map[auth.Scope]struct{}{}
+	for _, t := range tenants {
+		m[t] = map[auth.Scope]struct{}{TransformWrite: {}}
+	}
+	return auth.WithAccess(context.Background(), m)
+}
+
+func doModel(fn func(http.ResponseWriter, *http.Request), method, id string, body any, headers map[string]string) *httptest.ResponseRecorder {
+	return doModelAs(fn, method, id, body, headers, fullAccess("t"))
+}
+
+func doModelAs(fn func(http.ResponseWriter, *http.Request), method, id string, body any, headers map[string]string, ctx context.Context) *httptest.ResponseRecorder {
+	var buf bytes.Buffer
+	if body != nil {
+		_ = json.NewEncoder(&buf).Encode(body)
+	}
+	req := httptest.NewRequest(method, "/x", &buf)
+	req = req.WithContext(ctx)
+	if id != "" {
+		req.SetPathValue("id", id)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rr := httptest.NewRecorder()
+	fn(rr, req)
+	return rr
+}
+
+func decodeModel(t *testing.T, rr *httptest.ResponseRecorder) Model {
+	t.Helper()
+	var m Model
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rr.Body.String())
+	}
+	return m
+}
+
+func TestModelsCRUD(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rr := doModel(h.createModel, http.MethodPost, "", testRule(), nil)
+	is.Equal(rr.Code, http.StatusCreated)
+	created := decodeModel(t, rr)
+	is.True(created.ID != "")
+	is.Equal(created.Revision, int64(1))
+	is.Equal(created.Source, rules.SourceAPI)
+	is.Equal(rr.Header().Get("ETag"), `"rev-1"`)
+
+	rr = doModel(h.getModel, http.MethodGet, created.ID, nil, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.Equal(rr.Header().Get("ETag"), `"rev-1"`)
+
+	rr = doModel(h.listModels, http.MethodGet, "", nil, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var list struct {
+		Models []Model `json:"models"`
+	}
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &list))
+	is.Equal(len(list.Models), 1)
+
+	r := testRule()
+	r.Match.Type = "Hall"
+	rr = doModel(h.updateModel, http.MethodPut, created.ID, r, map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusOK)
+	updated := decodeModel(t, rr)
+	is.Equal(updated.Revision, int64(2))
+	is.Equal(updated.Rule.Match.Type, "Hall")
+
+	rr = doModel(h.updateModel, http.MethodPut, created.ID, r, map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusConflict)
+
+	rr = doModel(h.getModel, http.MethodGet, "00000000-0000-0000-0000-000000000000", nil, nil)
+	is.Equal(rr.Code, http.StatusNotFound)
+
+	rr = doModel(h.deleteModel, http.MethodDelete, created.ID, nil, map[string]string{"If-Match": `"rev-2"`})
+	is.Equal(rr.Code, http.StatusNoContent)
+
+	rr = doModel(h.getModel, http.MethodGet, created.ID, nil, nil)
+	is.Equal(rr.Code, http.StatusNotFound)
+	rr = doModel(h.deleteModel, http.MethodDelete, created.ID, nil, map[string]string{"If-Match": `"rev-2"`})
+	is.Equal(rr.Code, http.StatusNotFound)
+}
+
+func TestModelsStrictDecode(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	withUnknown := map[string]any{
+		"match":    map[string]any{"kind": "thing", "type": "Room", "bogus": 1},
+		"entities": []any{},
+	}
+	rr := doModel(h.createModel, http.MethodPost, "", withUnknown, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+
+	badKind := testRule()
+	badKind.Match.Kind = "nope"
+	rr = doModel(h.createModel, http.MethodPost, "", badKind, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+
+	// Fel Content-Type nekas.
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	req := httptest.NewRequest(http.MethodPost, "/x", &buf)
+	req.Header.Set("Content-Type", "text/yaml")
+	rec := httptest.NewRecorder()
+	h.createModel(rec, req)
+	is.Equal(rec.Code, http.StatusBadRequest)
+
+	// If-Match krävs på PUT.
+	rr = doModel(h.updateModel, http.MethodPut, "x", testRule(), nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+	rr = doModel(h.updateModel, http.MethodPut, "x", testRule(), map[string]string{"If-Match": "bogus"})
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+// TF-07: strikt decoder — trailing JSON, fel mediatyp och ogiltig UUID ger
+// 400, inte 500 eller tyst acceptans.
+func TestModelsStrictDecoderContract(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	// Trailing JSON efter första dokumentet nekas.
+	var buf bytes.Buffer
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	req := httptest.NewRequest(http.MethodPost, "/x", &buf)
+	req = req.WithContext(fullAccess("t"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.createModel(rec, req)
+	is.Equal(rec.Code, http.StatusBadRequest)
+
+	// application/json-invalid är inte application/json.
+	buf.Reset()
+	_ = json.NewEncoder(&buf).Encode(testRule())
+	req = httptest.NewRequest(http.MethodPost, "/x", &buf)
+	req = req.WithContext(fullAccess("t"))
+	req.Header.Set("Content-Type", "application/json-invalid")
+	rec = httptest.NewRecorder()
+	h.createModel(rec, req)
+	is.Equal(rec.Code, http.StatusBadRequest)
+
+	// Ogiltigt UUID når aldrig PostgreSQL (500) — ger 400.
+	rr := doModel(h.getModel, http.MethodGet, "not-a-uuid", nil, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+	rr = doModel(h.updateModel, http.MethodPut, "not-a-uuid", testRule(), map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusBadRequest)
+	rr = doModel(h.deleteModel, http.MethodDelete, "not-a-uuid", nil, map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+// TF-07: avtalade scopes — validate/preview kräver transforms.write,
+// inte create. Endpointspecifik middleware, inte grupp-scope.
+func TestValidatePreviewWriteScope(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	// Write-only får validera och förhandsgranska ...
+	rr := doModelAs(h.validateModel, http.MethodPost, "", testRule(), nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusOK)
+
+	previewBody := map[string]any{
+		"rule": testRule(),
+		"event": map[string]any{
+			"kind": "things.v1.values",
+			"message": map[string]any{
+				"thingId": "r1", "tenant": "t", "thingType": "room",
+				"thing":  map[string]any{"thingId": "r1", "name": "Rum"},
+				"values": []any{},
+			},
+		},
+	}
+	rr = doModelAs(h.previewModel, http.MethodPost, "", previewBody, nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusOK)
+
+	// ... men inte skapa (kräver create).
+	rr = doModelAs(h.createModel, http.MethodPost, "", testRule(), nil, writeOnly("t"))
+	is.Equal(rr.Code, http.StatusUnauthorized)
+
+	// Create-only får skapa men inte validera/förhandsgranska.
+	createOnly := auth.WithAccess(context.Background(), map[string]map[auth.Scope]struct{}{
+		"t": {TransformCreate: {}},
+	})
+	rr = doModelAs(h.createModel, http.MethodPost, "", testRule(), nil, createOnly)
+	is.True(rr.Code == http.StatusCreated || rr.Code == http.StatusForbidden)
+	rr = doModelAs(h.validateModel, http.MethodPost, "", testRule(), nil, createOnly)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+	rr = doModelAs(h.previewModel, http.MethodPost, "", previewBody, nil, createOnly)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+}
+
+// Omladdning ska synas i körning: efter PUT matchar nya regler,
+// efter DELETE matchar inget.
+func TestModelsReloadVisibleInTransform(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rr := doModel(h.createModel, http.MethodPost, "", testRule(), nil)
+	is.Equal(rr.Code, http.StatusCreated)
+	created := decodeModel(t, rr)
+
+	th := transform.Thing{
+		ID: "r1", Type: "Room", TypeName: "Room",
+		Tenant: "t", Event: transform.EventThingsV1Values,
+		Fields: map[string]any{"name": "n"},
+	}
+	writes, err := m.Snapshot().Things.Transform(th)
+	is.NoErr(err)
+	is.Equal(len(writes), 1)
+
+	r := testRule()
+	r.Match.Type = "Other"
+	rr = doModel(h.updateModel, http.MethodPut, created.ID, r, map[string]string{"If-Match": `"rev-1"`})
+	is.Equal(rr.Code, http.StatusOK)
+
+	_, err = m.Snapshot().Things.Transform(th)
+	is.True(errors.Is(err, transform.ErrNoMatchingRule))
+
+	rr = doModel(h.deleteModel, http.MethodDelete, created.ID, nil, map[string]string{"If-Match": `"rev-2"`})
+	is.Equal(rr.Code, http.StatusNoContent)
+
+	// Tomt regellager: inget matchar, inget fel i omladdningen.
+	rr = doModel(h.listModels, http.MethodGet, "", nil, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.True(strings.Contains(rr.Body.String(), `"models":[]`))
+}
+
+func TestModelsTenantIsolation(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	ctxA := fullAccess("a")
+	if err := transform.Validate([]transform.Rule{testRule()}); err != nil {
+		t.Fatalf("regression fixture must be valid: %v", err)
+	}
+
+	// Setup direkt i lagret (utan auktorisering): en global regel samt
+	// en regel per tenant. Lagret är tenant-okunnigt med flit; handlers
+	// upprätthåller ägarskapet som härleds ur match.tenant.
+	seed := func(tenant string) rules.StoredRule {
+		t.Helper()
+		r := testRule()
+		r.Match.Tenant = tenant
+		st, err := m.store.InsertRule(t.Context(), r)
+		if err != nil {
+			t.Fatalf("seed tenant %q: %v", tenant, err)
+		}
+		return st
+	}
+	global := seed("")
+	ruleA := seed("a")
+	ruleB := seed("b")
+
+	decodeList := func(t *testing.T, rr *httptest.ResponseRecorder) []Model {
+		t.Helper()
+		var list struct {
+			Models []Model `json:"models"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &list); err != nil {
+			t.Fatalf("decode list: %v (%s)", err, rr.Body.String())
+		}
+		return list.Models
+	}
+
+	// Listning som A: global + A syns, B döljs.
+	rr := doModelAs(h.listModels, http.MethodGet, "", nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusOK)
+	ids := map[string]bool{}
+	for _, mdl := range decodeList(t, rr) {
+		ids[mdl.ID] = true
+	}
+	is.True(ids[global.ID])
+	is.True(ids[ruleA.ID])
+	is.True(!ids[ruleB.ID])
+
+	// Direktläsning av B:s regel som A läcker inte existens.
+	rr = doModelAs(h.getModel, http.MethodGet, ruleB.ID, nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+
+	// Skrivning med B-tenant i bodyn som A ger 403 — oavsett om id:t
+	// finns (ingen skillnad mot okänt id: ingen existensläcka).
+	rb := testRule()
+	rb.Match.Tenant = "b"
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleB.ID, rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.updateModel, http.MethodPut, "00000000-0000-0000-0000-000000000000", rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	// Lagrad B-regel med A-tenant i bodyn: målet är osynligt -> 404.
+	ra := testRule()
+	ra.Match.Tenant = "a"
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleB.ID, ra, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+	rr = doModelAs(h.deleteModel, http.MethodDelete, ruleB.ID, nil, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusNotFound)
+
+	// Globala regler är synliga men låsta för API-skrivning (seed-ägda).
+	rr = doModelAs(h.getModel, http.MethodGet, global.ID, nil, nil, ctxA)
+	is.Equal(rr.Code, http.StatusOK)
+	rg := testRule()
+	rg.Match.Tenant = ""
+	rr = doModelAs(h.updateModel, http.MethodPut, global.ID, rg, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.deleteModel, http.MethodDelete, global.ID, nil, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	// En synlig global regel får inte tas över genom att body anger A.
+	rr = doModelAs(h.updateModel, http.MethodPut, global.ID, ra, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	unchanged, err := m.store.GetRule(t.Context(), global.ID)
+	is.NoErr(err)
+	is.Equal(unchanged.Rule.Match.Tenant, "")
+	is.Equal(unchanged.Revision, int64(1))
+
+	// Skapande kräver icke-tom tenant inom egna auktoriserade tenants.
+	rr = doModelAs(h.createModel, http.MethodPost, "", rb, nil, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rg = testRule()
+	rg.Match.Tenant = ""
+	rr = doModelAs(h.createModel, http.MethodPost, "", rg, nil, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+	rr = doModelAs(h.createModel, http.MethodPost, "", ra, nil, ctxA)
+	is.Equal(rr.Code, http.StatusCreated)
+
+	// Tenantbyte A->B i uppdatering nekas trots att den lagrade regeln är synlig.
+	rr = doModelAs(h.updateModel, http.MethodPut, ruleA.ID, rb, map[string]string{"If-Match": `"rev-1"`}, ctxA)
+	is.Equal(rr.Code, http.StatusForbidden)
+
+	// Utan access-context: 401 på läsning.
+	rr = doModelAs(h.listModels, http.MethodGet, "", nil, nil, context.Background())
+	is.Equal(rr.Code, http.StatusUnauthorized)
+}
+
+func TestModelsTenantTransferAndConcurrentRevision(t *testing.T) {
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	initial := testRule()
+	initial.Match.Tenant = "a"
+	st, err := m.store.InsertRule(t.Context(), initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := testRule()
+	next.Match.Tenant = "b"
+	// Överföring kräver skrivscope för båda tenants.
+	denied := doModelAs(h.updateModel, http.MethodPut, st.ID, next, map[string]string{"If-Match": `"rev-1"`}, fullAccess("b"))
+	if denied.Code != http.StatusNotFound {
+		t.Fatalf("new-owner-only transfer: %d %s", denied.Code, denied.Body.String())
+	}
+	start := make(chan struct{})
+	codes := make(chan int, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() {
+			<-start
+			rr := doModelAs(h.updateModel, http.MethodPut, st.ID, next, map[string]string{"If-Match": `"rev-1"`}, fullAccess("a", "b"))
+			codes <- rr.Code
+		})
+	}
+	close(start)
+	wg.Wait()
+	close(codes)
+	counts := map[int]int{}
+	for code := range codes {
+		counts[code]++
+	}
+	if counts[http.StatusOK] != 1 || counts[http.StatusConflict] != 1 {
+		t.Fatalf("expected one winner and one revision conflict: %v", counts)
+	}
+	final, err := m.store.GetRule(t.Context(), st.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if final.Revision != 2 || final.Rule.Match.Tenant != "b" {
+		t.Fatalf("unexpected final rule: %+v", final)
+	}
+}
+
+func TestDatabaseSnapshotRestartAndConcurrentMutation(t *testing.T) {
+	a := pgTestModels(t)
+	st, err := a.store.InsertRule(t.Context(), testRule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	version := a.Snapshot().Version
+	// Ny processvy läser alltid om från beständiga rader och version.
+	b := NewModels(a.store, nil)
+	if err := b.Refresh(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if b.Snapshot().Version != version {
+		t.Fatal("restart lost persisted version")
+	}
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		current := st
+		for range 10 {
+			var err error
+			current, err = a.store.UpdateRule(t.Context(), current.ID, testRule(), current.Revision)
+			if err != nil {
+				errs <- err
+				return
+			}
+		}
+	})
+	wg.Go(func() {
+		for range 10 {
+			if err := b.Refresh(t.Context()); err != nil {
+				errs <- err
+				return
+			}
+		}
+	})
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if err := b.SyncOnce(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	writes, err := b.ThingsTransformer().Transform(stubThing())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(writes) != 1 || writes[0].RuleRevision != 11 || writes[0].SnapshotVersion != version+10 {
+		t.Fatalf("mutation/reload lost revision: %+v", writes)
+	}
+}
+
+// Valfria sökfilter på GET /models (PLAN002 1.1): omitempty, AND, okända
+// värden ger tom lista (aldrig 400). Precedensordningen är oförändrad.
+func TestListModelsFilters(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+	ctx := fullAccess("t")
+
+	thing := testRule() // kind thing, event values, type Room, tenant t
+	meas := transform.Rule{
+		Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Tenant: "t"},
+		Entities: []transform.Entity{{
+			ID: "urn:ngsi-ld:T:x", Type: "T",
+			Properties: []transform.Property{{Target: "v", Type: transform.TypeNumber, Resource: "5700"}},
+		}},
+	}
+	for _, r := range []transform.Rule{thing, meas} {
+		if _, err := m.store.InsertRule(t.Context(), r); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	list := func(query string) []Model {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/x?"+query, nil)
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+		h.listModels(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list %q: code=%d (%s)", query, rr.Code, rr.Body.String())
+		}
+		var out struct {
+			Models []Model `json:"models"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return out.Models
+	}
+
+	is.Equal(2, len(list("")))
+	is.Equal(1, len(list("kind=thing")))
+	is.Equal(1, len(list("kind=measurement")))
+	is.Equal(1, len(list("event=things.v1.values")))
+	is.Equal(1, len(list("type=Room")))
+	is.Equal(2, len(list("tenant=t")))
+	is.Equal(2, len(list("source=api")))
+	is.Equal(0, len(list("source=seed")))
+	// AND-kombination + okända värden ger tom lista, inte 400.
+	is.Equal(1, len(list("kind=thing&type=Room")))
+	is.Equal(0, len(list("kind=thing&type=Other")))
+	is.Equal(0, len(list("kind=nope")))
+}
+
+func TestValidateModel(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rr := doModel(h.validateModel, http.MethodPost, "", testRule(), nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.True(strings.Contains(rr.Body.String(), `"valid":true`))
+
+	bad := testRule()
+	bad.Match.Kind = "nope"
+	rr = doModel(h.validateModel, http.MethodPost, "", bad, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+func TestPreviewRelations(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rule := map[string]any{
+		"match": map[string]any{"kind": "thing", "event": "things.v1.relations", "relation": "partOf", "type": "tank"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}",
+			"type": "AgriGreenhouse",
+			"properties": []any{
+				map[string]any{"target": "hasWaterQualityObserved", "type": "Relationship", "array": true, "value": "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", "required": true},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "things.v1.relations",
+			"message": map[string]any{
+				"relationId": "partof-tank-1", "type": "partOf",
+				"fromId": "tank-1", "toId": "greenhouse-a", "tenant": "t",
+				"revision": 2, "changedAt": "2026-09-17T12:00:00Z",
+				"fromThingType": "tank",
+				"from":          map[string]any{"thingId": "tank-1", "name": "Tank 1"},
+				"toThingType":   "greenhouse",
+				"to":            map[string]any{"thingId": "greenhouse-a", "name": "Växthus A"},
+			},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(1, len(out.Entities))
+	is.Equal("urn:ngsi-ld:AgriGreenhouse:greenhouse-a", out.Entities[0].ID)
+	is.Equal("merge", out.Entities[0].Operation)
+}
+
+func TestPreviewLifecycle(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	rule := map[string]any{
+		"match": map[string]any{"kind": "thing", "event": "things.v1.lifecycle", "lifecycle": "deleted"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{id}}",
+			"type": "IndoorEnvironmentObserved", "properties": []any{}, "delete": true,
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "things.v1.lifecycle",
+			"message": map[string]any{
+				"eventId": "v1/t/room-a/lifecycle/deleted/4", "tenant": "t",
+				"thingId": "room-a", "kind": "deleted",
+				"thingType": "room", "thingTypeVersion": "1",
+				"configRevision": 4, "changedAt": "2026-09-17T12:00:00Z",
+				"thing": map[string]any{"thingId": "room-a", "name": "Room A"},
+			},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(1, len(out.Entities))
+	is.Equal("urn:ngsi-ld:IndoorEnvironmentObserved:room-a", out.Entities[0].ID)
+	is.Equal("delete", out.Entities[0].Operation)
+	// delete-svar bär tomt properties-objekt (aldrig null mot kontraktet).
+	if out.Entities[0].Properties == nil {
+		t.Fatal("delete properties must be {}, not null")
+	}
+	is.Equal(0, len(out.Entities[0].Properties))
+
+	// created-händelse aktiverar aldrig delete-regeln.
+	body["event"].(map[string]any)["message"].(map[string]any)["kind"] = "created"
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(!out.Matched)
+	is.Equal(len(out.Entities), 0)
+
+	// Ogiltig kind nekas (thing.updated-kuvert stöds inte längre).
+	body["event"] = map[string]any{"kind": "thing", "message": map[string]any{}}
+	rr = doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+}
+
+func TestPreviewMeasurement(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	v := 22.5
+	// Produktionsformat (bn/bt) — preview delar produktionens
+	// partitionering (TF-06), så testpacket måste parsa som produktion.
+	pack := []map[string]any{
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": v},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "lat", "v": 62.36, "u": "lat"},
+		{"bn": "dev-1/", "n": "lon", "v": 17.51, "u": "lon"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303", "env": "indoors"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type": "IndoorEnvironmentObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700", "observedAt": "header"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind": "measurement",
+			"message": map[string]any{
+				"pack":      pack,
+				"timestamp": "2024-06-03T00:00:00Z",
+			},
+			"sensorType": "st-test",
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 1)
+}
+
+func TestPreviewMeasurementMatchesOnlySelectedPhysicalPort(t *testing.T) {
+	h := &handler{models: NewModels(&stubRuleStore{}, nil)}
+	rule := transform.Rule{Match: transform.Match{Kind: transform.KindMeasurement, Object: "urn:oma:lwm2m:ext:3303", Port: "2"},
+		Entities: []transform.Entity{{ID: "urn:example:Observation:{{id}}:{{port}}", Type: "Observation", Properties: []transform.Property{{Target: "reading", Type: transform.TypeNumber, Resource: "5700"}}}}}
+	if err := transform.Validate([]transform.Rule{rule}); err != nil {
+		t.Fatal(err)
+	}
+	pack := []map[string]any{
+		{"bn": "123-456-789/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 11},
+		{"bn": "123-456-789/0/3303/", "bt": 1720000001, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 22},
+		{"bn": "123-456-789/1/3303/", "bt": 1720000002, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 33},
+		{"bn": "123-456-789/2/3303/", "bt": 1720000003, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"}, {"n": "5700", "v": 44},
+		{"bn": "123-456-789/", "n": "tenant", "vs": "test"},
+	}
+	body := map[string]any{"rule": rule, "event": map[string]any{"kind": "measurement", "message": map[string]any{"pack": pack, "timestamp": "2024-07-03T09:46:45Z"}}}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("preview: %d %s", rr.Code, rr.Body.String())
+	}
+	var response previewResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Matched || response.Observations != 4 || len(response.Entities) != 1 || response.Entities[0].ID != "urn:example:Observation:123-456-789:2" {
+		t.Fatalf("ports not isolated in preview: %+v", response)
+	}
+	reading := response.Entities[0].Properties["reading"].(map[string]any)
+	if reading["value"] != 44.0 {
+		t.Fatalf("preview read wrong port value: %+v", reading)
+	}
+}
+
+// TF-06: multi-observation-pack delas som i produktion — en regel för ett
+// objekt ger träff på dess observation utan läckage från andra objekt.
+func TestPreviewMultiObservation(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev1/3428/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3428"},
+		{"n": "5700", "u": "Cel", "v": 22.2},
+		{"bn": "dev1/3324/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3324"},
+		{"n": "5700", "u": "dB", "v": 55},
+		{"bn": "dev1/", "n": "tenant", "vs": "acme"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3428"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:AirQualityObserved:{{deviceID}}",
+			"type": "AirQualityObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-07-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(out.Observations, 2)
+	is.Equal(len(out.Entities), 1)
+	is.Equal(out.Entities[0].Type, "AirQualityObserved")
+	// 3324-observationens buller får inte läcka in i 3428-entiteten.
+	is.True(!strings.Contains(rr.Body.String(), "55"))
+}
+
+// TF-06: matchad regel utan entiteter (required saknas) rapporteras som
+// matchad med skip-orsak — inte som ingen matchning.
+func TestPreviewMatchedButSuppressed(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": 22.5},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303", "env": "indoors"},
+		"entities": []any{map[string]any{
+			"id":   "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type": "IndoorEnvironmentObserved",
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "9999", "required": true},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-06-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 0)
+	is.True(out.SkippedReason != "")
+}
+
+// TF-06: preview exponerar Create-semantik och context som produktion.
+func TestPreviewExposesOperationAndContext(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+	h := &handler{models: m}
+
+	pack := []map[string]any{
+		{"bn": "dev-1/3303/", "bt": 1720000000, "n": "0", "vs": "urn:oma:lwm2m:ext:3303"},
+		{"n": "5700", "v": 22.5},
+		{"bn": "dev-1/", "n": "env", "vs": "indoors"},
+		{"bn": "dev-1/", "n": "tenant", "vs": "default"},
+	}
+	rule := map[string]any{
+		"match": map[string]any{"kind": "measurement", "object": "urn:oma:lwm2m:ext:3303"},
+		"entities": []any{map[string]any{
+			"id":      "urn:ngsi-ld:IndoorEnvironmentObserved:{{deviceID}}",
+			"type":    "IndoorEnvironmentObserved",
+			"context": "https://example.com/ctx.jsonld",
+			"create":  true,
+			"properties": []any{
+				map[string]any{"target": "temperature", "type": "Number", "resource": "5700"},
+			},
+		}},
+	}
+	body := map[string]any{
+		"rule": rule,
+		"event": map[string]any{
+			"kind":    "measurement",
+			"message": map[string]any{"pack": pack, "timestamp": "2024-06-03T00:00:00Z"},
+		},
+	}
+	rr := doModel(h.previewModel, http.MethodPost, "", body, nil)
+	is.Equal(rr.Code, http.StatusOK)
+	var out previewResponse
+	is.NoErr(json.Unmarshal(rr.Body.Bytes(), &out))
+	is.True(out.Matched)
+	is.Equal(len(out.Entities), 1)
+	is.Equal(out.Entities[0].Operation, "create")
+	is.Equal(out.Entities[0].Context, "https://example.com/ctx.jsonld")
+}
+
+const muxAllowPolicy = `package example.authz
+default allow := false
+allow := {"access": {"t": ["transforms.read", "transforms.create", "transforms.update", "transforms.delete", "transforms.write"]}} if { input.token == "good" }
+`
+
+// Full varv genom mux + middleware + handler + lagring: fångar
+// route-krockar (panik) och scope-fel vid registrering.
+func TestRegisterHandlersRoundTrip(t *testing.T) {
+	is := is.New(t)
+	m := pgTestModels(t)
+
+	mux := http.NewServeMux()
+	policies := strings.NewReader(muxAllowPolicy)
+	is.NoErr(RegisterHandlers(context.Background(), mux, m, policies))
+
+	do := func(method, path, token string, body any) *httptest.ResponseRecorder {
+		var buf bytes.Buffer
+		if body != nil {
+			_ = json.NewEncoder(&buf).Encode(body)
+		}
+		req := httptest.NewRequest(method, path, &buf)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		rr := httptest.NewRecorder()
+		mux.ServeHTTP(rr, req)
+		return rr
+	}
+
+	rr := do(http.MethodPost, "/api/v0/models/validate", "good", testRule())
+	is.Equal(rr.Code, http.StatusOK)
+
+	rr = do(http.MethodPost, "/api/v0/models", "good", nil)
+	is.Equal(rr.Code, http.StatusBadRequest)
+
+	rr = do(http.MethodPost, "/api/v0/models", "good", testRule())
+	is.Equal(rr.Code, http.StatusCreated)
+	created := decodeModel(t, rr)
+
+	rr = do(http.MethodGet, "/api/v0/models", "good", nil)
+	is.Equal(rr.Code, http.StatusOK)
+
+	rr = do(http.MethodGet, "/api/v0/models/"+created.ID, "good", nil)
+	is.Equal(rr.Code, http.StatusOK)
+	is.Equal(rr.Header().Get("ETag"), `"rev-1"`)
+
+	rr = do(http.MethodGet, "/api/v0/models", "bad", nil)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+	rr = do(http.MethodGet, "/api/v0/models", "", nil)
+	is.Equal(rr.Code, http.StatusUnauthorized)
+
+	preview := map[string]any{
+		"rule": testRule(),
+		"event": map[string]any{
+			"kind": "things.v1.values",
+			"message": map[string]any{
+				"thingId": "r1", "tenant": "t", "thingType": "room",
+				"thing":  map[string]any{"thingId": "r1", "name": "Rum"},
+				"values": []any{},
+			},
+		},
+	}
+	rr = do(http.MethodPost, "/api/v0/models/preview", "good", preview)
+	is.Equal(rr.Code, http.StatusOK)
+}

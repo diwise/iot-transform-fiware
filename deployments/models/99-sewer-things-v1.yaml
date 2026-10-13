@@ -1,0 +1,37 @@
+# Sewer från versionerade värdesevent (things.v1.values). Ersätter
+# 70-sewer.yaml (thing.updated): level/percent från values.level|fillRate,
+# status via numToOnOff på values.overflow (v2-overflow anländer som 1/0).
+# Känd lucka: refDevice mappas inte (v2-värden bär source-sträng, ingen
+# device-extrahering finns) — dokumenterat avsteg från legacy-paritet.
+# J2(d): overflowTime (SDM-obligatorisk för CombinedSewerOverflow) har ingen
+# v2-källa och mappas inte — dokumenterat avsteg, ej tyst: entiteten skrivs
+# utan overflowTime. location/dateObserved är required (skärpt): saknad
+# plats eller tid undertrycker entiteten i stället för tyst ofullständig
+# skrivning.
+# subType CombinedSewerOverflow (legacy main) vinner över generisk Sewer
+# via specificitet och skriver samma egenskaper mot CSO-typen.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: sewer }
+    entities:
+      - id: "urn:ngsi-ld:Sewer:{{id}}"
+        type: Sewer
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: level, type: Number, field: values.level.value, observedAt: "field:values.level.observedAt" }
+          - { target: percent, type: Number, field: values.fillRate.value, observedAt: "field:values.fillRate.observedAt" }
+          - { target: status, type: Text, field: values.overflow.value, observedAt: "field:values.overflow.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: location, type: Geo, field: geometry, required: true }
+  - match: { kind: thing, event: things.v1.values, type: sewer, subType: CombinedSewerOverflow }
+    entities:
+      - id: "urn:ngsi-ld:CombinedSewerOverflow:{{id}}"
+        type: CombinedSewerOverflow
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: level, type: Number, field: values.level.value, observedAt: "field:values.level.observedAt" }
+          - { target: percent, type: Number, field: values.fillRate.value, observedAt: "field:values.fillRate.observedAt" }
+          - { target: status, type: Text, field: values.overflow.value, observedAt: "field:values.overflow.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: location, type: Geo, field: geometry, required: true }

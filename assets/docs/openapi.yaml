@@ -1,0 +1,538 @@
+openapi: 3.0.3
+info:
+  title: iot-transform-fiware models API
+  version: v0
+  description: >-
+    CRUD, validering och torr förhandsgranskning av transform-regler.
+    Reglerna lagras i postgres (tabell transform_rules); YAML-filerna i
+    deployments/models är seed som läggs in idempotent vid start och
+    aldrig skriver över API-ändringar. All bodies är application/json;
+    okända fält nekas. Skrivning kräver If-Match med revision ("rev-<n>");
+    konflikt ger 409.
+    Ägarskap: en regel ägs av sin match.tenant. Läsning visar globala
+    regler (tom tenant) samt regler för egna auktoriserade tenants;
+    övrigt ger 404 utan existensläcka. Skrivning kräver icke-tom tenant
+    inom egna auktoriserade tenants; globala regler administreras via
+    seed-filer och ger 403 via API.
+    Scopes: read för läsning, create för POST /models, update för PUT,
+    delete för DELETE, write (transforms.write) för torra validate/preview.
+servers:
+  - url: /api/v0
+    description: API-bas (alla paths nedan är relativa mot denna).
+paths:
+  /models:
+    get:
+      tags: [Models]
+      summary: Lista regler i precedensordning (seed i filordning, API-regler sist)
+      parameters:
+        - name: kind
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.kind (t.ex. measurement, thing).
+        - name: event
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.event (t.ex. things.v1.values).
+        - name: type
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.type (sakmall).
+        - name: tenant
+          in: query
+          schema: { type: string }
+          description: Filtrera på match.tenant (ägarskap).
+        - name: source
+          in: query
+          schema: { type: string, enum: [seed, api] }
+          description: Filtrera på regelkälla. Filtren kombineras med AND; okända värden ger tom lista.
+      responses:
+        '200':
+          description: Regler
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [models]
+                properties:
+                  models:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Model'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Models]
+      summary: Skapa regel (UUID genereras, revision 1; kräver icke-tom tenant inom egna tenants)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '201':
+          description: Regel skapad (körningsmotorer omladdade)
+          headers:
+            ETag:
+              schema: { type: string }
+              description: Aktuell revision ("rev-<n>").
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /models/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Models]
+      summary: Hämta en regel
+      responses:
+        '200':
+          description: Regel
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Models]
+      summary: Ersätt regel (kräver If-Match, flippar källa till api)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '200':
+          description: Regel uppdaterad (körningsmotorer omladdade)
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Model'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Models]
+      summary: Ta bort regel (kräver If-Match, idempotent mot okänt id efter kontroll)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Regel borttagen }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /models/validate:
+    post:
+      tags: [Models]
+      summary: Validera regel utan att spara (samma regler som vid start; kräver transforms.write)
+      description: >-
+        Kontrollerar syntax, referenser och statiska värden med samma generella
+        validering som YAML/seed, snapshot och preview. Ogiltiga statiska URI:er,
+        datum, värdetyper och transformargument (inklusive division med noll)
+        ger 400. Dynamiska källvärden kan bara bedömas vid körning med indata;
+        ett godkänt svar intygar inte Smart Data Models-konformitet. Denna
+        endpoint kontrollerar endast den angivna regeln. Vid create/update
+        valideras även hela kandidatuppsättningen: identiska ID-mallar med
+        olika typmallar avvisas inom samma regel eller mellan potentiellt
+        överlappande matchningar. Åtskilda tenants ger ingen sådan konflikt.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Rule'
+      responses:
+        '200':
+          description: Giltig regel
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /models/preview:
+    post:
+      tags: [Models]
+      summary: Torr körning av inline-regel mot exempelhändelse (kräver transforms.write)
+      description: >-
+        Kör regeln mot en mätvärdes- ({pack, timestamp} + valfri sensorType
+        som kringgår device-management) eller sakhändelse (things.v1.values-,
+        things.v1.relations- eller things.v1.lifecycle-kuvert). Mätvärdespack delas i
+        enobservations-meddelanden med samma normalisering som produktion
+        (TF-06). Aldrig broker-kontakt, aldrig persistens. Ingen matchning
+        ger matched:false med tom lista; matchad men undertryckt regel
+        (required saknas) ger matched:true med tom lista och skippedReason.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule, event]
+              properties:
+                rule:
+                  $ref: '#/components/schemas/Rule'
+                event:
+                  type: object
+                  required: [kind, message]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [measurement, things.v1.values, things.v1.relations, things.v1.lifecycle]
+                    message:
+                      type: object
+                      description: Rått kuvert (mätarmeddelande eller sakuvert).
+                    sensorType:
+                      type: string
+                      description: Offline-override för mätvärden.
+      responses:
+        '200':
+          description: Entiteter (NGSI-LD-attribut utan id/type) med operation och context
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [matched, entities, observations]
+                properties:
+                  matched: { type: boolean, description: True vid regelträff, även undertryckt }
+                  observations: { type: integer, description: Antal enobservations-indata som utvärderades }
+                  skippedReason: { type: string, description: Orsak vid matchning utan entiteter }
+                  entities:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, type, properties, operation]
+                      properties:
+                        id: { type: string }
+                        type: { type: string }
+                        properties:
+                          type: object
+                        context: { type: string, description: Entitetens JSON-LD-context (tom betyder deployment-default) }
+                        operation: { type: string, enum: [create, merge, remove, delete], description: Skrivsemantik mot brokern }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /models/compat:
+    post:
+      tags: [Models]
+      summary: Kompatibilitetskontroll mot explicit mallversion + källkontrakt (kräver transforms.write; förslag till A)
+      description: >-
+        Offline kontroll av en kandidatregeluppsättning mot explicit
+        mallversion (thingType/subType/thingTypeVersion/variantId/variantVersion)
+        och källkontrakt (egenskaps-ID:n/enheter, relationsplatser/tillåtna
+        mål/kardinalitet, geometri/metadata). Torr, ingen persistens, ingen
+        brokerkontakt, inget dolt kataloguppslag per mätning. Returnerar
+        compatible + strukturerad diagnostik
+        {code,ruleId,ruleRevision,snapshotVersion,entity,attribute,expression,
+        tenant,thingId,configRevision} med koder required-missing |
+        invalid-source | no-match | ambiguous-match | unit-conflict |
+        geometry-invalid | ngsild-invalid | revision-conflict | tenant-denied |
+        target-notfound | cardinality | deleted-target. Statiskt omöjliga
+        konstruktioner (syntax, okända roller, cykler, framåt-/självref,
+        dubblett-target, oförenliga ID/typdefinitioner, enhets/geometri-fel
+        där underlag räcker) ger compatible:false; dynamiska/valfria källor
+        (saknad valfri källa, fria metadata/repeat) ger aldrig falsk
+        fullständig garanti utan skip vid körning/preview. Full
+        JSON-LD-context-expansion, versionerad SDM-schemavalidering och
+        brokerns faktiska existens verifieras INTE; NGSI-LD-profilen
+        validerar faktisk serialiserad output via gemensamma protokollhjälpare.
+        Mätvärdesregler berörs inte av mallversion/variant (additivt).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompatRequest'
+      responses:
+        '200':
+          description: Kompatibilitetsutfall med diagnostik (tom lista vid full kompatibilitet)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompatResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+components:
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string }
+      description: Aktuell revision ("rev-<n>", se ETag).
+  responses:
+    BadRequest:
+      description: Ogiltig begäran (valideringsfel i klartext under error)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+    Unauthorized:
+      description: Saknad/ogiltig token eller scope
+      content:
+        application/json:
+          schema:
+            type: object
+    Forbidden:
+      description: Autentiserad men otillåten tenant eller global regel (administreras via seed)
+      content:
+        application/json:
+          schema:
+            type: object
+    NotFound:
+      description: Okänt id
+      content:
+        application/json:
+          schema:
+            type: object
+    Conflict:
+      description: Revisionskonflikt (läs om + försök igen)
+      content:
+        application/json:
+          schema:
+            type: object
+  schemas:
+    Model:
+      type: object
+      description: Regelkuvert (identitet/livscykel; id finns aldrig i YAML).
+      required: [id, revision, source, kind, rule]
+      properties:
+        id: { type: string, format: uuid }
+        revision: { type: integer }
+        source: { type: string, enum: [seed, api] }
+        seedKey: { type: string }
+        kind: { type: string, enum: [measurement, thing] }
+        rule:
+          $ref: '#/components/schemas/Rule'
+    Rule:
+      type: object
+      required: [match, entities]
+      properties:
+        priority:
+          type: integer
+          default: 0
+          description: 'Högsta prioritet vinner, därefter specificitet och stabil snapshotordning. Ändrar inte tenantgrinden.'
+        name:
+          type: string
+          description: 'Fritextnamn endast för användaren (visningsnamn). Påverkar aldrig matchning, körning, prioritet eller specificitet.'
+        match:
+          $ref: '#/components/schemas/Match'
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+    Match:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [measurement, thing] }
+        device: { type: string, description: 'Endast measurement; things saknar device-identitet.' }
+        port:
+          type: string
+          description: 'Measurement-filter för sensorns fysiska anslutning i device/port/object/resource. Tomt/osatt är wildcard. Utan port används device/object/resource; explicit "0" är en port. Exakt strängmatchning; {{port}} exponeras i mallar.'
+          example: '2'
+        sensorType: { type: string }
+        object: { type: string }
+        resource: { type: string }
+        env: { type: string }
+        type: { type: string }
+        subType: { type: string }
+        tenant: { type: string, description: Ägarskap för API-administration (tom = global seed-regel) }
+        event: { type: string, description: Händelsekälla för things-regler (t.ex. things.v1.values, things.v1.relations, things.v1.lifecycle); tom = ursprunglig källa }
+        relation: { type: string, description: Relationsregler avgränsas till relationstyp (t.ex. partOf); endast med event things.v1.relations och match.type/subType }
+        toType: { type: string, description: 'Exakt rå toThingType, separat från from-sidans type/subType. Endast things.v1.relations; tomt är wildcard.' }
+        relationRemoved: { type: boolean, description: Bortkoppling (true) eller koppling (osatt); endast med match.relation }
+        lifecycle: { type: string, enum: [created, updated, deleted], description: 'Krävs explicit med event things.v1.lifecycle; inget wildcard. Avvisas på övriga event.' }
+        thingTypeVersion: { type: string, description: 'Exakt mallversion (eventets thingTypeVersion). Tomt matchar alla versioner men kräver match.type; configRevision är aldrig matchfilter. Endast things; additivt, gamla regler utan fältet gäller oförändrat.' }
+        variantId: { type: string, description: 'Exakt variant (descriptorns variantId). Tomt är wildcard. Endast things; additivt.' }
+        variantVersion: { type: string, description: 'Exakt variantversion (descriptorns variantVersion). Tomt är wildcard, oberoende av variantId. Endast things; additivt.' }
+    Entity:
+      type: object
+      required: [id, type, properties]
+      properties:
+        name: { type: string, description: 'Deklarativ målroll (fri sträng, tom = anonym). {{entities.<roll>.id}} refererar bakåt till tidigare deklarerat ID; framåt-/självref i ID, okända roller, cykler och dubblett-target avvisas. En sak kan mappas till flera målentiteter i deklarerad ordning.' }
+        id:
+          type: string
+          description: 'Rekommenderad ID-mall använder stabilt käll-ID (helst GUID/UUID) via {{id}}, t.ex. urn:ngsi-ld:<Typ>:{{id}}. Stöds: {{entities.<roll>.id}} (bakåtreferens), {{field:<väg>}}, {{safeURI(...)}} och {{firstPresent(...)}}. Namn mappas till attribut. Dynamiska {{fält}} och nästlade fältvägar stöds; inga namnbaserade fallback-ID:n skapas.'
+          example: 'urn:ngsi-ld:X:{{id}}'
+        type: { type: string }
+        context: { type: string }
+        create: { type: boolean }
+        removeAttributes: { type: array, items: { type: string }, description: Rensar namngivna attribut (PATCH-null) i stället för att skriva värden; endast thing-regler }
+        delete: { type: boolean, description: Raderar hela entiteten (idempotent, 404 = OK); kräver match.lifecycle deleted; endast thing-regler }
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/Property'
+    Property:
+      type: object
+      required: [target, type]
+      properties:
+        target:
+          type: string
+          description: 'Kompakt term (Unicode-bokstav/underscore först; därefter bokstäver/siffror/underscore/bindestreck/punkt) eller absolut URI. Får inte kollidera med NGSI-LD-strukturfält.'
+        type:
+          type: string
+          enum: [Number, Text, Boolean, DateTime, Geo, Relationship, NumberArray, TextArray, Structured, LanguageMap]
+        array:
+          type: boolean
+          default: false
+          description: 'Endast NGSI-LD Relationship-attribut, inte Structured-delvärden. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
+        unit:
+          type: string
+          description: 'Endast Number och NumberArray-attribut. Stöds inte på Structured-delvärden. Känd källenhet får endast märkas om med ekvivalent kod eller explicit convert.'
+        convert:
+          type: object
+          required: [from, to]
+          description: 'Explicit Number/NumberArray-konvertering: värde * factor + offset, före transform. From verifieras mot känd källenhet; annars är from författarens uttryckliga deklaration. Argument/resultat måste vara finita; olika enheter får inte ha identisk numerisk omvandling. Unit, om angiven, måste stämma med to; annars används to som unitCode.'
+          properties:
+            from: { type: string }
+            to: { type: string }
+            factor: { type: number, default: 1 }
+            offset: { type: number, default: 0 }
+        observedAt:
+          type: string
+          description: 'Default är värdets egen observationstid (measurement-header som fallback), aldrig fabricerad tid. Header väljer bastid/max observedAt/changedAt; record värdets tid; message measurement-timestamp eller things publiceringstid/changedAt; none utelämnar tid; field:<väg> väljer explicit källtid. Stöds på alla attributtyper, inte Structured-delvärden. Strikt RFC3339 med högst nio decimaler; tillgänglig RFC3339Nano-precision bevaras.'
+          example: header
+        observedBy:
+          type: string
+          description: 'Endast Number-attribut, inte Structured-delvärden. Stöder malluttryck och entitetsreferenser.'
+        when: { type: string, enum: [present], description: 'Närvarosemantiken gäller även utan when. Tom/null/saknad källa ger ingen skrivning; noll och false är giltiga. Aggregat utan närvarande ingångar skriver inte.' }
+        required: { type: boolean, description: 'Saknad källa undertrycker hela entiteten, även för Structured-delvärden. Typfel är fel, inte frånvaro.' }
+        resource: { type: string }
+        object:
+          type: string
+          description: 'Measurement-selector som kräver resource eller name; gäller även derive.of.'
+        env:
+          type: string
+          description: 'Measurement-selector som kräver resource eller name; gäller även derive.of.'
+        name: { type: string }
+        field: { type: string, description: 'Things-källa: values.<id>.value|observedAt|quality|unit|source, snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[]/relations[]/relation.*/lifecycle.*/geometry/location/metadata samt standardgenvägar. Citerade vägar (values."a.b".value) och [n]-index stöds. Fria metadata/repeat ger aldrig falsk fullständig garanti.' }
+        ref: { type: string, description: 'Alias för field (things). Samma delta/snapshot-syntax som field.' }
+        const:
+          description: Konstant värde (valfri JSON-typ).
+        latlon: { type: boolean }
+        timestamp: { type: boolean }
+        value:
+          type: string
+          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Things-källvyer: values.<id>.* (kvalitetsfiltrerat, endast ok/uncertain), snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[] (proveniens utan värden), relations[]/relation.*, lifecycle.*, removed, geometry/location/metadata. Measurements: records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview. Aggregat endast via derive (sum/min/max/anyTrue/allTrue/coalesce/firstPresent) inom samma event.'
+          example: '{{metadata.description}}'
+        prefix:
+          type: string
+          description: 'Appliceras efter transform och före typkonvertering. Kräver text eller en lista med enbart text. På derive.of appliceras prefix före aggregatet.'
+        transform:
+          type: array
+          items:
+            type: object
+            required: [op]
+            properties:
+              op: { type: string }
+              value: { type: number }
+        derive:
+          type: object
+          description: 'Använder gemensam källutvärdering, även i Structured-delvärden. of stöder kindens egna källor samt const, value, latlon och timestamp med valfritt prefix. derive och transform kan inte kombineras på samma property.'
+          required: [fn, of]
+          properties:
+            fn: { type: string }
+            of:
+              type: array
+              items:
+                type: object
+        subproperties:
+          type: array
+          description: 'Endast Structured. Delvärden konverteras enligt deklarerad typ och kan använda derive. De är råa JSON-värden: unit, observedAt, observedBy, array och nästlad Structured avvisas.'
+          items:
+            $ref: '#/components/schemas/Property'
+    CompatRequest:
+      type: object
+      required: [template, rules]
+      properties:
+        template:
+          type: object
+          required: [thingType]
+          properties:
+            thingType: { type: string, description: 'Explicit malltyp (match.type).' }
+            subType: { type: string }
+            thingTypeVersion: { type: string, description: 'Explicit mallversion; tom = wildcard.' }
+            variantId: { type: string }
+            variantVersion: { type: string }
+        sources:
+          type: object
+          description: 'Explicit källkontrakt; tomt = okänt underlag (endast statiskt omöjliga konstruktioner rapporteras).'
+          properties:
+            properties:
+              type: array
+              items:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: string }
+                  unit: { type: string }
+            relations:
+              type: array
+              items:
+                type: object
+                required: [name]
+                properties:
+                  name: { type: string }
+                  allowedTargets: { type: array, items: { type: string } }
+                  min: { type: integer }
+                  max: { type: integer, description: '0 = obegränsat.' }
+            geometry: { type: boolean }
+            location: { type: boolean }
+            metadata: { type: array, items: { type: string } }
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+        tenant: { type: string }
+        thingId: { type: string }
+        configRevision: { type: integer }
+    CompatResult:
+      type: object
+      required: [compatible, diagnostics]
+      properties:
+        compatible: { type: boolean }
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnostic'
+    Diagnostic:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, enum: [required-missing, invalid-source, no-match, ambiguous-match, unit-conflict, geometry-invalid, ngsild-invalid, revision-conflict, tenant-denied, target-notfound, cardinality, deleted-target] }
+        ruleId: { type: string }
+        ruleRevision: { type: integer }
+        snapshotVersion: { type: integer }
+        entity: { type: string, description: Målroll (Entity.name) eller entity-index }
+        attribute: { type: string }
+        expression: { type: string }
+        tenant: { type: string }
+        thingId: { type: string }
+        configRevision: { type: integer }
+        detail: { type: string }

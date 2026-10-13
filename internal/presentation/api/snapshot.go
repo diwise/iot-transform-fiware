@@ -1,0 +1,149 @@
+package api
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"github.com/diwise/iot-transform-fiware/internal/application/measurements"
+	"github.com/diwise/iot-transform-fiware/internal/application/things"
+	"github.com/diwise/iot-transform-fiware/internal/application/transform"
+	"github.com/diwise/iot-transform-fiware/internal/infrastructure/rules"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+)
+
+// RuleStore är den persistensyta Models behöver. *rules.PgStore uppfyller
+// den; tester stoppar in stubbar för felinjicering.
+type RuleStore interface {
+	LoadRules(ctx context.Context) ([]rules.StoredRule, int64, error)
+	ListRules(ctx context.Context) ([]rules.StoredRule, error)
+	GetRule(ctx context.Context, id string) (rules.StoredRule, error)
+	InsertRule(ctx context.Context, r transform.Rule) (rules.StoredRule, error)
+	UpdateRule(ctx context.Context, id string, r transform.Rule, rev int64) (rules.StoredRule, error)
+	DeleteRule(ctx context.Context, id string, rev int64) error
+	RuleVersion(ctx context.Context) (int64, error)
+}
+
+// Snapshot är en oföränderlig regeluppsättning med förbyggda motorer.
+// Meddelandehantering läser alltid en komplett snapshot: saker och
+// mätvärden kan aldrig se olika regelversioner (TF-05).
+type Snapshot struct {
+	Version      int64
+	Things       *things.DynamicThingTransformer
+	Measurements *measurements.DynamicTransformer
+}
+
+// buildSnapshot bygger motorer från lagrade rader. Anropas med komplett
+// radmängd; resultatet publiceras atomärt av anroparen.
+func buildSnapshot(stored []rules.StoredRule, resolver measurements.SensorTypeResolver) *Snapshot {
+	rs := make([]transform.Rule, 0, len(stored))
+	for _, st := range stored {
+		rs = append(rs, st.Rule)
+	}
+	return &Snapshot{
+		Things:       things.NewDynamicThingTransformer(rs),
+		Measurements: measurements.NewDynamicTransformer(rs, resolver),
+	}
+}
+
+// SyncOnce laddar om snapshoten om lagrets version ändrats. Idempotent:
+// utan ändring händer inget. Fel propageras; anroparen (mutate, RunSync)
+// avgör återhämtning.
+func (m *Models) SyncOnce(ctx context.Context) error {
+	v, err := m.store.RuleVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if snap := m.snap.Load(); snap != nil && snap.Version == v {
+		return nil
+	}
+	return m.Refresh(ctx)
+}
+
+// Refresh bygger om snapshoten från lagret villkorslöst och byter den
+// atomärt. Används vid start, efter egna mutationer och vid poll-träff.
+func (m *Models) Refresh(ctx context.Context) error {
+	stored, v, err := m.store.LoadRules(ctx)
+	if err != nil {
+		return err
+	}
+	candidate := make([]transform.Rule, len(stored))
+	for i, st := range stored {
+		stored[i].Rule.ID = st.ID
+		stored[i].Rule.Revision = st.Revision
+		stored[i].Rule.SnapshotVersion = v
+		candidate[i] = stored[i].Rule
+	}
+	if err := transform.Validate(candidate); err != nil {
+		return err
+	}
+	snap := buildSnapshot(stored, m.resolver)
+	snap.Version = v
+	for {
+		current := m.snap.Load()
+		if current != nil && current.Version >= v {
+			return nil
+		}
+		if m.snap.CompareAndSwap(current, snap) {
+			for _, overlap := range transform.NewEngine(candidate).PotentialOverlaps() {
+				logging.GetFromContext(ctx).Debug("rules potentially overlap", "rule_id", overlap.FirstRuleID, "other_rule_id", overlap.SecondRuleID, "snapshot_version", v)
+			}
+			break
+		}
+	}
+	return nil
+}
+
+// Snapshot returnerar aktuell snapshot (aldrig nil; före första Refresh
+// en tom oladdad snapshot som inte matchar någon lagerversion).
+func (m *Models) Snapshot() *Snapshot {
+	snapshot := *m.snap.Load()
+	return &snapshot
+}
+
+// ThingsTransformer löser aktuell snapshot-motor per meddelande.
+// Uppfyller messaging-things TransformerProvider.
+func (m *Models) ThingsTransformer() *things.DynamicThingTransformer {
+	return m.Snapshot().Things
+}
+
+// MeasurementsTransformer löser aktuell snapshot-motor per meddelande.
+// Uppfyller messaging-measurements TransformerProvider.
+func (m *Models) MeasurementsTransformer() *measurements.DynamicTransformer {
+	return m.Snapshot().Measurements
+}
+
+// RunSync pollar lagrets version och laddar om vid ändring, så att alla
+// instanser konvergerar mot samma regler utan omstart. Fel loggas och
+// nästa tick försöker igen (återhämtning). Returnerar stoppfunktion.
+func (m *Models) RunSync(ctx context.Context, interval time.Duration, log *slog.Logger) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				before := int64(-1)
+				if snap := m.snap.Load(); snap != nil {
+					before = snap.Version
+				}
+				if err := m.SyncOnce(ctx); err != nil {
+					log.Warn("rule sync failed, retrying", "err", err.Error())
+					continue
+				}
+				if snap := m.snap.Load(); snap != nil && snap.Version != before {
+					log.Info("rule snapshot reloaded", "version", snap.Version)
+				}
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}

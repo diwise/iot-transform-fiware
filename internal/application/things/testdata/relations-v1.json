@@ -1,0 +1,1 @@
+{"relationId":"relation-1","type":"source-relation","fromId":"object-1","toId":"object-2","tenant":"tenant-a","revision":4,"changedAt":"2026-10-01T12:00:00Z","fromThingType":"source-template","from":{"thingId":"object-1","name":"Raw name å"},"toThingType":"other-template","to":{"thingId":"object-2","metadata":{"description":"Other source"}}}
