@@ -104,16 +104,18 @@ func TestJ2LifecycleCreatesShellWithoutMeasurements(t *testing.T) {
 		subType    string
 		wantID     string
 		wantType   string
+		wantSecond string
 	}{
-		{"room", "", "urn:ngsi-ld:IndoorEnvironmentObserved:j2-shell-1", "IndoorEnvironmentObserved"},
-		{"wastebin", "", "urn:ngsi-ld:WasteContainer:j2-shell-1", "WasteContainer"},
-		{"lifebuoy", "", "urn:ngsi-ld:Lifebuoy:j2-shell-1", "Lifebuoy"},
-		{"desk", "", "urn:ngsi-ld:Device:j2-shell-1", "Device"},
-		{"pumpingstation", "", "urn:ngsi-ld:SewagePumpingStation:j2-shell-1", "SewagePumpingStation"},
-		{"sewer", "", "urn:ngsi-ld:Sewer:j2-shell-1", "Sewer"},
-		{"sewer", "CombinedSewerOverflow", "urn:ngsi-ld:CombinedSewerOverflow:j2-shell-1", "CombinedSewerOverflow"},
-		{"pointofinterest", "", "urn:ngsi-ld:PointOfInterest:j2-shell-1", "PointOfInterest"},
-		{"pointofinterest", "Beach", "urn:ngsi-ld:Beach:j2-shell-1", "Beach"},
+		{"room", "", "urn:ngsi-ld:IndoorEnvironmentObserved:j2-shell-1", "IndoorEnvironmentObserved", ""},
+		{"wastebin", "", "urn:ngsi-ld:WasteContainer:j2-shell-1", "WasteContainer", ""},
+		{"lifebuoy", "", "urn:ngsi-ld:Lifebuoy:j2-shell-1", "Lifebuoy", ""},
+		{"passage", "", "urn:ngsi-ld:Device:j2-shell-1", "Device", ""},
+		{"pumpingstation", "", "urn:ngsi-ld:SewagePumpingStation:j2-shell-1", "SewagePumpingStation", ""},
+		{"sewer", "", "urn:ngsi-ld:Sewer:j2-shell-1", "Sewer", ""},
+		{"sewer", "CombinedSewerOverflow", "urn:ngsi-ld:CombinedSewerOverflow:j2-shell-1", "CombinedSewerOverflow", ""},
+		{"pointofinterest", "", "urn:ngsi-ld:PointOfInterest:j2-shell-1", "PointOfInterest", ""},
+		{"pointofinterest", "Beach", "urn:ngsi-ld:Beach:j2-shell-1", "Beach", ""},
+		{"greenhouse", "", "urn:ngsi-ld:AgriGreenhouse:j2-shell-1", "AgriGreenhouse", "urn:ngsi-ld:IndoorEnvironmentObserved:j2-shell-1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.sourceType+"/"+tc.subType, func(t *testing.T) {
@@ -135,12 +137,19 @@ func TestJ2LifecycleCreatesShellWithoutMeasurements(t *testing.T) {
 				t.Fatal(err)
 			}
 			writes, err := engine.Transform(input)
-			if err != nil || len(writes) != 1 {
+			want := 1
+			if tc.wantSecond != "" {
+				want = 2
+			}
+			if err != nil || len(writes) != want {
 				t.Fatalf("lifecycle created: %+v %v", writes, err)
 			}
 			if writes[0].EntityID != tc.wantID || writes[0].TypeName != tc.wantType {
 				t.Fatalf("mål-ID inkonsistent: %s/%s, want %s/%s",
 					writes[0].EntityID, writes[0].TypeName, tc.wantID, tc.wantType)
+			}
+			if tc.wantSecond != "" && writes[1].EntityID != tc.wantSecond {
+				t.Fatalf("andra entitet saknas: %+v, want %s", writes, tc.wantSecond)
 			}
 			entity := writeJSON(t, writes[0])
 			if entity["name"].(map[string]any)["value"] != "J2 Shell" {
@@ -160,7 +169,7 @@ func TestJ2LifecycleCreatesShellWithoutMeasurements(t *testing.T) {
 				t.Fatal(err)
 			}
 			uw, err := engine.Transform(updated)
-			if err != nil || len(uw) != 1 || uw[0].EntityID != tc.wantID {
+			if err != nil || len(uw) != want || uw[0].EntityID != tc.wantID {
 				t.Fatalf("lifecycle updated: %+v %v", uw, err)
 			}
 			if writeJSON(t, uw[0])["name"].(map[string]any)["value"] != "J2 Shell renamed" {
@@ -298,18 +307,25 @@ func TestJ2SewerRequirementsAndDeviations(t *testing.T) {
 	}
 }
 
-// J2(e): greenhouse/tank-regler förblir borttagna; mallar utan regler är
-// avsiktligt (ingen återinföring av vana).
+// J2(e): greenhouse/tank-regler återinförda med nya mallar (102/103 + 94):
+// växthus -> AgriGreenhouse + IndoorEnvironmentObserved, tank ->
+// WaterQualityObserved, tank partOf greenhouse -> hasWaterQualityObserved.
 func TestJ2GreenhouseTankRulesAbsent(t *testing.T) {
 	rules, err := LoadModelsDir("../../../deployments/models")
 	if err != nil {
 		t.Fatal(err)
 	}
+	seen := map[string]bool{}
 	for _, r := range rules {
-		for _, blocked := range []string{"greenhouse", "tank", "tankwater"} {
-			if r.Match.Type == blocked {
-				t.Fatalf("borttagen regeltyp %q återinförd: %+v", blocked, r.Match)
-			}
+		seen[string(r.Match.Kind)+"/"+string(r.Match.Event)+"/"+r.Match.Type+"/"+r.Match.Relation] = true
+	}
+	for _, want := range []string{
+		"thing/things.v1.values/greenhouse/",
+		"thing/things.v1.values/tank/",
+		"thing/things.v1.relations/tank/partOf",
+	} {
+		if !seen[want] {
+			t.Fatalf("saknad regel %q (102/103/94)", want)
 		}
 	}
 }

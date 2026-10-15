@@ -1,0 +1,23 @@
+# Tank från versionerade värdesevent (things.v1.values), saktyp tank.
+# WaterQualityObserved kräver id/type/dateObserved/location: platsen sätts
+# på saken (Point mitt i växthusets polygon — tanken har allowNoLocation).
+# Standardfält: temperature, pH (versalt H). pH är avsiktligt valfri:
+# egenskapen är aktiverad i mallen men saknar givare idag, och dyker upp
+# när den binds. waterLevel (m) och co2 (PPM) har inga standardfält i
+# WaterQualityObserved och mappas som custom-attribut med samma namn.
+# Alla värdefält är valfria: temperatur+co2 anländer tillsammans från en
+# givare, vattennivå från en annan — required skulle tysta partiella batchar.
+rules:
+  - match: { kind: thing, event: things.v1.values, type: tank }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
+        type: WaterQualityObserved
+        properties:
+          - { target: location, type: Geo, field: geometry, required: true }
+          - { target: dateObserved, type: DateTime, timestamp: true, required: true }
+          - { target: temperature, type: Number, field: values.temperature.value, observedAt: "field:values.temperature.observedAt" }
+          - { target: pH, type: Number, field: values.ph.value, observedAt: "field:values.ph.observedAt" }
+          - { target: waterLevel, type: Number, field: values.waterLevel.value, observedAt: "field:values.waterLevel.observedAt" }
+          - { target: co2, type: Number, field: values.co2.value, observedAt: "field:values.co2.observedAt" }
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }

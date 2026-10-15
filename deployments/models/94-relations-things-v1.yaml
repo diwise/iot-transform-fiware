@@ -7,7 +7,9 @@
 # Rums partOf-länk skrivs som refParent på rummets observationsentitet
 # (samma id-mall som 90-room-things-v1.yaml). Förälder-entiteten förväntas
 # existera (skapad av egen regel); NGSI-LD tolererar dangling-referenser.
-# Greenhouse/tank är borttagna tills nya mallar tas fram.
+# Tanks partOf-länk mot växthus skrivs som hasWaterQualityObserved på
+# växthusets AgriGreenhouse-entitet (102-greenhouse-things-v1.yaml äger
+# växthusentiteten, 103-tank-things-v1.yaml äger WaterQualityObserved).
 #
 # J2(c): värdet är avsiktligt hårdkodat till Building-URN och regeln är
 # avgränsad med match.toType: building. Mål av annan källtyp träffar inte
@@ -27,3 +29,15 @@ rules:
         type: IndoorEnvironmentObserved
         properties: []
         removeAttributes: [refParent]
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank, toType: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
+        type: AgriGreenhouse
+        properties:
+          - { target: hasWaterQualityObserved, type: Relationship, array: true, value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}", required: true }
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, relationRemoved: true, type: tank, toType: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
+        type: AgriGreenhouse
+        properties: []
+        removeAttributes: [hasWaterQualityObserved]

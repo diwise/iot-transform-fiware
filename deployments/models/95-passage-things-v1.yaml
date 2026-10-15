@@ -1,0 +1,18 @@
+# Passage -> Device från versionerade värdesevent (things.v1.values).
+# Dörrkontakt (bool 1/0) blir status via numToOnOff, den beräknade
+# passages-räknaren mappas som custom-attribut (inget standardfält för
+# kumulativa passager i Device). Följer desk/lifebuoy-mönstret; inga
+# required-flaggor (tolerant mot partiella batchar).
+rules:
+  - match: { kind: thing, event: things.v1.values, type: passage }
+    entities:
+      - id: "urn:ngsi-ld:Device:{{id}}"
+        type: Device
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+          - { target: alternateName, type: Text, field: alternativeName, observedAt: none }
+          - { target: controlledProperty, type: TextArray, const: ["peopleCount"], observedAt: none }
+          - { target: dateLastValueReported, type: DateTime, timestamp: true }
+          - { target: status, type: Text, field: values.door.value, observedAt: "field:values.door.observedAt", transform: [{ op: numToOnOff }] }
+          - { target: passages, type: Number, field: values.passages.value, observedAt: "field:values.passages.observedAt" }
+          - { target: location, type: Geo, field: geometry }

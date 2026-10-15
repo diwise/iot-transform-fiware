@@ -54,7 +54,8 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 	engine := things.NewDynamicThingTransformer(rules)
 	for sourceType, modelType := range map[string]string{
 		"room": "IndoorEnvironmentObserved", "wastebin": "WasteContainer",
-		"lifebuoy": "Lifebuoy", "desk": "Device", "pumpingstation": "SewagePumpingStation", "sewer": "Sewer", "pointofinterest": "PointOfInterest",
+		"lifebuoy": "Lifebuoy", "passage": "Device", "pumpingstation": "SewagePumpingStation", "sewer": "Sewer", "pointofinterest": "PointOfInterest",
+		"tank": "WaterQualityObserved", "greenhouse": "AgriGreenhouse",
 	} {
 		t.Run(sourceType, func(t *testing.T) {
 			wantedID := "urn:ngsi-ld:" + modelType + ":" + sourceGUID
@@ -74,6 +75,16 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 					}
 					if writes[1].EntityID != "urn:ngsi-ld:WeatherObserved:"+sourceGUID || writes[1].TypeName != "WeatherObserved" {
 						t.Fatalf("poi weather identity lost: %+v", writes[1])
+					}
+				} else if sourceType == "greenhouse" {
+					if err != nil || len(writes) != 2 {
+						t.Fatalf("values: %+v %v", writes, err)
+					}
+					if writes[0].EntityID != wantedID || writes[0].TypeName != "AgriGreenhouse" {
+						t.Fatalf("greenhouse agri identity lost: %+v", writes[0])
+					}
+					if writes[1].EntityID != "urn:ngsi-ld:IndoorEnvironmentObserved:"+sourceGUID || writes[1].TypeName != "IndoorEnvironmentObserved" {
+						t.Fatalf("greenhouse indoor identity lost: %+v", writes[1])
 					}
 				} else if err != nil || len(writes) != 1 {
 					t.Fatalf("values: %+v %v", writes, err)
@@ -100,6 +111,13 @@ func TestShippedRulesKeepGUIDAcrossNamesAndLifecycle(t *testing.T) {
 					}
 					if deleted[0].EntityID != wantedID || deleted[1].EntityID != "urn:ngsi-ld:WeatherObserved:"+sourceGUID {
 						t.Fatalf("poi delete identities lost: %+v", deleted)
+					}
+				} else if sourceType == "greenhouse" {
+					if err != nil || len(deleted) != 2 || !deleted[0].Delete || !deleted[1].Delete {
+						t.Fatalf("delete identity differs from values: %+v %v", deleted, err)
+					}
+					if deleted[0].EntityID != wantedID || deleted[1].EntityID != "urn:ngsi-ld:IndoorEnvironmentObserved:"+sourceGUID {
+						t.Fatalf("greenhouse delete identities lost: %+v", deleted)
 					}
 				} else if err != nil || len(deleted) != 1 || !deleted[0].Delete || deleted[0].EntityID != wantedID {
 					t.Fatalf("delete identity differs from values: %+v %v", deleted, err)
