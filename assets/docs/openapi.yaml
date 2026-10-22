@@ -416,7 +416,7 @@ components:
             offset: { type: number, default: 0 }
         observedAt:
           type: string
-          description: 'Default är värdets egen observationstid (measurement-header som fallback), aldrig fabricerad tid. Header väljer bastid/max observedAt/changedAt; record värdets tid; message measurement-timestamp eller things publiceringstid/changedAt; none utelämnar tid; field:<väg> väljer explicit källtid. Stöds på alla attributtyper, inte Structured-delvärden. Strikt RFC3339 med högst nio decimaler; tillgänglig RFC3339Nano-precision bevaras.'
+          description: 'Default är värdets egen observationstid (measurement-header som fallback), aldrig fabricerad tid. Header väljer bastid/max observedAt/changedAt; record värdets tid; message measurement-timestamp eller things publiceringstid/changedAt; none utelämnar tid; field:<väg> väljer explicit källtid. Stöds på alla attributtyper, inte Structured-delvärden. Strikt RFC3339 med högst tre decimaler i broker-utdata (millisekunder, trunkerad); källvyer bevarar RFC3339Nano.'
           example: header
         observedBy:
           type: string

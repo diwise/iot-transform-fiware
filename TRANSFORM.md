@@ -380,7 +380,9 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
    konstanter/namn får ingen implicit tid. Aggregat använder senaste
    närvarande ingångstid, coalesce/firstPresent den valda ingångens tid.
    Separera things publiceringstid (`message`) från observation (`record`)
-   och max-observation/changedAt (`header`). Bevara RFC3339Nano, utelämna
+   och max-observation/changedAt (`header`). Bevara RFC3339Nano i källvyer,
+   trunkera broker-utdata (DateTime-värden och observedAt) till
+   millisekunder, utelämna
    saknad tid och stöd tidsmetadata på alla attributtyper, inte delvärden.
 4. Behåll källenheter åtkomliga. Känd källenhet får inte märkas om utan
    ekvivalent enhetskod eller explicit numerisk omvandling. Inför generisk
@@ -421,8 +423,10 @@ Berör främst `internal/application/transform/{engine,measurement,thing,values,
       measurement-fallback. Things-values använder respektive observedAt;
       relation/lifecycle använder changedAt där regeln efterfrågar den.
       Konstanter/namn får ingen automatisk tid. Saknad tid fabriceras inte.
-- [x] Bevara tillgänglig subsekundprecision. Verifiera relativ SenML-tid,
-      saknad tid och flera observationer med olika mättider.
+- [x] Bevara tillgänglig subsekundprecision i källvyer. Verifiera relativ SenML-tid,
+      saknad tid och flera observationer med olika mättider. Broker-utdata
+      (DateTime-värden och observedAt) trunkeras till millisekunder eftersom
+      Orion avvisar nanosekunder.
 - [x] Gör källenheter åtkomliga och låt regler ange målens enheter och eventuell
       omvandling. Märk inte om enheten utan motsvarande dokumenterad omvandling.
 - [x] Flytta measurement-vägens broker-/tokenförberedelse efter transformation,
@@ -448,7 +452,8 @@ Required undertrycker entiteten; tom Structured, saknad mallkälla och
 alla-saknade aggregat skriver inte. Samtliga närvarande numeriska/boolean-
 aggregatingångar typkontrolleras före reducering; noll/false bevaras.
 Tids-/enhetsmetadata följer direkta fält, mallar och aggregat. Samtliga
-attributtyper kan bära observedAt med RFC3339Nano; saknad/zero tid
+attributtyper kan bära observedAt; källvyer bevarar RFC3339Nano medan
+broker-utdata trunkeras till millisekunder; saknad/zero tid
 fabriceras inte och fälttidsfel skiljs från frånvaro. Detaljer för header,
 record, message, field och none finns i regelkontraktets tidstabell.
 

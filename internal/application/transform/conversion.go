@@ -39,10 +39,18 @@ func convertValue(p Property, raw any) (any, error) {
 		if !ok {
 			return invalid("date time")
 		}
-		if err := validateTimestamp(v); err != nil {
+		// Normalisera till broker-kompatibel millisekundprecision: indata
+		// med nanosekunder (producentens RFC3339Nano) trunkeras här så att
+		// Orion aldrig ser mer än tre decimaler. Parsning accepterar
+		// nanosekunder; validering sker på den normaliserade formen.
+		normalized, err := NormalizeBrokerTimestamp(v)
+		if err != nil {
 			return nil, fmt.Errorf("property %s: invalid date time %q: %w", p.Target, v, err)
 		}
-		return v, nil
+		if err := validateTimestamp(normalized); err != nil {
+			return nil, fmt.Errorf("property %s: invalid date time %q: %w", p.Target, v, err)
+		}
+		return normalized, nil
 	case TypeGeo:
 		if s, ok := raw.(string); ok {
 			var geo map[string]any

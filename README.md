@@ -229,7 +229,9 @@ kind-kontroller:
 - Default `observedAt` följer värdets egen observationstid, med measurement-
   header som fallback. Konstanter och namn får ingen implicit tid. `record`,
   `header`, `message`, `field:<väg>` och `none` väljer tid explicit och fungerar
-  på alla attributtyper med RFC3339Nano-precision. `timestamp: true` för
+  på alla attributtyper. Källvyer bevarar RFC3339Nano; broker-utdata
+  (DateTime-värden och observedAt) trunkeras till millisekunder (Orion avvisar
+  nanosekunder). `timestamp: true` för
   values-event är max-observedAt (mättid; J2), med publiceringstid som fallback
   endast när inga värdetider finns; `{{timestamp}}` är samma konsumenttid.
   `event.publishedAt` förblir explicit valbar via mall för diagnostik.
@@ -269,7 +271,8 @@ kind-kontroller:
   `message.timestamp`, `header.observedAt` och effektiv `source`.
   Partitionering delar parserns effektiva observationsmetadata med preview,
   så även upprepade objektprefix får rätt env, koordinater och resurser.
-  Råa tidsvägar bevarar tillgänglig subsekundprecision.
+  Råa tidsvägar (källvyer) bevarar tillgänglig subsekundprecision;
+  broker-utdata trunkeras till millisekunder.
 
 Medvetet utanfor i v1: `VocabProperty`, struktur-arrayer,
 `BooleanArray`/`DateTimeArray`, `datasetId`, `observedBy` utanfor Number

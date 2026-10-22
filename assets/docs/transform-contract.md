@@ -125,8 +125,9 @@ bn/n-encoding eller metadata-tidsstämplar. Detta används gemensamt av
 produktion och preview. SenML:s tidsupplösning följer den låsta parsern;
 tillgänglig subsekundprecision bevaras i den exponerade vyn.
 
-Etapp 5 inför den konsekventa tids-/enhetspolicyn nedan, inklusive
-timestamp-genvägarnas RFC3339Nano-formattering. Modellernas val av tidskällor
+Etapp 5 inför den konsekventa tids-/enhetspolicyn nedan. Källvyer bevarar
+RFC3339Nano; broker-utdata (DateTime-värden och observedAt) trunkeras till
+millisekunder, se tidsmetadata. Modellernas val av tidskällor
 granskas separat i etapp 8.
 Adaptrarna innehåller inga modellberoende mål-URN:er eller modellval.
 
@@ -326,7 +327,8 @@ ingen implicit observedAt. Alla attributtyper skriver samma valda tid.
 
 J2(a): `timestamp: true` använder konsumenttiden (aldrig transporttid):
 measurement-meddelandets timestamp respektive things max-observedAt/
-changedAt, nu med full precision och tomt vid saknad tid. `{{timestamp}}`
+changedAt, trunkerad till millisekunder (aldrig avrundad framåt) och tom vid
+saknad tid. `{{timestamp}}`
 är samma konsumenttid. `event.publishedAt` förblir explicit valbar via
 `{{event.publishedAt}}` för diagnostik. De explicita källvyerna gör
 observation/publicering/förändring separat valbara som DateTime-värden
@@ -338,8 +340,12 @@ senaste ingångstid och markerar blandade enheter. Numeriska aggregat och
 Structured använder senaste närvarande ingångstid; derive coalesce/firstPresent
 den valda ingångens tid. Metadata via `name` får ingen implicit aggregattid.
 Explicit observedAt kan alltid välja annan dokumenterad tidskälla. Saknad/zero
-tid utelämnas; ett närvarande felaktigt field-tidsvärde ger fel. Alla tider
+tid utelämnas; ett närvarande felaktigt field-tidsvärde ger fel. Källtider
 bevarar tillgänglig RFC3339Nano-precision, inklusive relativ SenML-tid.
+Broker-utdata (DateTime-värden och observedAt) trunkeras alltid till
+millisekunder: Orion avvisar nanosekunder (9 decimaler) med
+"expected end-of-string". Trunkering, aldrig avrundning, används så att
+tiden aldrig flyttas framåt.
 
 ## Enheter och explicit konvertering (etapp 5)
 
@@ -400,7 +406,9 @@ deras leveransutfall och felklassificering hör till etapp 7.
   GeoProperty skriver GeoJSON, Relationship `object` som URI eller platt URI-lista,
   LanguageProperty en språk-till-text-mapp (språktaggsyntax/`@none`).
 - Tal måste vara finita, även i listor och Structured. Datum/observedAt kräver
-  strikt RFC3339 med punkt som decimaltecken och högst nio decimaler; Go:s
+  strikt RFC3339 med punkt som decimaltecken och högst tre decimaler
+  (millisekunder) i broker-utdata; indata med nanosekunder accepteras och
+  trunkeras. Go:s
   datumvalidering används efter syntaxtest. Leap seconds ingår inte i profilen.
 - ObservedAt stöds på alla attributtyper. ObservedBy kräver en skalär URI-
   Relationship på numerisk Property. UnitCode är en icke-tom kod utan whitespace/

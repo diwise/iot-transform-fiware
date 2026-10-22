@@ -38,6 +38,7 @@ func TestStage6SupportedGeometryShapesAndImmutability(t *testing.T) {
 
 func TestStage6EveryPropertyTypeHasProfileJSON(t *testing.T) {
 	date := "2026-10-01T12:00:00.123456789Z"
+	wantDate := "2026-10-01T12:00:00.123Z" // broker trunkerar till millisekunder
 	in := Thing{ID: "object", Event: EventThingsV1Values, Fields: map[string]any{"clock": date}}
 	rule := stage5Rule(in,
 		Property{Target: "number", Type: TypeNumber, Const: 0, Unit: "CEL", ObservedBy: "urn:example:sensor"},
@@ -54,8 +55,8 @@ func TestStage6EveryPropertyTypeHasProfileJSON(t *testing.T) {
 	out := stage5Output(t, in, rule)
 	for _, p := range rule.Entities[0].Properties {
 		attribute := out[p.Target].(map[string]any)
-		if attribute["observedAt"] != date {
-			t.Fatalf("%s time lost: %v", p.Type, attribute)
+		if attribute["observedAt"] != wantDate {
+			t.Fatalf("%s time lost: %v want %s", p.Type, attribute, wantDate)
 		}
 		if p.Type == TypeRelationship {
 			if attribute["type"] != "Relationship" || attribute["value"] != nil {
@@ -79,7 +80,7 @@ func TestStage6EveryPropertyTypeHasProfileJSON(t *testing.T) {
 	if !reflect.DeepEqual(out["relatedList"].(map[string]any)["object"], []any{"urn:example:other"}) {
 		t.Fatal("relationship list shape")
 	}
-	if !reflect.DeepEqual(out["date"].(map[string]any)["value"], map[string]any{"@type": "DateTime", "@value": date}) {
+	if !reflect.DeepEqual(out["date"].(map[string]any)["value"], map[string]any{"@type": "DateTime", "@value": wantDate}) {
 		t.Fatal("typed DateTime shape")
 	}
 }

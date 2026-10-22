@@ -24,7 +24,9 @@ func sourceTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339Nano)
+	// Broker-kompatibel precision: trunkera till millisekunder. Orion-LD
+	// avvisar nanosekunder (9 decimaler) med "expected end-of-string".
+	return FormatBrokerTime(t)
 }
 
 func parseSourceTime(value any) (time.Time, bool) {

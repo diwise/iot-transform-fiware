@@ -66,6 +66,9 @@ func TestStage5RankingDiagnosticsAndRelationTarget(t *testing.T) {
 
 func TestStage5TimesAcrossPropertyTypesAndMissingTime(t *testing.T) {
 	observed := "2026-10-01T12:00:00.123456789Z"
+	// Broker-kompatibel utdata trunkeras till millisekunder (Orion avvisar
+	// nanosekunder). Källvyn bevarar nanosekunder; NGSI-LD-gränsen kapar.
+	wantTime := "2026-10-01T12:00:00.123Z"
 	in := Thing{ID: "object", Event: EventThingsV1Values, Fields: map[string]any{"event": map[string]any{"publishedAt": observed}, "sources": map[string]any{}}}
 	sources := in.Fields["sources"].(map[string]any)
 	for _, tc := range []struct {
@@ -83,8 +86,8 @@ func TestStage5TimesAcrossPropertyTypesAndMissingTime(t *testing.T) {
 			for _, mode := range []ObservedAt{"", ObservedAtRecord, ObservedAtMessage, ObservedAt("field:event.publishedAt")} {
 				p.ObservedAt = mode
 				output := stage5Output(t, in, stage5Rule(in, p))
-				if output["reading"].(map[string]any)["observedAt"] != observed {
-					t.Fatalf("%s time=%v", mode, output)
+				if output["reading"].(map[string]any)["observedAt"] != wantTime {
+					t.Fatalf("%s time=%v want %s", mode, output, wantTime)
 				}
 			}
 			p.ObservedAt = ObservedAtNone
@@ -95,8 +98,8 @@ func TestStage5TimesAcrossPropertyTypesAndMissingTime(t *testing.T) {
 	}
 	sources["reading"] = map[string]any{"value": 1.0, "observedAt": observed}
 	out := stage5Output(t, in, stage5Rule(in, Property{Target: "details", Type: TypeStructured, Subproperties: []Property{{Target: "reading", Type: TypeNumber, Field: "sources.reading.value"}}}))
-	if out["details"].(map[string]any)["observedAt"] != observed {
-		t.Fatalf("Structured time: %v", out)
+	if out["details"].(map[string]any)["observedAt"] != wantTime {
+		t.Fatalf("Structured time: %v want %s", out, wantTime)
 	}
 	sources["reading"] = map[string]any{"value": 1.0}
 	in.ObservedAt = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
@@ -286,6 +289,8 @@ func TestStage5AggregatesMissingAndTypeErrors(t *testing.T) {
 
 func TestStage5OwnObservationTimeAndConstants(t *testing.T) {
 	observed := time.Date(2026, 10, 1, 12, 0, 0, 123456789, time.UTC)
+	wantTime := FormatBrokerTime(observed)
+	wantPublished := FormatBrokerTime(observed.Add(time.Hour))
 	published := observed.Add(time.Hour)
 	in := Thing{ID: "object", Event: EventThingsV1Values, ObservedAt: observed.Add(time.Minute), Fields: map[string]any{
 		"event":  map[string]any{"publishedAt": published.Format(time.RFC3339Nano)},
@@ -296,11 +301,15 @@ func TestStage5OwnObservationTimeAndConstants(t *testing.T) {
 		Property{Target: "constant", Type: TypeNumber, Const: 0},
 		Property{Target: "published", Type: TypeDateTime, Value: "{{event.publishedAt}}"},
 	))
-	if got := out["reading"].(map[string]any)["observedAt"]; got != observed.Format(time.RFC3339Nano) {
-		t.Errorf("own time=%v", got)
+	if got := out["reading"].(map[string]any)["observedAt"]; got != wantTime {
+		t.Errorf("own time=%v want %v", got, wantTime)
 	}
 	if _, set := out["constant"].(map[string]any)["observedAt"]; set {
 		t.Error("constant acquired measurement time")
+	}
+	// DateTime-mall från nanosekundkälla normaliseras till millisekunder.
+	if got := out["published"].(map[string]any)["value"].(map[string]any)["@value"]; got != wantPublished {
+		t.Errorf("published DateTime=%v want %v", got, wantPublished)
 	}
 	// J2(a): timestamp:true för values är max-observedAt (mättid), inte
 	// transporttid. event.publishedAt förblir åtkomlig explicit via mall.
@@ -309,8 +318,8 @@ func TestStage5OwnObservationTimeAndConstants(t *testing.T) {
 	}
 	m := Measurement{DeviceID: "sensor", Timestamp: published, HeaderTime: observed.Add(-time.Minute), HasHeaderTime: true, Records: []Record{{Name: "5700", Value: new(12.0), Time: observed, HasTime: true}}}
 	out = stage5Output(t, m, stage5Rule(m, Property{Target: "reading", Type: TypeNumber, Resource: "5700"}))
-	if got := out["reading"].(map[string]any)["observedAt"]; got != observed.Format(time.RFC3339Nano) {
-		t.Errorf("measurement time=%v", got)
+	if got := out["reading"].(map[string]any)["observedAt"]; got != wantTime {
+		t.Errorf("measurement time=%v want %v", got, wantTime)
 	}
 }
 

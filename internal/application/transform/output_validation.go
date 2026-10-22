@@ -50,12 +50,12 @@ func validateUnitCode(value string) error {
 	return nil
 }
 
-var timestampPattern = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,9})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$`)
+var timestampPattern = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,3})?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$`)
 var languagePattern = regexp.MustCompile(`^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$`)
 
 func validateTimestamp(value string) error {
 	if !timestampPattern.MatchString(value) {
-		return fmt.Errorf("expected RFC3339 timestamp with at most nanosecond precision")
+		return fmt.Errorf("expected RFC3339 timestamp with at most millisecond precision")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, value); err != nil {
 		return fmt.Errorf("invalid date time: %w", err)

@@ -576,7 +576,8 @@ func templateValue(v any) (string, error) {
 		return "", errExprNotFound
 	}
 	if t, ok := v.(time.Time); ok {
-		return t.UTC().Format(time.RFC3339Nano), nil
+		// Broker-kompatibel precision, se sourceTime.
+		return FormatBrokerTime(t), nil
 	}
 	if s, ok := v.(string); ok {
 		return s, nil

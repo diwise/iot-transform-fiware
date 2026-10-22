@@ -33,7 +33,7 @@ func TestStage5PreviewPreservesOwnTimeConversionAndEmptySkip(t *testing.T) {
 			t.Fatalf("writes: %+v", out)
 		}
 		entry := out.Entities[0].Properties["reading"].(map[string]any)
-		if entry["value"] != 273.15 || entry["unitCode"] != "KEL" || entry["observedAt"] != "2026-10-01T12:00:00.123456789Z" {
+		if entry["value"] != 273.15 || entry["unitCode"] != "KEL" || entry["observedAt"] != "2026-10-01T12:00:00.123Z" {
 			t.Fatalf("preview changed semantics: %+v", entry)
 		}
 	}
