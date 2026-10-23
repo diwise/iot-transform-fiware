@@ -362,22 +362,29 @@ func (h *handler) listModels(w http.ResponseWriter, r *http.Request) {
 // 1.1): alla omitempty, kombineras med AND. Okända värden ger tom lista,
 // aldrig 400. Precedensordningen från lagret är oförändrad.
 type listFilters struct {
-	Kind   string
-	Event  string
-	Type   string
-	Tenant string
-	Source string
+	Kind     string
+	Event    string
+	Type     string
+	Tenant   string
+	Source   string
+	Disabled *bool
 }
 
 func parseListFilters(r *http.Request) listFilters {
 	q := r.URL.Query()
-	return listFilters{
+	f := listFilters{
 		Kind:   q.Get("kind"),
 		Event:  q.Get("event"),
 		Type:   q.Get("type"),
 		Tenant: q.Get("tenant"),
 		Source: q.Get("source"),
 	}
+	if raw := q.Get("disabled"); raw != "" {
+		if v, err := strconv.ParseBool(raw); err == nil {
+			f.Disabled = &v
+		}
+	}
+	return f
 }
 
 func (f listFilters) matches(rule transform.Rule, source string) bool {
@@ -394,6 +401,9 @@ func (f listFilters) matches(rule transform.Rule, source string) bool {
 		return false
 	}
 	if f.Source != "" && source != f.Source {
+		return false
+	}
+	if f.Disabled != nil && rule.Disabled != *f.Disabled {
 		return false
 	}
 	return true

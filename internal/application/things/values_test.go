@@ -307,3 +307,50 @@ func TestThingValuesEndToEndRoom(t *testing.T) {
 	raw, _ := json.Marshal(w.Props)
 	t.Logf("props: %s", raw)
 }
+
+func TestThingValuesToleratesOlderSnapshotRevision(t *testing.T) {
+	body := `{"schema":"v1","eventId":"v1/t/thing-1/m2","tenant":"t",
+	  "thingId":"thing-1","thingType":"room","thingTypeVersion":"v1",
+	  "configRevision":6,"publishedAt":"2026-10-23T14:14:32Z",
+	  "thing":{"thingId":"thing-1"},
+	  "delta":[{"thingId":"thing-1","tenant":"t","propertyId":"a",
+	    "value":1.0,"quality":"ok","observedAt":"2026-10-23T14:14:00Z",
+	    "configRevision":6}],
+	  "snapshot":[
+	    {"propertyId":"a","value":1.0,"quality":"ok",
+	     "observedAt":"2026-10-23T14:14:00Z","configRevision":6},
+	    {"propertyId":"b","value":2.0,"quality":"ok",
+	     "observedAt":"2026-10-23T14:10:00Z","configRevision":5}]}`
+	th, err := ThingValuesFromJSON([]byte(body))
+	if err != nil {
+		t.Fatalf("blandad snapshot (kuvert 6 + snapshot 5) ska tolereras: %v", err)
+	}
+	snap, ok := th.Fields["snapshot"].(map[string]any)
+	if !ok || len(snap) != 2 {
+		t.Fatalf("snapshot=%+v, want 2 poster", th.Fields["snapshot"])
+	}
+}
+
+func TestThingValuesRejectsDeltaRevisionMismatch(t *testing.T) {
+	body := `{"thingId":"x","tenant":"t","thingType":"room","configRevision":6,
+	  "thing":{"thingId":"x"},
+	  "delta":[{"thingId":"x","tenant":"t","propertyId":"a",
+	    "value":1.0,"quality":"ok","observedAt":"2026-10-23T14:14:00Z",
+	    "configRevision":5}]}`
+	if _, err := ThingValuesFromJSON([]byte(body)); err == nil {
+		t.Fatal("delta med annan revision än kuvertet ska nekas permanent")
+	}
+}
+
+func TestThingValuesRejectsFutureSnapshotRevision(t *testing.T) {
+	body := `{"thingId":"x","tenant":"t","thingType":"room","configRevision":6,
+	  "thing":{"thingId":"x"},
+	  "delta":[{"thingId":"x","tenant":"t","propertyId":"a",
+	    "value":1.0,"quality":"ok","observedAt":"2026-10-23T14:14:00Z",
+	    "configRevision":6}],
+	  "snapshot":[{"propertyId":"a","value":1.0,"quality":"ok",
+	    "observedAt":"2026-10-23T14:14:00Z","configRevision":7}]}`
+	if _, err := ThingValuesFromJSON([]byte(body)); err == nil {
+		t.Fatal("snapshot med nyare revision än kuvertet ska nekas permanent")
+	}
+}

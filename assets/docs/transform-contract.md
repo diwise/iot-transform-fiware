@@ -438,6 +438,7 @@ i validatorn, men standardreglernas modellkonformitet granskas separat i etapp 8
 | Situation | Produktion | Administration/preview |
 | --- | --- | --- |
 | Ingen regel | skip, ingen brokerkontakt | matched=false med orsak |
+| Avstängd regel (`disabled: true`) | skip, ingen brokerkontakt (som ingen regel) | matched=false; preview ignorerar flaggan |
 | Saknad valfri källa | utelämnat attribut | precis käll-/skiporsak |
 | Saknad required-källa | undertryckt entitet | matched=true, required-källa angiven |
 | Felaktig JSON/identitet/typ | irreparabelt fel, ingen skrivning | klientfel 400 |

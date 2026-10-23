@@ -391,6 +391,9 @@ func (e *Engine) match(in Input) (Rule, bool) {
 	bestScore := -1
 
 	for i, r := range e.rules {
+		if r.Disabled {
+			continue
+		}
 		if r.Match.Kind != kind || !r.Match.matches(in, info) {
 			continue
 		}

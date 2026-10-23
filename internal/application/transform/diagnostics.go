@@ -26,6 +26,9 @@ func (e *Engine) ExplainMatch(in Input) []MatchDiagnostic {
 	result := make([]MatchDiagnostic, 0)
 	chosen := false
 	for i, r := range e.rules {
+		if r.Disabled {
+			continue
+		}
 		if r.Match.Kind != in.Kind() || !r.Match.matches(in, in.MatchInfo()) {
 			continue
 		}
@@ -57,7 +60,13 @@ type RuleOverlap struct {
 func (e *Engine) PotentialOverlaps() []RuleOverlap {
 	result := make([]RuleOverlap, 0)
 	for i, r := range e.rules {
+		if r.Disabled {
+			continue
+		}
 		for j := range i {
+			if e.rules[j].Disabled {
+				continue
+			}
 			if r.Match.overlaps(e.rules[j].Match) {
 				result = append(result, RuleOverlap{First: j, Second: i, FirstRuleID: e.rules[j].ID, SecondRuleID: r.ID})
 			}
@@ -228,8 +237,12 @@ func CheckCompatibility(req CompatRequest) CompatResult {
 	}
 
 	// 2. Per-regel match mot mallen (typ/version/variant/tenant).
+	// Avstängda regler deltar aldrig: de varken matchar eller ger fel.
 	matched := make([]int, 0, len(req.Rules))
 	for i, r := range req.Rules {
+		if r.Disabled {
+			continue
+		}
 		d, ok := matchTemplateDiagnostic(r, i, req)
 		if ok {
 			matched = append(matched, i)

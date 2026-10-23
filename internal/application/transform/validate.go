@@ -32,6 +32,12 @@ func Validate(rules []Rule) error {
 		for j, e := range r.Entities {
 			for _, previous := range definitions[e.ID] {
 				other := rules[previous.rule]
+				// Avstängda regler deltar aldrig i körning: deras
+				// ID/typ-krockar blockerar inte det aktiva regelverket.
+				// Syntax valideras fortfarande per regel ovan.
+				if r.Disabled || other.Disabled {
+					continue
+				}
 				known := other.Entities[previous.entity]
 				if known.Type != e.Type && (previous.rule == i || r.Match.overlaps(other.Match)) {
 					return fmt.Errorf("rule %d (%q), entity %d: ID template %q has conflicting types %q and %q with rule %d (%q), entity %d", i, r.ID, j, e.ID, e.Type, known.Type, previous.rule, other.ID, previous.entity)

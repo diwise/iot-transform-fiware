@@ -97,10 +97,18 @@ Publikt CRUD + validering + torr forhandsgranskning under `/api/v0/models`
 (kontrakt: `assets/docs/openapi.yaml`; kroppar ar `application/json`, okanda
 falt nekas). Scopes `transforms.read/create/update/delete`
 (`transforms.create` laggs till i compose-policyn; ovriga finns dar).
-Skrivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
+Skivning kraver `If-Match` med revision (`"rev-<n>"`, 409 vid konflikt);
 `PUT` flippar kallan till `api` sa att seed aldrig skriver over manuella
 andringar. `POST /models/preview` kor en inline-regel torrt mot en
-exempelhandelse (aldrig broker/persistens).
+exempelhandelse (aldrig broker/persistens; preview ignorerar `disabled`
+sa att en avstangd regel kan torrköras fore aktivering).
+
+En regel kan stangas av med `disabled: true` utan att raderas: avstangda
+regler valideras men matchar aldrig och ger inga skrivningar. Grundregler
+(globala, tom `match.tenant`) stangs av per installation i seed-YAML
+(`deployments/models`, `MODELS_DIR`); tenantregler kan dessutom slas
+av/på via API (`PUT` med `disabled`). `GET /models?disabled=true/false`
+filtrerar.
 
 ## Generell SDM-mappning (bada kallor)
 

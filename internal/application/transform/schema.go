@@ -78,6 +78,13 @@ type Model struct {
 // Rule matchar en källa och beskriver vilka entiteter som ska skrivas.
 type Rule struct {
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+	// Disabled stänger av regeln utan att radera den: avstängda regler
+	// valideras fortfarande syntaktiskt men deltar aldrig i matchning,
+	// överlapp eller kompatibilitet, och ger inga skrivningar.
+	// Sätts per installation i seed-YAML (grundregler) eller via API
+	// (tenantregler). Preview av en inline-regel ignorerar flaggan så att
+	// en avstängd regel kan torrköras före aktivering.
+	Disabled bool `yaml:"disabled,omitempty" json:"disabled,omitempty"`
 	// Name är fritext endast för användaren (t.ex. "Rum – temperatur till
 	// WeatherObserved"). Det påverkar aldrig matchning, körning,
 	// prioritet eller specificitet och behöver inte vara unikt.

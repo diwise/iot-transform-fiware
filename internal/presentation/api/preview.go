@@ -203,7 +203,10 @@ type previewDetail struct {
 // previewDetailed kör en inline-regel torrt med full diagnostik. Delar
 // normalisering med produktion (samma ThingValuesFromJSON/
 // ThingRelationsFromJSON/ThingLifecycleFromJSON/PartitionMessage + engine).
+// Preview ignorerar Disabled: en avstängd regel kan torrköras före
+// aktivering; produktionssnapshoten respekterar flaggan.
 func previewDetailed(ctx context.Context, req previewRequest) (previewDetail, error) {
+	req.Rule.Disabled = false
 	engine := transform.NewEngine([]transform.Rule{req.Rule})
 	detailFor := func(in transform.Thing, observations int) (previewDetail, error) {
 		matched := engine.Matched(in)
@@ -342,7 +345,9 @@ func entityProperties(id, typeName string, props []entities.EntityDecoratorFunc)
 // enobservations-meddelanden före transformation. Returnerar skrivningar,
 // om någon regel matchade (även undertryckt) samt antal observationer.
 // ErrNoMatchingRule blir tomt resultat med matched=false, aldrig fel.
+// Preview ignorerar Disabled (se previewDetailed).
 func previewTransform(ctx context.Context, req previewRequest) ([]transform.EntityWrite, bool, int, error) {
+	req.Rule.Disabled = false
 	engine := transform.NewEngine([]transform.Rule{req.Rule})
 	switch req.Event.Kind {
 	case transform.EventThingsV1Values:

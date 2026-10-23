@@ -45,6 +45,10 @@ paths:
           in: query
           schema: { type: string, enum: [seed, api] }
           description: Filtrera på regelkälla. Filtren kombineras med AND; okända värden ger tom lista.
+        - name: disabled
+          in: query
+          schema: { type: boolean }
+          description: Filtrera på avstängda (true) eller aktiva (false) regler. Tomt = alla.
       responses:
         '200':
           description: Regler
@@ -339,6 +343,10 @@ components:
         name:
           type: string
           description: 'Fritextnamn endast för användaren (visningsnamn). Påverkar aldrig matchning, körning, prioritet eller specificitet.'
+        disabled:
+          type: boolean
+          default: false
+          description: 'Avstängd regel valideras men matchar aldrig och ger inga skrivningar. Sätts i seed-YAML per installation (grundregler) eller via API (tenantregler). Preview ignorerar flaggan.'
         match:
           $ref: '#/components/schemas/Match'
         entities:

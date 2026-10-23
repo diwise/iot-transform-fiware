@@ -99,3 +99,45 @@ func TestEngineSafeURI(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:a%20b%2Fc")
 }
+
+func TestDisabledRuleNeverMatches(t *testing.T) {
+	is := is.New(t)
+
+	active := measurementRule("urn:ngsi-ld:Thing:active", "", "", "urn:oma:lwm2m:ext:3303")
+	disabled := measurementRule("urn:ngsi-ld:Thing:disabled", "", "", "urn:oma:lwm2m:ext:3303")
+	disabled.Disabled = true
+	disabled.Priority = 100
+
+	e := NewEngine([]Rule{disabled, active})
+	writes, err := e.Transform(testMeasurement())
+	is.NoErr(err)
+	is.Equal(len(writes), 1)
+	is.Equal(writes[0].EntityID, "urn:ngsi-ld:Thing:active")
+}
+
+func TestAllDisabledRulesGiveNoMatch(t *testing.T) {
+	is := is.New(t)
+
+	r := measurementRule("urn:ngsi-ld:Thing:x", "", "", "urn:oma:lwm2m:ext:3303")
+	r.Disabled = true
+
+	e := NewEngine([]Rule{r})
+	is.True(!e.Matched(testMeasurement()))
+	_, err := e.Transform(testMeasurement())
+	is.True(err == ErrNoMatchingRule)
+	is.Equal(len(e.PotentialOverlaps()), 0)
+}
+
+func TestValidateSkipsIDConflictWithDisabledRule(t *testing.T) {
+	is := is.New(t)
+
+	a := validRule()
+	a.Entities[0].ID = "urn:ngsi-ld:Thing:same"
+	a.Entities[0].Type = "TypeA"
+	b := validRule()
+	b.Entities[0].ID = "urn:ngsi-ld:Thing:same"
+	b.Entities[0].Type = "TypeB"
+	b.Disabled = true
+
+	is.NoErr(Validate([]Rule{a, b}))
+}

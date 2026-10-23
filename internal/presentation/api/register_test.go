@@ -984,3 +984,27 @@ func TestRegisterHandlersRoundTrip(t *testing.T) {
 	rr = do(http.MethodPost, "/api/v0/models/preview", "good", preview)
 	is.Equal(rr.Code, http.StatusOK)
 }
+
+func TestListFiltersDisabled(t *testing.T) {
+	is := is.New(t)
+
+	on := transform.Rule{Disabled: true}
+	off := transform.Rule{}
+
+	req := httptest.NewRequest(http.MethodGet, "/x?disabled=true", nil)
+	f := parseListFilters(req)
+	is.True(f.Disabled != nil && *f.Disabled)
+	is.True(f.matches(on, "seed"))
+	is.True(!f.matches(off, "seed"))
+
+	req = httptest.NewRequest(http.MethodGet, "/x?disabled=false", nil)
+	f = parseListFilters(req)
+	is.True(f.matches(off, "seed"))
+	is.True(!f.matches(on, "seed"))
+
+	req = httptest.NewRequest(http.MethodGet, "/x", nil)
+	f = parseListFilters(req)
+	is.True(f.Disabled == nil)
+	is.True(f.matches(on, "seed"))
+	is.True(f.matches(off, "seed"))
+}

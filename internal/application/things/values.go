@@ -305,8 +305,16 @@ func buildRemovedView(removed removedList) ([]any, error) {
 // Strukturfel (Permanent, aldrig tyst last-write-wins):
 //   - tom propertyId,
 //   - dubblett-propertyId inom samma lista,
-//   - motstridig kuvert-/värdeidentitet (thingId/tenant/configRevision),
+//   - motstridig kuvert-/värdeidentitet (thingId/tenant),
+//   - delta med annan configRevision än kuvertet,
+//   - snapshot med nyare configRevision än kuvertet (framtida revision),
 //   - NaN/Inf-värde.
+//
+// Snapshot tolererar äldre revisioner: kuvertet bär delta-gruppens
+// beräkningsrevision medan varje snapshot-post bär sin egen frysta
+// observationsrevision. Efter konfigurationsbyte är blandat
+// (kuvert 6 + snapshot 5) legalt för oförändrade egenskaper; gamla
+// värden märks aldrig om. Per-värde revision exponeras i källvyn.
 func buildValueView(list []thingValue, envelopeThingID, envelopeTenant string, envelopeRevision int64, view string) (time.Time, map[string]any, []any, error) {
 	var latest time.Time
 	byProperty := make(map[string]any, len(list))
@@ -326,8 +334,14 @@ func buildValueView(list []thingValue, envelopeThingID, envelopeTenant string, e
 		if v.Tenant != "" && envelopeTenant != "" && v.Tenant != envelopeTenant {
 			return time.Time{}, nil, nil, fmt.Errorf("things.v1.values: %s[%d] tenant %q conflicts with envelope %q", view, i, v.Tenant, envelopeTenant)
 		}
-		if v.ConfigRevision != 0 && envelopeRevision != 0 && v.ConfigRevision != envelopeRevision {
-			return time.Time{}, nil, nil, fmt.Errorf("things.v1.values: %s[%d] configRevision %d conflicts with envelope %d", view, i, v.ConfigRevision, envelopeRevision)
+		if v.ConfigRevision != 0 && envelopeRevision != 0 {
+			if view == "snapshot" {
+				if v.ConfigRevision > envelopeRevision {
+					return time.Time{}, nil, nil, fmt.Errorf("things.v1.values: %s[%d] configRevision %d is newer than envelope %d", view, i, v.ConfigRevision, envelopeRevision)
+				}
+			} else if v.ConfigRevision != envelopeRevision {
+				return time.Time{}, nil, nil, fmt.Errorf("things.v1.values: %s[%d] configRevision %d conflicts with envelope %d", view, i, v.ConfigRevision, envelopeRevision)
+			}
 		}
 		if v.Value != nil && (math.IsNaN(*v.Value) || math.IsInf(*v.Value, 0)) {
 			return time.Time{}, nil, nil, fmt.Errorf("things.v1.values: %s %q has non-finite value (NaN/Inf not allowed)", view, v.PropertyID)

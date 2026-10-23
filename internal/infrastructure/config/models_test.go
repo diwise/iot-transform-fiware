@@ -167,3 +167,23 @@ func TestLoadModelsDirUsesLexicographicOrder(t *testing.T) {
 	is.Equal(rules[0].Match.Type, "First")
 	is.Equal(rules[1].Match.Type, "Second")
 }
+
+func TestParseModelAcceptsDisabled(t *testing.T) {
+	is := is.New(t)
+
+	data := []byte(`
+rules:
+  - disabled: true
+    match: { kind: measurement, object: "urn:oma:lwm2m:ext:3428" }
+    entities:
+      - id: "urn:ngsi-ld:AirQualityObserved:{{deviceID}}"
+        type: AirQualityObserved
+        properties:
+          - { target: label, type: Text, const: "x" }
+`)
+	rules, err := ParseModel(data)
+	is.NoErr(err)
+	is.Equal(len(rules), 1)
+	is.True(rules[0].Disabled)
+	is.NoErr(transform.Validate(rules))
+}
