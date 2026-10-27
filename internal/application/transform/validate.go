@@ -47,7 +47,7 @@ func Validate(rules []Rule) error {
 		}
 	}
 
-	return nil
+	return validateAggregateOwnership(rules)
 }
 
 func (r Rule) validate() error {
@@ -80,6 +80,9 @@ func (r Rule) validate() error {
 	}
 
 	for i, e := range r.Entities {
+		if err := validateRelationAggregate(r, e); err != nil {
+			return fmt.Errorf("entity %d: %w", i, err)
+		}
 		if err := e.validate(); err != nil {
 			return fmt.Errorf("entity %d: %w", i, err)
 		}
@@ -481,6 +484,9 @@ func (e Entity) validateForRule(kind Kind) error {
 }
 
 func (p Property) validate() error {
+	if p.Aggregate != nil && p.Type != TypeRelationship {
+		return errors.New("aggregate is only valid for Relationship")
+	}
 	if p.Array && p.Type != TypeRelationship {
 		return errors.New("array is only valid for Relationship")
 	}
@@ -572,6 +578,9 @@ func (p Property) validate() error {
 		}
 		seen := map[string]bool{}
 		for i, sp := range p.Subproperties {
+			if sp.Aggregate != nil {
+				return errors.New("aggregate is not supported in Structured subproperties")
+			}
 			if sp.Unit != "" || sp.ObservedAt != "" || sp.ObservedBy != "" {
 				return fmt.Errorf("subproperty %d (%s): unit/observedAt/observedBy metadata is not supported on Structured values", i, sp.Target)
 			}

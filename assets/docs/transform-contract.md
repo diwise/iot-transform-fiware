@@ -17,6 +17,12 @@ hämtas/expanderas inte och brokerkapabiliteter förhandlas inte. Typ- och
 attributtermer tolkas genom den effektiva contexten. Fullständig Smart Data
 Models-schemavalidering ingår inte; `required` styr mappning, inte modellkonformitet.
 
+Beständiga inversa relationsmängder har ett separat, uttryckligt
+[`aggregate: {direction: reverse}`-kontrakt](relation-aggregation.md).
+`array:true` behåller sin stateless-semantik. Regelval, städning,
+brokerordning, import/återbyggnad och gränsen för aldrig tidigare sedda sena
+källevent beskrivs där; inga källwatermarks eller recency-filter införs.
+
 Profilen omfattar en attributinstans per namn, skalära Property-värden,
 tal-/textlistor, Structured-objekt, LanguageProperty, GeoProperty
 (Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon)

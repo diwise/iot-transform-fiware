@@ -8,6 +8,7 @@ import (
 
 	"github.com/diwise/iot-transform-fiware/internal/application/relations"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -68,6 +69,9 @@ func (s *Store) ApplyChange(ctx context.Context, change relations.Change, trace 
 		return Result{}, err
 	}
 	defer rollback(ctx, tx)
+	if err := lockTenantTx(ctx, tx, change.Tenant); err != nil {
+		return Result{}, err
+	}
 
 	keys := []string{fromKey(change.Tenant, change.Relation, change.FromID)}
 	if change.ToID != "" {
@@ -130,6 +134,8 @@ func (s *Store) ApplyChange(ctx context.Context, change relations.Change, trace 
 		return Result{}, err
 	}
 	snap.Removed = removed
+	snap.Change = &change
+	snap.Trigger = uuid.NewString()
 
 	var writes []relations.PendingWrite
 	if planner != nil {
@@ -298,6 +304,12 @@ func (s *Store) applyMoveTx(ctx context.Context, tx pgx.Tx, change relations.Cha
 // Min-gränser kringgås avsiktligt — ett borttaget mål kan inte behålla
 // länkar. Raderna låses i sorterad ordning (dödlägesfria).
 func (s *Store) DeleteEndpoint(ctx context.Context, tenant, endpoint string, trace map[string]string, planner relations.PlanFunc) (res Result, err error) {
+	return s.DeleteEndpointEvent(ctx, tenant, endpoint, "", trace, planner)
+}
+
+// DeleteEndpointEvent additionally deduplicates lifecycle delivery by its
+// source event ID. Empty ID retains the legacy caller's behavior.
+func (s *Store) DeleteEndpointEvent(ctx context.Context, tenant, endpoint, eventID string, trace map[string]string, planner relations.PlanFunc) (res Result, err error) {
 	ctx, end := beginOp(ctx, "projection-delete-endpoint", "tenant", tenant, "endpoint", endpoint)
 	defer func() { end(err) }()
 
@@ -315,6 +327,22 @@ func (s *Store) DeleteEndpoint(ctx context.Context, tenant, endpoint string, tra
 		return Result{}, err
 	}
 	defer rollback(ctx, tx)
+	if err := lockTenantTx(ctx, tx, tenant); err != nil {
+		return Result{}, err
+	}
+	if eventID != "" {
+		var fresh bool
+		// Length-delimited identity prevents tenant/event delimiter collisions.
+		seenID := fmt.Sprintf("lifecycle:%d:%s:%s", len(tenant), tenant, eventID)
+		err := tx.QueryRow(ctx, `INSERT INTO projection_seen_changes(relation_id,tenant) VALUES($1,$2)
+			ON CONFLICT (relation_id) DO NOTHING RETURNING true`, seenID, tenant).Scan(&fresh)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Result{Duplicate: true}, nil
+		}
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	if err := lockKeys(ctx, tx, []string{"proj-del:" + tenant, "proj-ep:" + tenant + "/" + endpoint}); err != nil {
 		return Result{}, err
 	}
@@ -352,6 +380,11 @@ func (s *Store) DeleteEndpoint(ctx context.Context, tenant, endpoint string, tra
 		IsLastLink:      true,
 		Detached:        detached,
 		EndpointDeleted: endpoint,
+		Trigger:         uuid.NewString(),
+	}
+	snap.Groups, err = affectedSnapshotsTx(ctx, tx, tenant, detached)
+	if err != nil {
+		return Result{}, err
 	}
 	var writes []relations.PendingWrite
 	if planner != nil {

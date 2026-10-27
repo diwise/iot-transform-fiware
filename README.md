@@ -152,8 +152,18 @@ Relationsregler använder exempelvis
 `type: Relationship, array: true`. Descriptors i `relation.from` och
 `relation.to` innehåller råa ID:n och namn, ingen förbyggd modell-URN.
 `array: true` gör skalären till en lista och bevarar befintliga listor platta;
-flerrelationsaggregation ingår inte. Både skalärer och listelement måste vara
-absoluta URI-strängar.
+flaggan aggregerar inte relationer mellan event. För kompletta inversa mängder
+finns explicit `aggregate: {direction: reverse}` med beständig projektion,
+atomär köläggning, detach/flytt/delete och sorterade unika medlems-ID:n.
+Både skalärer och listelement måste vara absoluta URI-strängar.
+Se [regelschema, aktivering och återbyggnad](assets/docs/relation-aggregation.md)
+och det körbara exemplet i `deployments/examples/tank-greenhouse/`.
+
+`go run ./cmd/rebuild-relations -tenant <tenant>` gör en skrivskyddad plan
+från nuvarande regler/projektion. `-apply` kölägger arbetet för ordinarie
+brokerworker. Saknade äldre länkar kräver explicit, komplett import med
+`-things-export` eller `-import` och `-quiesced`; en regeländring hämtar inte
+historik automatiskt. Verktyget använder samma `POSTGRES_*`-konfiguration.
 
 ### Sensorportar
 

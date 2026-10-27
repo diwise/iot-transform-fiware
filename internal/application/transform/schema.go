@@ -233,19 +233,30 @@ type Conversion struct {
 type Property struct {
 	// Array skriver en skalär Relationship som enelementslista. Listor
 	// bevaras platta; flaggan är inte en flerrelationsaggregation.
-	Array      bool         `yaml:"array,omitempty" json:"array,omitempty"`
-	Target     string       `yaml:"target" json:"target"`
-	Type       PropertyType `yaml:"type" json:"type"`
-	Unit       string       `yaml:"unit,omitempty" json:"unit,omitempty"`
-	Convert    *Conversion  `yaml:"convert,omitempty" json:"convert,omitempty"`
-	ObservedAt ObservedAt   `yaml:"observedAt,omitempty" json:"observedAt,omitempty"`
-	ObservedBy string       `yaml:"observedBy,omitempty" json:"observedBy,omitempty"`
-	When       When         `yaml:"when,omitempty" json:"when,omitempty"`
-	Required   bool         `yaml:"required,omitempty" json:"required,omitempty"`
+	Array bool `yaml:"array,omitempty" json:"array,omitempty"`
+	// Aggregate uses the durable source-link projection, not the current
+	// event's scalar value. It implies a sorted, deduplicated Relationship
+	// object array. Only reverse is supported; array:true remains stateless.
+	Aggregate  *RelationAggregate `yaml:"aggregate,omitempty" json:"aggregate,omitempty"`
+	Target     string             `yaml:"target" json:"target"`
+	Type       PropertyType       `yaml:"type" json:"type"`
+	Unit       string             `yaml:"unit,omitempty" json:"unit,omitempty"`
+	Convert    *Conversion        `yaml:"convert,omitempty" json:"convert,omitempty"`
+	ObservedAt ObservedAt         `yaml:"observedAt,omitempty" json:"observedAt,omitempty"`
+	ObservedBy string             `yaml:"observedBy,omitempty" json:"observedBy,omitempty"`
+	When       When               `yaml:"when,omitempty" json:"when,omitempty"`
+	Required   bool               `yaml:"required,omitempty" json:"required,omitempty"`
 
 	Source `yaml:",inline"`
 
 	Transform     []Transform `yaml:"transform,omitempty" json:"transform,omitempty"`
 	Derive        *Derive     `yaml:"derive,omitempty" json:"derive,omitempty"`
 	Subproperties []Property  `yaml:"subproperties,omitempty" json:"subproperties,omitempty"`
+}
+
+// RelationAggregate declares a complete inverse set on relation.to. The
+// containing entity's id identifies the owner; Property.Value identifies
+// each member using relation.from. Both templates use stable IDs only.
+type RelationAggregate struct {
+	Direction string `yaml:"direction" json:"direction"`
 }

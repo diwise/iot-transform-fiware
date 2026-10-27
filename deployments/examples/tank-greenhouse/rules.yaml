@@ -1,0 +1,58 @@
+# Explicit bidirectional mapping; not automatically seeded by MODELS_DIR.
+# The inverse attribute belongs exclusively to the aggregate declaration.
+rules:
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank, toType: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"
+        type: WaterQualityObserved
+        properties:
+          - { target: refParent, type: Relationship, value: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}", required: true }
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{relation.to.thingId}}"
+        type: AgriGreenhouse
+        properties:
+          - target: hasWaterQualityObserved
+            type: Relationship
+            aggregate: { direction: reverse }
+            value: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"
+  - match: { kind: thing, event: things.v1.relations, relation: partOf, type: tank, toType: greenhouse, relationRemoved: true }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{relation.from.thingId}}"
+        type: WaterQualityObserved
+        properties: []
+        removeAttributes: [refParent]
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: created, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
+        type: AgriGreenhouse
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: updated, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
+        type: AgriGreenhouse
+        properties:
+          - { target: name, type: Text, field: name, observedAt: none }
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
+        type: AgriGreenhouse
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.lifecycle, lifecycle: deleted, type: tank }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
+        type: WaterQualityObserved
+        properties: []
+        delete: true
+  - match: { kind: thing, event: things.v1.values, type: greenhouse }
+    entities:
+      - id: "urn:ngsi-ld:AgriGreenhouse:{{id}}"
+        type: AgriGreenhouse
+        properties:
+          - { target: co2, type: Number, field: values.co2.value, observedAt: "field:values.co2.observedAt" }
+  - match: { kind: thing, event: things.v1.values, type: tank }
+    entities:
+      - id: "urn:ngsi-ld:WaterQualityObserved:{{id}}"
+        type: WaterQualityObserved
+        properties:
+          - { target: temperature, type: Number, field: values.temperature.value, observedAt: "field:values.temperature.observedAt" }

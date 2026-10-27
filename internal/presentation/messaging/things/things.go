@@ -46,24 +46,20 @@ type RelationStore interface {
 	DeleteEndpoint(ctx context.Context, tenant, endpoint string, trace map[string]string, planner relations.PlanFunc) (projection.Result, error)
 }
 
-// plannerFromWrites bygger F:s PlanFunc-closure från E:s validerade
-// skrivplan. Ren funktion (ingen I/O, ingen context): lagret anropar den
-// inom transaktionsgränsen och rullar tillbaka både projektion och arbete
-// vid fel. Förvaliderar hela batchen före I/O via EntityWritesToPending
-// (faktisk serialiserad NGSI-LD); ogiltig output ger fel före brokerkontakt.
-// Snapshoten bärs för komplett mängdplanering och tenant-avgränsning;
-// nuvarande E-planering är per-händelse (direkta writes) — kompletta
-// mängdskrivningar för fler-mål array:er förfinas när E exponerar
-// snapshot-till-writes utan modellnamn. Ingen recency-filtrering sker här.
-func plannerFromWrites(tenant string, writes []transform.EntityWrite, defaultContext string) relations.PlanFunc {
+// relationPlanner använder en och samma regelsnapshot för direkta writes och
+// kompletta inversa mängder inom projektionstransaktionen. Planeringsfel
+// klassificeras före commit och broker-I/O; inga modellnamn behövs här.
+func relationPlanner(d *appthings.DynamicThingTransformer, tenant string, writes []transform.EntityWrite, defaultContext string) relations.PlanFunc {
+	planner := d.RelationPlanner(writes, defaultContext)
 	return func(snap relations.Snapshot) ([]relations.PendingWrite, error) {
-		// Tenant-avgränsning bevaras: planeraren blandar aldrig in länkar
-		// från annan tenant (lagret garanterar Snapshot.Tenant).
-		if snap.Tenant != "" && snap.Tenant != tenant {
-			// Defensivt: fel före persistens, ingen brokerkontakt.
-			return nil, delivery.DataError(fmt.Errorf("planner tenant %q does not match handler tenant %q", snap.Tenant, tenant))
+		if snap.Tenant != tenant {
+			return nil, fmt.Errorf("%w: planner tenant mismatch", projection.ErrInvalid)
 		}
-		return transform.EntityWritesToPending(tenant, writes, defaultContext)
+		pending, err := planner(snap)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", projection.ErrInvalid, err)
+		}
+		return pending, nil
 	}
 }
 

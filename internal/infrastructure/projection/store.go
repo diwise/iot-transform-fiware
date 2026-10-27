@@ -14,6 +14,7 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel"
@@ -124,6 +125,13 @@ func (s *Store) IsReady(ctx context.Context) (err error) {
 			return fmt.Errorf("%w: table %s", ErrNotFound, table)
 		}
 	}
+	var ordered bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='pending_broker_work' AND column_name='delivery_order')`).Scan(&ordered); err != nil {
+		return err
+	}
+	if !ordered {
+		return fmt.Errorf("%w: pending delivery order (migration 006)", ErrNotFound)
+	}
 	return nil
 }
 
@@ -222,6 +230,14 @@ func fromKey(tenant, relation, from string) string {
 
 func reverseKey(tenant, relation, to string) string {
 	return "proj-rev:" + tenant + "/" + relation + "/" + to
+}
+
+// All source-state mutations, endpoint detach, import and rebuild use this
+// same transaction lock. A complete reverse snapshot and its queue insertion
+// cannot interleave with another mutation, even across service instances.
+// This serializes local processing only; it does not filter late source events.
+func lockTenantTx(ctx context.Context, tx pgx.Tx, tenant string) error {
+	return lockKeys(ctx, tx, []string{"proj-state:" + tenant})
 }
 
 // SetSpec lagrar/ersätter kardinalitetsspecen för ett relationsnamn.
@@ -415,7 +431,7 @@ func (s *Store) BootstrapUpsert(ctx context.Context, links []relations.Link) (in
 	}
 	keys := make([]string, 0, len(tenants))
 	for tenant := range tenants {
-		keys = append(keys, "proj-bs:"+tenant)
+		keys = append(keys, "proj-state:"+tenant)
 	}
 	if err := lockKeys(ctx, tx, keys); err != nil {
 		return 0, 0, err
@@ -466,7 +482,15 @@ func (s *Store) BootstrapPrune(ctx context.Context, tenant string, keep []relati
 	}
 	ctx, cancel := s.ctx(ctx)
 	defer cancel()
-	tag, err := s.pool.Exec(ctx,
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer rollback(ctx, tx)
+	if err := lockTenantTx(ctx, tx, tenant); err != nil {
+		return 0, err
+	}
+	tag, err := tx.Exec(ctx,
 		`DELETE FROM source_links
 		 WHERE tenant=$1 AND updated_at < $2
 		   AND NOT EXISTS (
@@ -475,6 +499,9 @@ func (s *Store) BootstrapPrune(ctx context.Context, tenant string, keep []relati
 		   )`,
 		tenant, watermark.UTC(), rels, froms, tos)
 	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}
 	return tag.RowsAffected(), nil
@@ -511,8 +538,9 @@ func (s *Store) Rebuild(ctx context.Context, tenant, relation string, trace map[
 	if err != nil {
 		return RebuildResult{}, err
 	}
+	trigger := uuid.NewString()
 	for _, f := range froms {
-		pending, err := s.rebuildGroup(ctx, tenant, f.relation, f.from, trace, planner)
+		pending, err := s.rebuildGroup(ctx, tenant, f.relation, f.from, trigger, trace, planner)
 		if err != nil {
 			return res, err
 		}
@@ -557,7 +585,7 @@ func (s *Store) distinctFroms(ctx context.Context, tenant, relation string, max 
 	return out, rows.Err()
 }
 
-func (s *Store) rebuildGroup(ctx context.Context, tenant, relation, from string, trace map[string]string, planner relations.PlanFunc) (int, error) {
+func (s *Store) rebuildGroup(ctx context.Context, tenant, relation, from, trigger string, trace map[string]string, planner relations.PlanFunc) (int, error) {
 	ctx, cancel := s.ctx(ctx)
 	defer cancel()
 	tx, err := s.pool.Begin(ctx)
@@ -565,6 +593,9 @@ func (s *Store) rebuildGroup(ctx context.Context, tenant, relation, from string,
 		return 0, err
 	}
 	defer rollback(ctx, tx)
+	if err := lockTenantTx(ctx, tx, tenant); err != nil {
+		return 0, err
+	}
 	if err := lockKeys(ctx, tx, []string{fromKey(tenant, relation, from)}); err != nil {
 		return 0, err
 	}
@@ -572,6 +603,7 @@ func (s *Store) rebuildGroup(ctx context.Context, tenant, relation, from string,
 	if err != nil {
 		return 0, err
 	}
+	snap.Trigger = trigger
 	writes, err := planner(snap)
 	if err != nil {
 		return 0, err
@@ -624,6 +656,9 @@ func (s *Store) RebuildFromExport(ctx context.Context, tenant, relation string, 
 		return RebuildResult{}, err
 	}
 	defer rollback(ctx, tx)
+	if err := lockTenantTx(ctx, tx, tenant); err != nil {
+		return RebuildResult{}, err
+	}
 	n, err := insertPendingTx(ctx, tx, tenant, trace, writes)
 	if err != nil {
 		return RebuildResult{}, err
@@ -686,4 +721,39 @@ func nullableTime(t time.Time) any {
 		return nil
 	}
 	return t.UTC()
+}
+
+// Build complete post-mutation groups, including now-empty previous targets.
+// Caller holds the common tenant mutation lock for the entire transaction.
+func affectedSnapshotsTx(ctx context.Context, tx pgx.Tx, tenant string, before []relations.Link) ([]relations.Snapshot, error) {
+	groups := map[fromGroup][]relations.Link{}
+	for _, l := range before {
+		g := fromGroup{relation: l.Relation, from: l.FromID}
+		groups[g] = append(groups[g], l)
+	}
+	keys := make([]fromGroup, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].relation != keys[j].relation {
+			return keys[i].relation < keys[j].relation
+		}
+		return keys[i].from < keys[j].from
+	})
+	var out []relations.Snapshot
+	for _, key := range keys {
+		old := groups[key]
+		previous := make([]string, 0, len(old))
+		for _, l := range old {
+			previous = append(previous, l.ToID)
+		}
+		snap, err := snapshotTx(ctx, tx, tenant, key.relation, key.from, previous)
+		if err != nil {
+			return nil, err
+		}
+		snap.Removed = old
+		out = append(out, snap)
+	}
+	return out, nil
 }

@@ -1,6 +1,7 @@
 package things
 
 import (
+	"github.com/diwise/iot-transform-fiware/internal/application/relations"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 )
 
@@ -11,6 +12,14 @@ import (
 // borttagen, PLAN001 steg 7.6).
 type DynamicThingTransformer struct {
 	engine *transform.Engine
+}
+
+func (d *DynamicThingTransformer) HasRelationAggregates() bool {
+	return d.engine.HasRelationAggregates()
+}
+
+func (d *DynamicThingTransformer) RelationPlanner(writes []transform.EntityWrite, defaultContext string) relations.PlanFunc {
+	return d.engine.RelationPlanner(writes, defaultContext)
 }
 
 func NewDynamicThingTransformer(rules []transform.Rule) *DynamicThingTransformer {

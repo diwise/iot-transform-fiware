@@ -2,10 +2,9 @@ package projection
 
 // schemaSQL är den kanoniska DDL:n för projektionstabellerna i
 // applikationskoden. Samma DDL finns som
-// internal/infrastructure/rules/migrations/005_projection.sql för
-// produktionsmigrering via regellagrets kedja (nummerförslag 005, A
-// bekräftar). Båda är idempotenta (IF NOT EXISTS) och kan köras i valfri
-// ordning; håll dem i synk tills A väljer kanonisk plats vid wiring.
+// internal/infrastructure/rules/migrations/{005_projection,006_pending_order}.sql
+// för produktionsmigrering via regellagrets kedja. DDL:n är idempotent;
+// håll den i synk med migrationsfilerna.
 const schemaSQL = `
 CREATE TABLE IF NOT EXISTS source_links(
   tenant            TEXT NOT NULL,
@@ -58,6 +57,12 @@ CREATE TABLE IF NOT EXISTS pending_broker_work(
   UNIQUE (tenant, idempotency_key)
 );
 CREATE INDEX IF NOT EXISTS pending_broker_work_claim ON pending_broker_work(tenant, created_at);
+
+-- Also applied as migration 006. A monotonic insertion sequence (rather
+-- than timestamp + random UUID) orders state writes to the same entity.
+ALTER TABLE pending_broker_work ADD COLUMN IF NOT EXISTS delivery_order BIGSERIAL;
+CREATE UNIQUE INDEX IF NOT EXISTS pending_broker_work_order ON pending_broker_work(delivery_order);
+CREATE INDEX IF NOT EXISTS pending_broker_work_entity_order ON pending_broker_work(tenant, entity_id, delivery_order);
 `
 
 // schemaLock är advisory-låset för schemamigrering. Skilt från regellagrets

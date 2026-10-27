@@ -410,6 +410,13 @@ components:
           type: boolean
           default: false
           description: 'Endast NGSI-LD Relationship-attribut, inte Structured-delvärden. En skalär URI skrivs som enelementslista; en lista förblir platt. Alla referenser måste vara absoluta URI-strängar. Detta aggregerar inte relationer mellan event.'
+        aggregate:
+          type: object
+          additionalProperties: false
+          required: [direction]
+          description: 'Beständig komplett invers mängd, inte array:true. Kräver set-regel för things.v1.relations med match.relation/type/toType. Entiteten har statisk typ, merge-semantik och exakt denna enda Relationship-property. ID använder relation.toId eller relation.to.thingId; value använder relation.fromId eller relation.from.thingId (tenant och safeURI/firstPresent tillåts). Inga andra källor/modifierare/observationsmetadata; observedAt:none tillåts. Match på subtype/variant saknar beständigt underlag och nekas. Äger mål-attributet, även vid remove/flytt/delete; sista medlemmen ger removeAttributes. Inline-preview returnerar 400 eftersom den saknar komplett projektion. Aktivering återbygger inte äldre länkar automatiskt; se assets/docs/relation-aggregation.md.'
+          properties:
+            direction: { type: string, enum: [reverse] }
         unit:
           type: string
           description: 'Endast Number och NumberArray-attribut. Stöds inte på Structured-delvärden. Känd källenhet får endast märkas om med ekvivalent kod eller explicit convert.'
@@ -447,7 +454,7 @@ components:
         timestamp: { type: boolean }
         value:
           type: string
-          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Things-källvyer: values.<id>.* (kvalitetsfiltrerat, endast ok/uncertain), snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[] (proveniens utan värden), relations[]/relation.*, lifecycle.*, removed, geometry/location/metadata. Measurements: records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview. Aggregat endast via derive (sum/min/max/anyTrue/allTrue/coalesce/firstPresent) inom samma event.'
+          description: 'Mall med generella {{fält}}, citerade nycklar och index, samt safeURI och firstPresent. Things-källvyer: values.<id>.* (kvalitetsfiltrerat, endast ok/uncertain), snapshot.<id>.*, delta.<id>.*, descriptor|thing.*, event.*, observations[] (proveniens utan värden), relations[]/relation.*, lifecycle.*, removed, geometry/location/metadata. Measurements: records[n].fullName/unit/value/observedAt, message.timestamp och header.observedAt. observations[n] för things bär kvalitet/proveniens men aldrig värden. field: är ett valfritt uttrycksprefix. Dynamiska fälts närvaro verifieras vid körning eller preview. derive aggregerar inom samma event; aggregate:reverse använder istället värdemallen per beständig relationsmedlem (endast stabila from-ID:n och tenant).'
           example: '{{metadata.description}}'
         prefix:
           type: string

@@ -89,6 +89,9 @@ func decodePreview(r *http.Request) (previewRequest, error) {
 	if err := transform.Validate([]transform.Rule{req.Rule}); err != nil {
 		return req, fmt.Errorf("%w: %v", errValidation, err)
 	}
+	if transform.RuleHasRelationAggregates(req.Rule) {
+		return req, fmt.Errorf("%w: aggregated relationships require a complete durable projection; inline preview is not a relation-set preview", errValidation)
+	}
 	if len(req.Event.Message) == 0 {
 		return req, fmt.Errorf("%w: event.message is required", errValidation)
 	}
@@ -206,6 +209,9 @@ type previewDetail struct {
 // Preview ignorerar Disabled: en avstängd regel kan torrköras före
 // aktivering; produktionssnapshoten respekterar flaggan.
 func previewDetailed(ctx context.Context, req previewRequest) (previewDetail, error) {
+	if transform.RuleHasRelationAggregates(req.Rule) {
+		return previewDetail{}, fmt.Errorf("%w: aggregated relationships require a complete durable projection", errValidation)
+	}
 	req.Rule.Disabled = false
 	engine := transform.NewEngine([]transform.Rule{req.Rule})
 	detailFor := func(in transform.Thing, observations int) (previewDetail, error) {
@@ -347,6 +353,9 @@ func entityProperties(id, typeName string, props []entities.EntityDecoratorFunc)
 // ErrNoMatchingRule blir tomt resultat med matched=false, aldrig fel.
 // Preview ignorerar Disabled (se previewDetailed).
 func previewTransform(ctx context.Context, req previewRequest) ([]transform.EntityWrite, bool, int, error) {
+	if transform.RuleHasRelationAggregates(req.Rule) {
+		return nil, false, 0, fmt.Errorf("%w: aggregated relationships require a complete durable projection", errValidation)
+	}
 	req.Rule.Disabled = false
 	engine := transform.NewEngine([]transform.Rule{req.Rule})
 	switch req.Event.Kind {

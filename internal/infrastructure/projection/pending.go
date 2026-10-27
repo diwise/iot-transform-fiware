@@ -3,12 +3,14 @@ package projection
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"time"
 
 	"github.com/diwise/iot-transform-fiware/internal/application/relations"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -246,11 +248,12 @@ func (s *Store) PendingCount(ctx context.Context, tenant string) (count int, err
 	return count, err
 }
 
-// DrainOnce hämtar en batch och levererar varje post via broker. Lyckad
-// post raderas, misslyckad släpps för retry. Partiella brokerfel bevarar
-// slutförda leveranser i returrapporten — anroparen ser completed och
-// failed separat. Postfel loggas utan payload (aldrig hela payloads eller
-// hemligheter). Returnerar infra-fel endast vid claim/drain-fel.
+// DrainOnce delivers oldest-first per (tenant,entity), with the row locked
+// until HTTP and acknowledgement finish. A lease alone is not sufficient:
+// an expired worker could otherwise finish an older list after a newer one.
+// Failed entities block their successors, but not other tenants/entities.
+// ClaimPending/MarkDone remain low-level legacy helpers, not this worker's
+// delivery protocol. No broker read-modify-write or source recency filtering.
 func (s *Store) DrainOnce(ctx context.Context, tenant string, limit int, lease time.Duration, broker BrokerFunc) (completed, failed int, err error) {
 	ctx, end := beginOp(ctx, "projection-drain", "tenant", tenant, "limit", limit)
 	defer func() { end(err) }()
@@ -258,69 +261,94 @@ func (s *Store) DrainOnce(ctx context.Context, tenant string, limit int, lease t
 	if broker == nil {
 		return 0, 0, fmt.Errorf("%w: broker func is required", ErrInvalid)
 	}
-	items, err := s.ClaimPending(ctx, tenant, limit, lease)
-	if err != nil {
+	if err := s.ready(); err != nil {
 		return 0, 0, err
 	}
-	log := logging.GetFromContext(ctx)
-	for _, item := range items {
-		itemCtx, span := linkSpan(ctx, "projection-deliver", item.Trace)
-		span.SetAttributes(
-			attribute.String("tenant", item.Tenant),
-			attribute.String("operation", item.Operation),
-			attribute.String("entity_id", item.EntityID),
-		)
-		derr := broker(itemCtx, item)
-		if derr == nil {
-			// MarkDone under avbruten request får överleva med egen budget.
-			doneCtx := itemCtx
-			var doneCancel context.CancelFunc = func() {}
-			if itemCtx.Err() != nil {
-				doneCtx, doneCancel = context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
-			}
-			merr := s.markDoneCtx(doneCtx, item.ID)
-			doneCancel()
-			if merr != nil {
-				span.RecordError(merr)
-				log.Error("pending work delivered but not acknowledged",
-					"pending_id", item.ID, "tenant", item.Tenant, "operation", item.Operation, "err", merr.Error())
-				failed++
-			} else {
-				completed++
-			}
+	if limit <= 0 {
+		return 0, 0, fmt.Errorf("%w: limit must be positive", ErrInvalid)
+	}
+	if lease <= 0 {
+		lease = time.Minute
+	}
+	attempted := make([]string, 0, limit)
+	for range limit {
+		id, delivered, derr := s.deliverNext(ctx, tenant, lease, attempted, broker)
+		if derr != nil {
+			return completed, failed, derr
+		}
+		if id == "" {
+			break
+		}
+		attempted = append(attempted, id)
+		if delivered {
+			completed++
 		} else {
-			span.RecordError(derr)
-			log.Error("pending work delivery failed",
-				"pending_id", item.ID, "tenant", item.Tenant, "operation", item.Operation, "entity_id", item.EntityID, "err", derr.Error())
-			if ferr := s.markFailedCtx(ctx, item.ID); ferr != nil {
-				log.Error("pending work claim release failed",
-					"pending_id", item.ID, "err", ferr.Error())
-			}
 			failed++
 		}
-		span.End()
 	}
 	return completed, failed, nil
 }
 
-func (s *Store) markDoneCtx(ctx context.Context, id string) error {
-	ctx, cancel := s.ctx(ctx)
-	defer cancel()
-	tag, err := s.pool.Exec(ctx, `DELETE FROM pending_broker_work WHERE id=$1::uuid`, id)
+func (s *Store) deliverNext(ctx context.Context, tenant string, lease time.Duration, attempted []string, broker BrokerFunc) (id string, delivered bool, err error) {
+	queryCtx, queryCancel := s.ctx(ctx)
+	defer queryCancel()
+	tx, err := s.pool.Begin(queryCtx)
 	if err != nil {
-		return err
+		return "", false, err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("%w: pending work %s", ErrNotFound, id)
+	defer rollback(ctx, tx)
+	var item PendingItem
+	var rawTrace string
+	err = tx.QueryRow(queryCtx, `SELECT p.id::text,p.tenant,p.operation,p.entity_id,p.payload,p.trace_context,p.rule_id,p.rule_revision,p.attempts,p.created_at
+		FROM pending_broker_work p
+		WHERE ($1='' OR p.tenant=$1)
+		AND NOT (p.id::text = ANY($2::text[]))
+		AND (p.claimed_at IS NULL OR p.claimed_at < now()-($3 * interval '1 second'))
+		AND NOT EXISTS (SELECT 1 FROM pending_broker_work prior
+			WHERE prior.tenant=p.tenant AND prior.entity_id=p.entity_id AND prior.delivery_order<p.delivery_order)
+		ORDER BY p.delivery_order LIMIT 1 FOR UPDATE OF p SKIP LOCKED`, tenant, attempted, lease.Seconds()).
+		Scan(&item.ID, &item.Tenant, &item.Operation, &item.EntityID, &item.Payload, &rawTrace, &item.RuleID, &item.RuleRevision, &item.Attempts, &item.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
 	}
-	return nil
-}
-
-func (s *Store) markFailedCtx(ctx context.Context, id string) error {
-	ctx, cancel := s.ctx(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	item.Trace = decodeTrace(rawTrace)
+	item.Attempts++
+	if _, err := tx.Exec(queryCtx, `UPDATE pending_broker_work SET attempts=attempts+1 WHERE id=$1::uuid`, item.ID); err != nil {
+		return "", false, err
+	}
+	queryCancel() // no DB query timer runs during the separately budgeted HTTP call
+	itemCtx, span := linkSpan(ctx, "projection-deliver", item.Trace)
+	span.SetAttributes(attribute.String("tenant", item.Tenant), attribute.String("operation", item.Operation), attribute.String("entity_id", item.EntityID))
+	var deliveryErr error
+	defer func() { tracing.RecordAnyErrorAndEndSpan(errors.Join(deliveryErr, err), span) }()
+	deliveryErr = broker(itemCtx, item)
+	if deliveryErr != nil {
+		logging.GetFromContext(ctx).Error("pending work delivery failed", "pending_id", item.ID, "tenant", item.Tenant, "entity_id", item.EntityID, "operation", item.Operation, "err", deliveryErr)
+		// Persist attempts and keep the same oldest item for a later retry.
+		failedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
+		defer cancel()
+		if _, err := tx.Exec(failedCtx, `UPDATE pending_broker_work SET claimed_at=NULL WHERE id=$1::uuid`, item.ID); err != nil {
+			return "", false, err
+		}
+		if err := tx.Commit(failedCtx); err != nil {
+			return "", false, err
+		}
+		return item.ID, false, nil
+	}
+	// Own budget if cancellation arrived after successful HTTP. The
+	// transaction/row lock remains held; no younger item can pass it.
+	doneCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), queryTimeout)
 	defer cancel()
-	_, err := s.pool.Exec(ctx, `UPDATE pending_broker_work SET claimed_at=NULL WHERE id=$1::uuid`, id)
-	return err
+	if _, err := tx.Exec(doneCtx, `DELETE FROM pending_broker_work WHERE id=$1::uuid`, item.ID); err != nil {
+		return "", false, err
+	}
+	if err := tx.Commit(doneCtx); err != nil {
+		return "", false, err
+	}
+	return item.ID, true, nil
 }
 
 // Worker dränerar väntande arbete i poll-loop. A äger start/stopp:

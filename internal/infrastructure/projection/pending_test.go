@@ -19,11 +19,16 @@ func withTestTracer(t *testing.T) (*tracetest.SpanRecorder, func()) {
 	t.Helper()
 	previous := otel.GetTracerProvider()
 	previousPropagator := otel.GetTextMapPropagator()
+	previousTracer := tracer
 	recorder := tracetest.NewSpanRecorder()
 	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	otel.SetTracerProvider(provider)
 	otel.SetTextMapPropagator(propagation.TraceContext{})
+	// Package tracers created before the first provider are bound only once
+	// by OTel's proxy. Bind explicitly when swapping providers between tests.
+	tracer = provider.Tracer("iot-transform-fiware/projection")
 	return recorder, func() {
+		tracer = previousTracer
 		otel.SetTracerProvider(previous)
 		otel.SetTextMapPropagator(previousPropagator)
 		_ = provider.Shutdown(context.Background())

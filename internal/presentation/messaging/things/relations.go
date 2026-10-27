@@ -19,8 +19,9 @@ import (
 // NewThingRelationsTopicMessageHandler hanterar versionerade
 // relationshändelser (things.v1.relations) med samma konfigurationsstyrda
 // motor som värdeseventen. Fel-/retry-semantiken är identisk: strukturskada
-// är Permanent, tom tenant och saknad regel skippas utan broker-kontakt,
-// brokerfel propageras för retry. Samma DynamicThingTransformer-instans
+// är Permanent och tom tenant skippas utan broker-kontakt. Med projektion
+// kan aggregat planeras även utan en vanlig eventregel; brokerfel ger retry.
+// Samma DynamicThingTransformer-instans
 // återanvänds; händelsekällan (match.event) skiljer regeltyperna åt så att
 // värderegler aldrig aktiveras av relationshändelser och tvärtom.
 // C1: previousToId/revision/frysta ändpunktsdescriptors+målversioner
@@ -87,52 +88,31 @@ func NewThingRelationsTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 			return nil
 		}
 
-		writes, err := provider.ThingsTransformer().Transform(th)
+		transformer := provider.ThingsTransformer()
+		if store == nil && transformer.HasRelationAggregates() {
+			return delivery.DependencyError(errors.New("relation aggregation requires a durable projection store"))
+		}
+		writes, err := transformer.Transform(th)
 		if err != nil {
 			if errors.Is(err, transform.ErrNoMatchingRule) {
 				logNoWrites(log, provider, th)
-				// Persistera länken även utan regel när store finns
-				// (projektionen är källans sanning för framtida Rebuild;
-				// ingen brokerkontakt utan skrivningar).
-				if store != nil {
-					trace := projection.CaptureTrace(ctx)
-					planner := plannerFromWrites(change.Tenant, nil, defaultContext)
-					if _, derr := store.ApplyChange(ctx, change, trace, planner); derr != nil {
-						return storeError(derr)
-					}
-				}
-				return nil
+			} else {
+				log.Error("transform failed", "err", err.Error())
+				return delivery.DataError(err)
 			}
-
-			log.Error("transform failed", "err", err.Error())
-			return delivery.DataError(err)
 		}
 
 		if len(writes) == 0 {
 			// Matchad men undertryckt: MatchedRule/ExplainSkipped ger
 			// precisa koder utan brokerkontakt.
 			logNoWrites(log, provider, th)
-			if store != nil {
-				trace := projection.CaptureTrace(ctx)
-				planner := plannerFromWrites(change.Tenant, nil, defaultContext)
-				if _, derr := store.ApplyChange(ctx, change, trace, planner); derr != nil {
-					return storeError(derr)
-				}
-			}
-			return nil
 		}
 		if err := validateBeforeIO(writes, change.Tenant, defaultContext); err != nil {
 			log.Error("entity writes invalid before broker call", "err", err.Error())
 			return err
 		}
 
-		log = log.With(
-			slog.String("entity_id", writes[0].EntityID),
-			slog.String("type_name", writes[0].TypeName),
-			slog.String("tenant", th.Tenant),
-			slog.String("relation", th.Relation),
-			slog.Bool("removed", th.RelationRemoved),
-		)
+		log = log.With("relation", th.Relation, "removed", th.RelationRemoved)
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		if store != nil {
@@ -140,13 +120,13 @@ func NewThingRelationsTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 			// Planeraren är ren (ingen I/O): EntityWritesToPending via
 			// PlanFunc-closure, validerad NGSI-LD före persistens.
 			trace := projection.CaptureTrace(ctx)
-			planner := plannerFromWrites(change.Tenant, writes, defaultContext)
+			planner := relationPlanner(transformer, change.Tenant, writes, defaultContext)
 			res, derr := store.ApplyChange(ctx, change, trace, planner)
 			if derr != nil {
 				return storeError(derr)
 			}
-			if res.Duplicate {
-				log.Debug("duplicate relation change skipped", "pending", res.Pending)
+			if res.Duplicate || res.Pending == 0 {
+				log.Debug("relation change has no new pending writes", "duplicate", res.Duplicate, "pending", res.Pending)
 				return nil
 			}
 			// Omedelbar leverans via DrainOnce med pendingBrokerFunc så
@@ -171,6 +151,9 @@ func NewThingRelationsTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 			// Fallback när store inte är Drain-bar: direktväg nedan efter
 			// persistens (idempotent dubbel-leverans tolereras av
 			// merge/remove/delete).
+		}
+		if len(writes) == 0 {
+			return nil
 		}
 
 		cbClient, err := cbClientFn(th.Tenant)

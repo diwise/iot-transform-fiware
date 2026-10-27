@@ -1,0 +1,6 @@
+[
+  {"tenant":"example","relation":"partOf","fromId":"tank-1","toId":"greenhouse-1","revision":1,"fromKind":"tank","toKind":"greenhouse"},
+  {"tenant":"example","relation":"partOf","fromId":"tank-2","toId":"greenhouse-1","revision":1,"fromKind":"tank","toKind":"greenhouse"},
+  {"tenant":"example","relation":"partOf","fromId":"tank-3","toId":"greenhouse-1","revision":1,"fromKind":"tank","toKind":"greenhouse"},
+  {"tenant":"example","relation":"partOf","fromId":"tank-4","toId":"greenhouse-1","revision":1,"fromKind":"tank","toKind":"greenhouse"}
+]

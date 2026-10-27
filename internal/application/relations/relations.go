@@ -202,6 +202,19 @@ type Snapshot struct {
 	// som removed:true per länk + delete av målet självt).
 	Detached        []Link
 	EndpointDeleted string
+	// Trigger distinguishes successive state transitions (including returning
+	// to the same set) in the pending queue. Exact source replay is handled
+	// by projection_seen_changes, not by deduplicating payload hashes.
+	Trigger string
+	// Change retains the touched endpoints even for an idempotent remove
+	// whose link was not present locally (empty reverse sets still clear).
+	Change *Change
+	// Groups are complete post-detach/import snapshots for every affected
+	// (relation,from). DeleteEndpoint may affect multiple relation names.
+	Groups []Snapshot
+	// Reconcile also replays stable-ID forward mappings from an authoritative
+	// import. A regular rule-only rebuild plans aggregates only.
+	Reconcile bool
 }
 
 // PlanFunc planerar brokerarbete från en komplett snapshot. Måste vara ren

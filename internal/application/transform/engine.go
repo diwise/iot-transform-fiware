@@ -309,6 +309,9 @@ func (e *Engine) Transform(in Input) ([]EntityWrite, error) {
 		if err := validateWriteHeader(EntityWrite{EntityID: id, TypeName: typeName, Context: ent.Context}); err != nil {
 			return nil, fmt.Errorf("rule %q, entity %d (%q): %w", rule.ID, index, ent.Name, err)
 		}
+		if err := e.guardAggregateAttribute(id, ent, in); err != nil {
+			return nil, fmt.Errorf("rule %q, entity %d: %w", rule.ID, index, err)
+		}
 
 		// delete-entiteter raderar hela entiteten; properties byggs aldrig.
 		if ent.Delete {
@@ -368,6 +371,11 @@ func entityProps(ent Entity, in Input, ids map[string]string) ([]entities.Entity
 	props := make([]entities.EntityDecoratorFunc, 0, len(ent.Properties))
 
 	for _, p := range ent.Properties {
+		if p.Aggregate != nil {
+			// Planned only inside the source-link transaction, from a complete
+			// reverse set. Never turn an event into a one-member approximation.
+			continue
+		}
 		dec, err := buildProperty(p, in, ids)
 		if err != nil {
 			return nil, propertyError(p, err)

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/diwise/iot-transform-fiware/internal/application/relations"
 	appthings "github.com/diwise/iot-transform-fiware/internal/application/things"
 	"github.com/diwise/iot-transform-fiware/internal/application/transform"
 	"github.com/diwise/iot-transform-fiware/internal/infrastructure/contextbroker"
@@ -18,8 +19,9 @@ import (
 // NewThingLifecycleTopicMessageHandler hanterar versionerade
 // livscykelhändelser (things.v1.lifecycle) med samma konfigurationsstyrda
 // motor som värdes- och relationshändelser. Fel-/retry-semantiken är
-// identisk: strukturskada är Permanent, tom tenant och saknad regel skippas
-// utan broker-kontakt, brokerfel propageras för retry. Samma
+// identisk: strukturskada är Permanent och tom tenant skippas utan
+// broker-kontakt. Delete städar projektionens relationer även utan vanlig
+// lifecycle-regel; brokerfel propageras för retry. Samma
 // DynamicThingTransformer-instans återanvänds; händelsekällan (match.event)
 // + match.lifecycle skiljer regeltyperna åt så att livscykelregler aldrig
 // aktiveras av andra händelser och tvärtom. Delete-skrivningar är
@@ -71,49 +73,29 @@ func NewThingLifecycleTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 			return nil
 		}
 
-		writes, err := provider.ThingsTransformer().Transform(th)
+		transformer := provider.ThingsTransformer()
+		if store == nil && th.Lifecycle == string(transform.LifecycleDeleted) && transformer.HasRelationAggregates() {
+			return delivery.DependencyError(errors.New("relation aggregation requires a durable projection store"))
+		}
+		writes, err := transformer.Transform(th)
 		if err != nil {
 			if errors.Is(err, transform.ErrNoMatchingRule) {
 				logNoWrites(log, provider, th)
-				// Även utan regel ska borttaget mål rensas i projektionen
-				// när store finns (delete-policy utan brokerkontakt om
-				// inget att planera).
-				if store != nil && th.Lifecycle == string(transform.LifecycleDeleted) {
-					trace := projection.CaptureTrace(ctx)
-					planner := plannerFromWrites(th.Tenant, nil, defaultContext)
-					if _, derr := store.DeleteEndpoint(ctx, th.Tenant, th.ID, trace, planner); derr != nil {
-						return storeError(derr)
-					}
-				}
-				return nil
+			} else {
+				log.Error("transform failed", "err", err.Error())
+				return delivery.DataError(err)
 			}
-
-			log.Error("transform failed", "err", err.Error())
-			return delivery.DataError(err)
 		}
 
 		if len(writes) == 0 {
 			logNoWrites(log, provider, th)
-			if store != nil && th.Lifecycle == string(transform.LifecycleDeleted) {
-				trace := projection.CaptureTrace(ctx)
-				planner := plannerFromWrites(th.Tenant, nil, defaultContext)
-				if _, derr := store.DeleteEndpoint(ctx, th.Tenant, th.ID, trace, planner); derr != nil {
-					return storeError(derr)
-				}
-			}
-			return nil
 		}
 		if err := validateBeforeIO(writes, th.Tenant, defaultContext); err != nil {
 			log.Error("entity writes invalid before broker call", "err", err.Error())
 			return err
 		}
 
-		log = log.With(
-			slog.String("entity_id", writes[0].EntityID),
-			slog.String("type_name", writes[0].TypeName),
-			slog.String("tenant", th.Tenant),
-			slog.String("lifecycle", th.Lifecycle),
-		)
+		log = log.With("lifecycle", th.Lifecycle)
 		ctx = logging.NewContextWithLogger(ctx, log)
 
 		// F-projektion för deleted: persistera detach + väntande arbete
@@ -122,9 +104,13 @@ func NewThingLifecycleTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 		// av brokerfel är replay-/omstartssäker via pending-kön.
 		if store != nil && th.Lifecycle == string(transform.LifecycleDeleted) {
 			trace := projection.CaptureTrace(ctx)
-			planner := plannerFromWrites(th.Tenant, writes, defaultContext)
-			if _, derr := store.DeleteEndpoint(ctx, th.Tenant, th.ID, trace, planner); derr != nil {
+			planner := relationPlanner(transformer, th.Tenant, writes, defaultContext)
+			res, derr := deleteEndpoint(ctx, store, th, trace, planner)
+			if derr != nil {
 				return storeError(derr)
+			}
+			if res.Duplicate || res.Pending == 0 {
+				return nil
 			}
 			// Omedelbar leverans via DrainOnce med pendingBrokerFunc så
 			// att slutfört bevaras och trace länkas (parent/link efter
@@ -148,6 +134,9 @@ func NewThingLifecycleTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 			// Fallback när store inte är konkret Drain-bar: direktväg nedan
 			// efter persistens (idempotent dubbel-leverans tolereras).
 		}
+		if len(writes) == 0 {
+			return nil
+		}
 
 		cbClient, err := cbClientFn(th.Tenant)
 		if err != nil {
@@ -162,4 +151,15 @@ func NewThingLifecycleTopicMessageHandlerWithStore(cbClientFn contextbroker.Cont
 		log.Debug("thing lifecycle handled successfully")
 		return nil
 	}
+}
+
+func deleteEndpoint(ctx context.Context, store RelationStore, th transform.Thing, trace map[string]string, planner relations.PlanFunc) (projection.Result, error) {
+	if s, ok := store.(interface {
+		DeleteEndpointEvent(context.Context, string, string, string, map[string]string, relations.PlanFunc) (projection.Result, error)
+	}); ok {
+		eventID, _ := th.ResolvePath("event.eventId")
+		id, _ := eventID.(string)
+		return s.DeleteEndpointEvent(ctx, th.Tenant, th.ID, id, trace, planner)
+	}
+	return store.DeleteEndpoint(ctx, th.Tenant, th.ID, trace, planner)
 }

@@ -70,6 +70,9 @@ func TestOpenAPIContract(t *testing.T) {
 		}
 	}
 fieldOK:
+	if p, ok := doc.Components.Schemas["Property"].Properties["aggregate"]; !ok || p.Type != "object" || !strings.Contains(p.Description, "invers") {
+		t.Fatal("OpenAPI must document persistent reverse relationship aggregation")
+	}
 
 	// Preview-svaret ska kräva operation (create/merge) och observations (TF-06).
 	// Enkel yaml-kontroll: råtexten måste innehålla nycklarna.
